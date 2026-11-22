@@ -11,7 +11,7 @@ import {
   formatCharacterDNAToTags,
 } from '../../shared/character-dna.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
-import { ImageLightbox } from './image-lightbox.js';
+import { FullscreenLightbox } from './fullscreen-lightbox.js';
 import { openReferenceCropperModal } from './reference-cropper.js';
 import { InteractionTray } from './interaction-tray.js';
 import type { DraftMergeMode, InteractionDraft } from '../../shared/scene-interactions.js';
@@ -81,7 +81,6 @@ export class CharacterFolio implements WorkspaceSurface {
   private mergeOther='';
   private accumulatedCgs = new Map<string, Array<{ imageUrl: string; caption?: string }>>();
   private persistentGalleries: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>> = Object.create(null);
-  private readonly lightbox: ImageLightbox;
 
   setSceneActionTools(tools: CharacterSceneActionTools | null, forCharacterName?: string): void {
     this.sceneActionTools = tools;
@@ -818,11 +817,7 @@ export class CharacterFolio implements WorkspaceSurface {
 
     this.rosterCarousel = this.element.querySelector('[data-folio-roster]')!;
     this.detailContainer = this.element.querySelector('[data-folio-body]')!;
-    this.lightbox = new ImageLightbox(this.element);
-    this.lightbox.onDelete = (item) => {
-      this.removeCg(item.imageUrl);
-      this.handlers.onDeleteImage?.(item.imageUrl);
-    };
+
   }
 
   enter(): void {
@@ -2590,13 +2585,23 @@ export class CharacterFolio implements WorkspaceSurface {
         img.src = cg.imageUrl;
         img.alt = cg.caption || char.name;
         img.title = 'Click to inspect full image';
-        const lightboxItems = collected.map(item => ({
-          imageUrl: item.imageUrl,
-          caption: item.caption || char.name,
-          storyExcerpt: item.caption
-        }));
         img.onclick = () => {
-          this.lightbox.open(lightboxItems, collected.indexOf(cg));
+          FullscreenLightbox.open({
+            src: cg.imageUrl,
+            title: char.name,
+            ...(cg.caption ? { subtitle: cg.caption } : {}),
+            gallery: collected.map((item) => ({
+              src: item.imageUrl,
+              title: char.name,
+              ...(item.caption ? { subtitle: item.caption } : {}),
+            })),
+            galleryIndex: collected.indexOf(cg),
+            themeSource: this.element,
+            onDelete: (item) => {
+              this.removeCg(item.src);
+              this.handlers.onDeleteImage?.(item.src);
+            },
+          });
         };
 
         // Status badges container

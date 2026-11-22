@@ -29073,7 +29073,6 @@ section[data-reference-observations] h3 {
   height: 100% !important;
   min-width: 100% !important;
   min-height: 100% !important;
-  object-fit: cover !important;
   object-position: 50% 30% !important;
 }
 
@@ -35353,6 +35352,9 @@ class FullscreenLightbox {
           <div class="vn-lightbox-subtitle"></div>
         </div>
         <div class="vn-lightbox-actions">
+          <button type="button" class="vn-lightbox-btn" data-action="face-ref" hidden title="Set as face reference">Face Ref</button>
+          <button type="button" class="vn-lightbox-btn" data-action="outfit-ref" hidden title="Set as outfit reference">Outfit Ref</button>
+          <button type="button" class="vn-lightbox-btn" data-action="delete" hidden title="Delete image">Delete</button>
           <button type="button" class="vn-lightbox-btn" data-action="zoom-toggle" title="Toggle zoom">100%</button>
           <button type="button" class="vn-lightbox-btn" data-action="info-toggle" title="Prompt details">Info</button>
           <button type="button" class="vn-lightbox-btn vn-lightbox-close" data-action="close" aria-label="Close" title="Close (Esc)">✕</button>
@@ -35398,7 +35400,35 @@ class FullscreenLightbox {
   };
   wireEvents() {
     const viewport = this.backdrop.querySelector("[data-viewport]");
+    const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]');
+    const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]');
+    const deleteBtn = this.backdrop.querySelector('[data-action="delete"]');
     const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
+    faceBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = this.galleryItems[this.galleryIndex] ?? this.currentOptions;
+      if (item && this.currentOptions?.onSetFaceRef) {
+        this.currentOptions.onSetFaceRef(item, this.galleryIndex);
+      }
+    });
+    outfitBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = this.galleryItems[this.galleryIndex] ?? this.currentOptions;
+      if (item && this.currentOptions?.onSetOutfitRef) {
+        this.currentOptions.onSetOutfitRef(item, this.galleryIndex);
+      }
+    });
+    deleteBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = this.galleryItems[this.galleryIndex] ?? this.currentOptions;
+      if (item && this.currentOptions?.onDelete) {
+        this.currentOptions.onDelete(item, this.galleryIndex);
+        this.close();
+      }
+    });
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
     const closeBtn = this.backdrop.querySelector('[data-action="close"]');
     closeBtn.addEventListener("click", (e) => {
@@ -35597,6 +35627,15 @@ class FullscreenLightbox {
   }
   show(options) {
     this.currentOptions = options;
+    const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]');
+    const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]');
+    const deleteBtn = this.backdrop.querySelector('[data-action="delete"]');
+    if (faceBtn)
+      faceBtn.hidden = !options.onSetFaceRef;
+    if (outfitBtn)
+      outfitBtn.hidden = !options.onSetOutfitRef;
+    if (deleteBtn)
+      deleteBtn.hidden = !options.onDelete;
     this.applyThemeTokens(options.themeSource);
     this.galleryItems = options.gallery && options.gallery.length > 0 ? options.gallery : [];
     const requestedIdx = options.galleryIndex ?? 0;
@@ -57296,7 +57335,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.170";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.171";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -61799,420 +61838,6 @@ var DOCKED_LIBRARY_CSS = `
 :host([data-vn-workspace-tool]) [data-detail-back] { font-size: 24px !important; }
 `;
 
-// src/frontend/stage/image-lightbox.ts
-class ImageLightbox {
-  host;
-  img;
-  captionEl;
-  zoomBtn;
-  prevBtn;
-  nextBtn;
-  exportBtn;
-  deleteBtn;
-  items = [];
-  activeIndex = -1;
-  isOpen = false;
-  scale = 1;
-  zoomMode = "fit";
-  translateX = 0;
-  translateY = 0;
-  isDragging = false;
-  startX = 0;
-  startY = 0;
-  initialPinchDist = 0;
-  initialPinchScale = 1;
-  lastTapTime = 0;
-  onDelete;
-  onClose;
-  constructor(mountParent) {
-    this.host = document.createElement("div");
-    this.host.className = "vn-interactive-lightbox";
-    this.host.setAttribute("data-cg-lightbox", "");
-    this.host.hidden = true;
-    this.host.style.cssText = `
-      position: fixed;
-      inset: 0;
-      z-index: 100050;
-      background: rgba(0, 0, 0, 0.94);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
-    `;
-    const topBar = document.createElement("div");
-    topBar.className = "lightbox-topbar";
-    topBar.style.cssText = `
-      position: absolute;
-      top: calc(14px + env(safe-area-inset-top, 0px));
-      left: 14px;
-      right: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      z-index: 100060;
-      pointer-events: auto;
-    `;
-    const backBtn = document.createElement("button");
-    backBtn.type = "button";
-    backBtn.className = "lightbox-btn lightbox-back-btn";
-    backBtn.setAttribute("data-cg-lightbox-back", "");
-    backBtn.innerHTML = "← <span>Back</span>";
-    backBtn.style.cssText = this.btnStyle();
-    backBtn.onclick = () => this.close();
-    const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
-    this.zoomBtn = document.createElement("button");
-    this.zoomBtn.type = "button";
-    this.zoomBtn.className = "lightbox-btn lightbox-zoom-btn";
-    this.zoomBtn.textContent = "\uD83D\uDD0D Fit";
-    this.zoomBtn.title = "Toggle Zoom (Fit / 100% / 200%)";
-    this.zoomBtn.style.cssText = this.btnStyle();
-    this.zoomBtn.onclick = () => this.cycleZoom();
-    this.prevBtn = document.createElement("button");
-    this.prevBtn.type = "button";
-    this.prevBtn.className = "lightbox-btn";
-    this.prevBtn.setAttribute("data-cg-prev", "");
-    this.prevBtn.innerHTML = "◀ <span>Prev</span>";
-    this.prevBtn.style.cssText = this.btnStyle();
-    this.prevBtn.onclick = () => this.step(-1);
-    this.nextBtn = document.createElement("button");
-    this.nextBtn.type = "button";
-    this.nextBtn.className = "lightbox-btn";
-    this.nextBtn.setAttribute("data-cg-next", "");
-    this.nextBtn.innerHTML = "<span>Next</span> ▶";
-    this.nextBtn.style.cssText = this.btnStyle();
-    this.nextBtn.onclick = () => this.step(1);
-    this.exportBtn = document.createElement("button");
-    this.exportBtn.type = "button";
-    this.exportBtn.className = "lightbox-btn";
-    this.exportBtn.setAttribute("data-cg-download", "");
-    this.exportBtn.innerHTML = "\uD83D\uDCE5 <span>Save</span>";
-    this.exportBtn.style.cssText = this.btnStyle();
-    this.exportBtn.onclick = () => this.exportCurrent();
-    this.deleteBtn = document.createElement("button");
-    this.deleteBtn.type = "button";
-    this.deleteBtn.className = "lightbox-btn lightbox-del-btn";
-    this.deleteBtn.setAttribute("data-cg-delete", "");
-    this.deleteBtn.innerHTML = "\uD83D\uDDD1️";
-    this.deleteBtn.title = "Delete picture";
-    this.deleteBtn.style.cssText = this.btnStyle("rgba(239, 68, 68, 0.25)", "rgba(239, 68, 68, 0.45)", "#fca5a5");
-    this.deleteBtn.onclick = () => this.deleteCurrent();
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "lightbox-btn lightbox-close-btn";
-    closeBtn.setAttribute("data-cg-lightbox-close", "");
-    closeBtn.innerHTML = "✕";
-    closeBtn.title = "Close";
-    closeBtn.style.cssText = this.btnStyle() + "width:38px;padding:0;text-align:center;justify-content:center;";
-    closeBtn.onclick = () => this.close();
-    actions.append(this.zoomBtn, this.prevBtn, this.nextBtn, this.exportBtn, this.deleteBtn, closeBtn);
-    topBar.append(backBtn, actions);
-    const viewport = document.createElement("div");
-    viewport.className = "lightbox-viewport";
-    viewport.style.cssText = `
-      position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      cursor: grab;
-    `;
-    this.img = document.createElement("img");
-    this.img.className = "lightbox-img";
-    this.img.setAttribute("data-cg-lightbox-img", "");
-    this.img.alt = "Artwork preview";
-    this.img.style.cssText = `
-      max-width: 94vw;
-      max-height: 80vh;
-      object-fit: contain;
-      border-radius: 8px;
-      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9);
-      transition: transform 0.08s ease-out;
-      transform-origin: center center;
-      will-change: transform;
-      pointer-events: auto;
-    `;
-    viewport.append(this.img);
-    this.captionEl = document.createElement("div");
-    this.captionEl.className = "lightbox-caption";
-    this.captionEl.setAttribute("data-cg-lightbox-quote", "");
-    this.captionEl.style.cssText = `
-      position: absolute;
-      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-      left: 20px;
-      right: 20px;
-      max-width: 820px;
-      margin: 0 auto;
-      text-align: center;
-      font-size: 13px;
-      font-style: italic;
-      color: rgba(241, 245, 249, 0.92);
-      text-shadow: 0 2px 6px rgba(0,0,0,0.85);
-      pointer-events: none;
-      line-height: 1.5;
-    `;
-    this.host.append(topBar, viewport, this.captionEl);
-    if (mountParent)
-      mountParent.append(this.host);
-    else if (typeof document !== "undefined" && document.body)
-      document.body.append(this.host);
-    this.attachEvents(viewport);
-  }
-  btnStyle(bg = "rgba(255, 255, 255, 0.12)", border = "rgba(255, 255, 255, 0.2)", color = "#fff") {
-    return `
-      min-height: 38px;
-      padding: 6px 14px;
-      border-radius: 8px;
-      border: 1px solid ${border};
-      background: ${bg};
-      color: ${color};
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    `;
-  }
-  attachEvents(viewport) {
-    viewport.addEventListener("mousedown", (e) => {
-      if (e.button !== 0)
-        return;
-      this.isDragging = true;
-      this.startX = e.clientX - this.translateX;
-      this.startY = e.clientY - this.translateY;
-      viewport.style.cursor = "grabbing";
-      e.preventDefault();
-    });
-    window.addEventListener("mousemove", (e) => {
-      if (!this.isDragging || !this.isOpen)
-        return;
-      this.translateX = e.clientX - this.startX;
-      this.translateY = e.clientY - this.startY;
-      this.applyTransform();
-    });
-    window.addEventListener("mouseup", () => {
-      if (!this.isDragging)
-        return;
-      this.isDragging = false;
-      viewport.style.cursor = "grab";
-    });
-    viewport.addEventListener("wheel", (e) => {
-      if (!this.isOpen)
-        return;
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 1.15 : 0.85;
-      this.scale = Math.max(0.3, Math.min(4.5, this.scale * delta));
-      this.updateZoomModeLabel();
-      this.applyTransform();
-    }, { passive: false });
-    viewport.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 2) {
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        if (!t0 || !t1)
-          return;
-        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-        this.initialPinchDist = dist;
-        this.initialPinchScale = this.scale;
-      } else if (e.touches.length === 1) {
-        const t0 = e.touches[0];
-        if (!t0)
-          return;
-        const now = Date.now();
-        if (now - this.lastTapTime < 320) {
-          this.cycleZoom();
-          this.lastTapTime = 0;
-          return;
-        }
-        this.lastTapTime = now;
-        this.isDragging = true;
-        this.startX = t0.clientX - this.translateX;
-        this.startY = t0.clientY - this.translateY;
-      }
-    }, { passive: true });
-    viewport.addEventListener("touchmove", (e) => {
-      if (!this.isOpen)
-        return;
-      if (e.touches.length === 2 && this.initialPinchDist > 0) {
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        if (!t0 || !t1)
-          return;
-        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-        const factor = dist / this.initialPinchDist;
-        this.scale = Math.max(0.4, Math.min(4.5, this.initialPinchScale * factor));
-        this.updateZoomModeLabel();
-        this.applyTransform();
-        e.preventDefault();
-      } else if (e.touches.length === 1 && this.isDragging) {
-        const t0 = e.touches[0];
-        if (!t0)
-          return;
-        this.translateX = t0.clientX - this.startX;
-        this.translateY = t0.clientY - this.startY;
-        this.applyTransform();
-        e.preventDefault();
-      }
-    }, { passive: false });
-    viewport.addEventListener("touchend", (e) => {
-      if (e.touches.length < 2) {
-        this.initialPinchDist = 0;
-      }
-      if (e.touches.length === 0) {
-        this.isDragging = false;
-      }
-    });
-    window.addEventListener("keydown", (e) => {
-      if (!this.isOpen)
-        return;
-      if (e.key === "Escape") {
-        this.close();
-      } else if (e.key === "ArrowLeft") {
-        this.step(-1);
-      } else if (e.key === "ArrowRight") {
-        this.step(1);
-      } else if (e.key === "+" || e.key === "=") {
-        this.scale = Math.min(4.5, this.scale * 1.25);
-        this.updateZoomModeLabel();
-        this.applyTransform();
-      } else if (e.key === "-" || e.key === "_") {
-        this.scale = Math.max(0.4, this.scale * 0.8);
-        this.updateZoomModeLabel();
-        this.applyTransform();
-      } else if (e.key === "0") {
-        this.resetTransform();
-      }
-    });
-  }
-  applyTransform() {
-    this.img.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
-  }
-  resetTransform() {
-    this.scale = 1;
-    this.translateX = 0;
-    this.translateY = 0;
-    this.zoomMode = "fit";
-    this.zoomBtn.innerHTML = "\uD83D\uDD0D Fit";
-    this.applyTransform();
-  }
-  cycleZoom() {
-    if (this.zoomMode === "fit") {
-      this.zoomMode = "100";
-      this.scale = 1.6;
-      this.zoomBtn.textContent = "\uD83D\uDD0D 100%";
-    } else if (this.zoomMode === "100") {
-      this.zoomMode = "200";
-      this.scale = 2.6;
-      this.zoomBtn.textContent = "\uD83D\uDD0D 200%";
-    } else {
-      this.resetTransform();
-      return;
-    }
-    this.applyTransform();
-  }
-  updateZoomModeLabel() {
-    if (Math.abs(this.scale - 1) < 0.15) {
-      this.zoomMode = "fit";
-      this.zoomBtn.innerHTML = "\uD83D\uDD0D Fit";
-    } else if (Math.abs(this.scale - 1.6) < 0.25) {
-      this.zoomMode = "100";
-      this.zoomBtn.innerHTML = "\uD83D\uDD0D 100%";
-    } else if (this.scale >= 2) {
-      this.zoomMode = "200";
-      this.zoomBtn.innerHTML = "\uD83D\uDD0D 200%";
-    } else {
-      this.zoomBtn.textContent = `\uD83D\uDD0D ${Math.round(this.scale * 100)}%`;
-    }
-  }
-  get hidden() {
-    return Boolean(this.host.hidden);
-  }
-  set hidden(val) {
-    this.host.hidden = val;
-    if (val) {
-      this.close();
-    }
-  }
-  get isOpenState() {
-    return this.isOpen;
-  }
-  open(items, index = 0) {
-    if (typeof items === "string") {
-      this.items = [{ imageUrl: items }];
-      this.activeIndex = 0;
-    } else {
-      this.items = items;
-      this.activeIndex = Math.max(0, Math.min(items.length - 1, index));
-    }
-    this.isOpen = true;
-    this.host.hidden = false;
-    this.renderCurrent();
-  }
-  close() {
-    this.isOpen = false;
-    this.host.hidden = true;
-    this.resetTransform();
-    this.onClose?.();
-  }
-  renderCurrent() {
-    const item = this.items[this.activeIndex];
-    if (!item)
-      return;
-    this.resetTransform();
-    this.img.src = item.imageUrl;
-    const captionText = item.storyExcerpt ? `“${item.storyExcerpt}”` : item.caption || item.title || "";
-    this.captionEl.textContent = captionText;
-    this.captionEl.style.display = captionText ? "block" : "none";
-    this.prevBtn.style.display = this.items.length > 1 ? "inline-flex" : "none";
-    this.nextBtn.style.display = this.items.length > 1 ? "inline-flex" : "none";
-    this.deleteBtn.style.display = this.onDelete ? "inline-flex" : "none";
-  }
-  step(delta) {
-    if (this.items.length <= 1)
-      return;
-    this.activeIndex = (this.activeIndex + delta + this.items.length) % this.items.length;
-    this.renderCurrent();
-  }
-  exportCurrent() {
-    const item = this.items[this.activeIndex];
-    if (!item?.imageUrl)
-      return;
-    const a = document.createElement("a");
-    a.href = item.imageUrl;
-    a.download = `lumiglyphics-artwork-${Date.now()}.png`;
-    a.click();
-  }
-  deleteCurrent() {
-    const item = this.items[this.activeIndex];
-    if (!item)
-      return;
-    if (typeof window !== "undefined" && window.confirm && !window.confirm("Delete this picture?"))
-      return;
-    const idx = this.activeIndex;
-    this.items = this.items.filter((_, i) => i !== idx);
-    this.onDelete?.(item, idx);
-    if (this.items.length === 0) {
-      this.close();
-    } else {
-      this.activeIndex = Math.min(this.activeIndex, this.items.length - 1);
-      this.renderCurrent();
-    }
-  }
-}
-
 // src/frontend/stage/reference-cropper.ts
 var MIN_SIZE = 0.08;
 var round4 = (n2) => Number(n2.toFixed(4));
@@ -62535,7 +62160,6 @@ class CharacterFolio {
   mergeOther = "";
   accumulatedCgs = new Map;
   persistentGalleries = Object.create(null);
-  lightbox;
   setSceneActionTools(tools, forCharacterName) {
     this.sceneActionTools = tools;
     this.sceneActionForName = forCharacterName?.trim() || null;
@@ -63333,11 +62957,6 @@ class CharacterFolio {
     `;
     this.rosterCarousel = this.element.querySelector("[data-folio-roster]");
     this.detailContainer = this.element.querySelector("[data-folio-body]");
-    this.lightbox = new ImageLightbox(this.element);
-    this.lightbox.onDelete = (item) => {
-      this.removeCg(item.imageUrl);
-      this.handlers.onDeleteImage?.(item.imageUrl);
-    };
   }
   enter() {
     if (!this.activeCharacterId && Object.keys(this.library).length > 0) {
@@ -65142,13 +64761,23 @@ class CharacterFolio {
         img.src = cg.imageUrl;
         img.alt = cg.caption || char.name;
         img.title = "Click to inspect full image";
-        const lightboxItems = collected.map((item) => ({
-          imageUrl: item.imageUrl,
-          caption: item.caption || char.name,
-          storyExcerpt: item.caption
-        }));
         img.onclick = () => {
-          this.lightbox.open(lightboxItems, collected.indexOf(cg));
+          FullscreenLightbox.open({
+            src: cg.imageUrl,
+            title: char.name,
+            ...cg.caption ? { subtitle: cg.caption } : {},
+            gallery: collected.map((item) => ({
+              src: item.imageUrl,
+              title: char.name,
+              ...item.caption ? { subtitle: item.caption } : {}
+            })),
+            galleryIndex: collected.indexOf(cg),
+            themeSource: this.element,
+            onDelete: (item) => {
+              this.removeCg(item.src);
+              this.handlers.onDeleteImage?.(item.src);
+            }
+          });
         };
         const badges = document.createElement("div");
         badges.className = "folio-cg-badges";

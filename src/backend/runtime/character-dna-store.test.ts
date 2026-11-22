@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'bun:test';
-import {loadCharacterDNALibrary,saveCharacterDNA} from './character-dna-harvester.js';
+import {loadCharacterDNALibrary,saveCharacterDNA} from './character-dna-store.js';
 import {createEmptyCharacterDNA,findCharacterDNA} from '../../shared/character-dna.js';
 function fixture(){const data=new Map<string,unknown>();const spindle:any={userStorage:{getJson:async(p:string,o:any)=>structuredClone(data.get(`${o?.userId}:${p}`)??o?.fallback??null),setJson:async(p:string,v:unknown,o:any)=>{data.set(`${o?.userId}:${p}`,structuredClone(v));}}};return{data,spindle};}
 describe('DNA library mutation integrity',()=>{

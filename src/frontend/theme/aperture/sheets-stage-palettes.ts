@@ -888,7 +888,6 @@ section[data-reference-observations] h3 {
   height: 100% !important;
   min-width: 100% !important;
   min-height: 100% !important;
-  object-fit: cover !important;
   object-position: 50% 30% !important;
 }
 

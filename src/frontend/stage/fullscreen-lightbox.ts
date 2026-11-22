@@ -14,6 +14,9 @@ export interface LightboxOptions extends LightboxGalleryItem {
   gallery?: readonly LightboxGalleryItem[] | undefined;
   galleryIndex?: number | undefined;
   themeSource?: HTMLElement | undefined;
+  onDelete?: ((item: LightboxGalleryItem, index: number) => void) | undefined;
+  onSetFaceRef?: ((item: LightboxGalleryItem, index: number) => void) | undefined;
+  onSetOutfitRef?: ((item: LightboxGalleryItem, index: number) => void) | undefined;
 }
 
 const LIGHTBOX_CSS = `
@@ -270,6 +273,9 @@ export class FullscreenLightbox {
           <div class="vn-lightbox-subtitle"></div>
         </div>
         <div class="vn-lightbox-actions">
+          <button type="button" class="vn-lightbox-btn" data-action="face-ref" hidden title="Set as face reference">Face Ref</button>
+          <button type="button" class="vn-lightbox-btn" data-action="outfit-ref" hidden title="Set as outfit reference">Outfit Ref</button>
+          <button type="button" class="vn-lightbox-btn" data-action="delete" hidden title="Delete image">Delete</button>
           <button type="button" class="vn-lightbox-btn" data-action="zoom-toggle" title="Toggle zoom">100%</button>
           <button type="button" class="vn-lightbox-btn" data-action="info-toggle" title="Prompt details">Info</button>
           <button type="button" class="vn-lightbox-btn vn-lightbox-close" data-action="close" aria-label="Close" title="Close (Esc)">✕</button>
@@ -321,7 +327,25 @@ export class FullscreenLightbox {
 
   private wireEvents(): void {
     const viewport = this.backdrop.querySelector("[data-viewport]") as HTMLElement;
+    const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]') as HTMLButtonElement;
+    const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]') as HTMLButtonElement;
+    const deleteBtn = this.backdrop.querySelector('[data-action="delete"]') as HTMLButtonElement;
     const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]') as HTMLButtonElement;
+    faceBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const item = this.galleryItems[this.galleryIndex] ?? this.currentOptions;
+      if (item && this.currentOptions?.onSetFaceRef) { this.currentOptions.onSetFaceRef(item, this.galleryIndex); }
+    });
+    outfitBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const item = this.galleryItems[this.galleryIndex] ?? this.currentOptions;
+      if (item && this.currentOptions?.onSetOutfitRef) { this.currentOptions.onSetOutfitRef(item, this.galleryIndex); }
+    });
+    deleteBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const item = this.galleryItems[this.galleryIndex] ?? this.currentOptions;
+      if (item && this.currentOptions?.onDelete) { this.currentOptions.onDelete(item, this.galleryIndex); this.close(); }
+    });
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]') as HTMLButtonElement;
     const closeBtn = this.backdrop.querySelector('[data-action="close"]') as HTMLButtonElement;
 
@@ -538,6 +562,12 @@ export class FullscreenLightbox {
 
   public show(options: LightboxOptions): void {
     this.currentOptions = options;
+    const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]') as HTMLButtonElement | null;
+    const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]') as HTMLButtonElement | null;
+    const deleteBtn = this.backdrop.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
+    if (faceBtn) faceBtn.hidden = !options.onSetFaceRef;
+    if (outfitBtn) outfitBtn.hidden = !options.onSetOutfitRef;
+    if (deleteBtn) deleteBtn.hidden = !options.onDelete;
     this.applyThemeTokens(options.themeSource);
     this.galleryItems = options.gallery && options.gallery.length > 0 ? options.gallery : [];
     const requestedIdx = options.galleryIndex ?? 0;

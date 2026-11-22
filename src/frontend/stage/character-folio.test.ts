@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { CharacterFolio } from './character-folio.js';
+import { FullscreenLightbox } from './fullscreen-lightbox.js';
 import { createEmptyCharacterDNA, formatCharacterDNAToPromptClause, formatCharacterDNAToTags, mergeCharacterDNA } from '../../shared/character-dna.js';
 import { installFakeDocument } from './stage-test-dom.js';
 
@@ -392,11 +393,19 @@ it('setActiveCharacter with empty string does not create blank character, facts 
     f.activeSubTab = 'cgs';
     f.renderDetail();
 
-    expect(f.lightbox.host.hidden).toBe(true);
-    const thumb = f.detailContainer.querySelector('.folio-cg-thumb');
-    expect(thumb).not.toBeNull();
-    thumb.click();
-    expect(f.lightbox.host.hidden).toBe(false);
+    const origOpen = FullscreenLightbox.open;
+    let openedOpts: any = null;
+    FullscreenLightbox.open = ((opts: any) => { openedOpts = opts; return null as any; });
+    try {
+      const thumb = f.detailContainer.querySelector('.folio-cg-thumb');
+      expect(thumb).not.toBeNull();
+      thumb.click();
+      expect(openedOpts).not.toBeNull();
+      expect(openedOpts.src).toBe('https://example.com/pic1.png');
+      expect(openedOpts.gallery).toHaveLength(1);
+    } finally {
+      FullscreenLightbox.open = origOpen;
+    }
   } finally {
     restore();
   }
