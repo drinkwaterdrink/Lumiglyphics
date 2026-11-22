@@ -287,8 +287,10 @@ export function buildVisualBrief(
   const noPeople = template.subjectMode === "none";
   const ensemble = template.subjectMode === "ensemble";
   const { name, sameCharacter, saved, resolved, identity, lockedDNA } = resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary);
-  const dnaAttire = lockedDNA ? (lockedDNA.activeOutfit || lockedDNA.signatureOutfit || null) : null;
-  const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null) ?? dnaAttire;
+  const dnaAttire = lockedDNA ? ((lockedDNA.activeWardrobeKey && lockedDNA.wardrobeStates?.[lockedDNA.activeWardrobeKey]) || lockedDNA.activeOutfit || lockedDNA.signatureOutfit || null) : null;
+  const attire = (lockedDNA?.lockActiveWardrobe && dnaAttire)
+    ? dnaAttire
+    : (cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null) ?? dnaAttire);
   const manual = cue.visualSources?.includes("manual subject correction");
   const conflicts = !noPeople && !ensemble && saved && resolved && saved !== resolved
     ? [manual ? "Manual appearance replaces saved appearance for this picture." : lockedDNA?.locked ? "Locked Character DNA takes precedence over story text drift." : "Saved appearance differs from scene evidence; the saved appearance is used."]
@@ -332,10 +334,16 @@ export function buildVisualBrief(
     const contAppearance = cont?.appearance ? Object.values(cont.appearance).filter(Boolean).join(', ') : undefined;
     const contWardrobe = cont?.wardrobe ? Object.values(cont.wardrobe).filter(Boolean).join(', ') : undefined;
 
-    const fallbackAppearance = dnaAppearance || saved || (member.appearance?.trim() ? member.appearance : contAppearance);
-    const memberAttire = ('attire' in member && member.attire)
-      ? String(member.attire)
-      : (memberDna?.activeOutfit || memberDna?.signatureOutfit || contWardrobe || undefined);
+    const isCuratedDna = memberDna && (memberDna.locked || !memberDna.autoDiscovered);
+    const fallbackAppearance = isCuratedDna
+      ? (dnaAppearance || saved || (member.appearance?.trim() ? member.appearance : contAppearance))
+      : (saved || dnaAppearance || (member.appearance?.trim() ? member.appearance : contAppearance));
+    const memberDnaWardrobe = (memberDna?.activeWardrobeKey && memberDna.wardrobeStates?.[memberDna.activeWardrobeKey]) || memberDna?.activeOutfit || memberDna?.signatureOutfit;
+    const memberAttire = (memberDna?.lockActiveWardrobe && memberDnaWardrobe)
+      ? memberDnaWardrobe
+      : ('attire' in member && member.attire)
+        ? String(member.attire)
+        : (memberDnaWardrobe || contWardrobe || undefined);
     const appearanceBase = manual ? member.appearance : (fallbackAppearance || member.appearance);
     const appearance = memberAttire ? applyAttireOverride(appearanceBase, '') : appearanceBase;
     return {...member, appearance, attire: memberAttire};

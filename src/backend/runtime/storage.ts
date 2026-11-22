@@ -1,5 +1,5 @@
 import {loadCharacterDNALibrary} from './character-dna-store.js';
-import {formatCharacterDNAToPromptClause} from '../../shared/character-dna.js';
+import {formatCharacterDNAToPromptClause, type CharacterDNA} from '../../shared/character-dna.js';
 import { ReplyUsageSchema, type ReplyUsage } from "../../shared/reply-usage.js";
 import { projectTurnPresentation } from "./entity-projection.js";
 import {PresentationRuleDocumentSchema,type PresentationRuleDocument} from '../../shared/presentation-rules.js';
@@ -310,14 +310,50 @@ export async function loadCharacterAppearance(
   chatId?: string
 ): Promise<CharacterAppearanceMap> {
   if (chatId) {
-    const map=normalizeAppearanceMap(await spindle.userStorage.getJson<unknown>(`chats/${safeSegment(chatId)}/characters.json`, { fallback: {}, ...(userOptions(userId) ?? {}) }));
-    for(const record of await manualCastRecords(spindle,chatId,userId)){const key=appearanceMapKeyFor(map,record.name);if(key)delete map[key];map[record.name]=setupAppearance(record.setup!);}
-    // Freeze saved DNA into the same identity map used by preview, provider payload and cache fingerprints.
-    // Selection below is by pictured identity; unrelated profiles are never appended to a prompt.
-    try{const library=await loadCharacterDNALibrary(spindle,chatId,userId);for(const dna of Object.values(library.characters)){
-      const appearance=formatCharacterDNAToPromptClause(dna);if(!appearance)continue;
-      for(const name of [dna.name,...dna.aliases]){const key=appearanceMapKeyFor(map,name);if(key)delete map[key];map[name]=appearance;}
-    }}catch{spindle.log?.warn?.('Saved DNA could not be read; existing appearance memory remains available.');}
+    const map = normalizeAppearanceMap(await spindle.userStorage.getJson<unknown>(`chats/${safeSegment(chatId)}/characters.json`, { fallback: {}, ...(userOptions(userId) ?? {}) }));
+    let unlockedDna: CharacterDNA[] = [];
+    let curatedDna: CharacterDNA[] = [];
+    try {
+      const library = await loadCharacterDNALibrary(spindle, chatId, userId);
+      for (const dna of Object.values(library.characters)) {
+        if (!dna || !dna.name) continue;
+        if (dna.locked || !dna.autoDiscovered) {
+          curatedDna.push(dna);
+        } else {
+          unlockedDna.push(dna);
+        }
+      }
+    } catch {
+      spindle.log?.warn?.('Saved DNA could not be read; existing appearance memory remains available.');
+    }
+
+    // Precedence: Curated DNA > CastArtSetup > Unlocked autoDiscovered DNA > characters.json
+    for (const dna of unlockedDna) {
+      const appearance = formatCharacterDNAToPromptClause(dna);
+      if (!appearance) continue;
+      for (const name of [dna.name, ...dna.aliases]) {
+        const key = appearanceMapKeyFor(map, name);
+        if (key) delete map[key];
+        map[name] = appearance;
+      }
+    }
+
+    for (const record of await manualCastRecords(spindle, chatId, userId)) {
+      const key = appearanceMapKeyFor(map, record.name);
+      if (key) delete map[key];
+      map[record.name] = setupAppearance(record.setup!);
+    }
+
+    for (const dna of curatedDna) {
+      const appearance = formatCharacterDNAToPromptClause(dna);
+      if (!appearance) continue;
+      for (const name of [dna.name, ...dna.aliases]) {
+        const key = appearanceMapKeyFor(map, name);
+        if (key) delete map[key];
+        map[name] = appearance;
+      }
+    }
+
     return map;
   }
   const raw = await spindle.userStorage.getJson<unknown>(characterAppearancePath(), {

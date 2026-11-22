@@ -43,14 +43,20 @@ const NICKNAME_CLUSTERS: ReadonlyArray<ReadonlySet<string>> = [
   new Set(["gerald", "jerry", "gerry"]),
   new Set(["lawrence", "larry"]),
   new Set(["stephen", "steven", "steve", "stevie"]),
-  new Set(["walter", "walt", "wally"]),
-  new Set(["marche", "marseline", "marseline vane"])
+  new Set(["walter", "walt", "wally"])
 ];
 
-const LOOKUP_MAP = new Map<string, ReadonlySet<string>>();
+const LOOKUP_MAP = new Map<string, Set<string>>();
 for (const cluster of NICKNAME_CLUSTERS) {
   for (const name of cluster) {
-    LOOKUP_MAP.set(name, cluster);
+    const existing = LOOKUP_MAP.get(name);
+    if (!existing) {
+      LOOKUP_MAP.set(name, new Set(cluster));
+    } else {
+      for (const item of cluster) {
+        existing.add(item);
+      }
+    }
   }
 }
 
@@ -125,15 +131,35 @@ export function findMatchingCharacterId(
   const candidateNorm = normalizeNameToken(candidateName);
   if (!candidateNorm) return null;
 
+  // 1. Exact name/alias match first (highest confidence)
   for (const char of Object.values(library)) {
-    if (areNamesEquivalent(char.name, candidateName)) {
+    if (normalizeNameToken(char.name) === candidateNorm) {
       return char.id;
     }
     for (const alias of char.aliases ?? []) {
-      if (areNamesEquivalent(alias, candidateName)) {
+      if (normalizeNameToken(alias) === candidateNorm) {
         return char.id;
       }
     }
+  }
+
+  // 2. Nickname / diminutive equivalence with single-match guard
+  const matches: string[] = [];
+  for (const char of Object.values(library)) {
+    if (areNamesEquivalent(char.name, candidateName)) {
+      matches.push(char.id);
+      continue;
+    }
+    for (const alias of char.aliases ?? []) {
+      if (areNamesEquivalent(alias, candidateName)) {
+        matches.push(char.id);
+        break;
+      }
+    }
+  }
+
+  if (matches.length === 1) {
+    return matches[0]!;
   }
 
   return null;

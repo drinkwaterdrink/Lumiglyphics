@@ -32,7 +32,7 @@ export type ResolvedVoice = {
 
 export function resolveVoiceForParagraph(
   settings: Pick<SpeechSettings, "narrator" | "characterDefault" | "characters">,
-  input: { chatId: string; paragraphSpeaker: string | null | undefined; turnSpeaker: string },
+  input: { chatId: string; paragraphSpeaker: string | null | undefined; turnSpeaker: string; aliases?: readonly string[] | Record<string, readonly string[]> | undefined },
 ): ResolvedVoice {
   const attributed = input.paragraphSpeaker;
   // null/undefined = unknown attribution: fall back to the turn speaker, exactly
@@ -47,6 +47,22 @@ export function resolveVoiceForParagraph(
   }
   const override = settings.characters[characterOverrideKey(input.chatId, name)];
   if (override) return { ref: override, source: "character-override", role: "character", speakerName: name };
+
+  if (input.aliases) {
+    const aliasList: readonly string[] = Array.isArray(input.aliases)
+      ? input.aliases
+      : (typeof input.aliases === "object"
+        ? ((input.aliases as Record<string, readonly string[]>)[name] ?? (input.aliases as Record<string, readonly string[]>)[speakerNameKey(name)] ?? [])
+        : []);
+    for (const alias of aliasList) {
+      if (!alias || typeof alias !== "string") continue;
+      const aliasOverride = settings.characters[characterOverrideKey(input.chatId, alias)];
+      if (aliasOverride) {
+        return { ref: aliasOverride, source: "character-override", role: "character", speakerName: name };
+      }
+    }
+  }
+
   if (settings.characterDefault) {
     return { ref: settings.characterDefault, source: "character-default", role: "character", speakerName: name };
   }

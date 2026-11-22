@@ -39,9 +39,17 @@ export async function saveCharacterDNA(spindle:SpindleAPI,chatId:string,dna:Char
  const parsed=CharacterDNASchema.parse(dna);return mutateCharacterDnaLibrary(spindle,chatId,userId,revision,l=>{
   const activeById=l.characters[parsed.id];
   if(l.deleted?.[parsed.id]||(!activeById&&findCharacterDNA(l.deleted??{},parsed.name)))throw new Error('This character was deleted. Restore it before saving.');
-  const existing=findCharacterDNA(l.characters,parsed.id)||findCharacterDNA(l.characters,parsed.name);
-  if(existing&&(existing.id!==parsed.id||existing.name!==parsed.name))throw new Error('This character already exists. Open its saved profile or merge identities explicitly.');
-  const id=existing?.id??parsed.id;parsed.fieldSources={...existing?.fieldSources,...parsed.fieldSources};
+  const existingById=l.characters[parsed.id];
+  const existingByName=findCharacterDNA(l.characters,parsed.name);
+  if(existingByName&&existingByName.id!==parsed.id)throw new Error('This character already exists. Open its saved profile or merge identities explicitly.');
+  const existing=existingById??existingByName;
+  const id=existing?.id??parsed.id;
+  if(existing&&existing.name&&existing.name.toLowerCase()!==parsed.name.toLowerCase()){
+   const aliases=new Set(parsed.aliases??[]);
+   aliases.add(existing.name);
+   parsed.aliases=Array.from(aliases).slice(0,16);
+  }
+  parsed.fieldSources={...existing?.fieldSources,...parsed.fieldSources};
   for(const path of DNA_FIELDS)if(JSON.stringify(existing&&dnaFieldValue(existing,path))!==JSON.stringify(dnaFieldValue(parsed,path)))parsed.fieldSources[path]={classification:'manual',sources:[]};
   l.characters[id]={...parsed,id,...(existing?.autoDiscovered||parsed.autoDiscovered?{autoDiscovered:false}:{})};
  });

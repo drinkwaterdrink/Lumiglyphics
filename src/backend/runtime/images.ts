@@ -1314,6 +1314,63 @@ async function resolveImageProfile(spindle: SpindleAPI, config: VisualNovelConfi
   }
 }
 
+export async function hydrateDnaReferenceImages(
+  spindle: SpindleAPI,
+  chatId: string,
+  userId: string | undefined,
+  dnaLibrary: CharacterDNALibrary | Record<string, CharacterDNA> | undefined,
+  cue: VisualCue,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!dnaLibrary || signal?.aborted) return;
+  const chars = "characters" in dnaLibrary ? dnaLibrary.characters : dnaLibrary;
+  if (!chars || typeof chars !== "object") return;
+
+  const candidateNames = new Set<string>();
+  if (cue.character) candidateNames.add(cue.character.trim().toLowerCase());
+  if (cue.ensembleSubjects) {
+    for (const sub of cue.ensembleSubjects) {
+      if (sub.name) candidateNames.add(sub.name.trim().toLowerCase());
+    }
+  }
+
+  const hydrateSlot = async (dna: CharacterDNA, field: "referenceImageUrl" | "secondaryReferenceImageUrl", charKey: string) => {
+    if (signal?.aborted) return;
+    const url = dna[field];
+    if (!url || typeof url !== "string") return;
+    if (url.startsWith("data:image/")) return;
+    if (url.startsWith("http://") || url.startsWith("https://")) return;
+
+    const imageId = url.replace(/^\/?(?:api\/v1\/)?images\//, "").trim();
+    if (!imageId) return;
+
+    try {
+      const dataUrl = await fetchReferenceImageViaFrontend(spindle, {
+        chatId,
+        imageId,
+        characterKey: charKey,
+        ...(userId ? { userId } : {}),
+        signal,
+      });
+      if (dataUrl && dataUrl.startsWith("data:image/")) {
+        dna[field] = dataUrl;
+      }
+    } catch {
+      // Fail safe, do not disrupt image generation
+    }
+  };
+
+  for (const [key, dna] of Object.entries(chars)) {
+    if (!dna) continue;
+    const names = [dna.name, ...(dna.aliases ?? [])].map(n => n.trim().toLowerCase());
+    const isTarget = candidateNames.size === 0 || names.some(n => candidateNames.has(n));
+    if (isTarget) {
+      await hydrateSlot(dna, "referenceImageUrl", key);
+      await hydrateSlot(dna, "secondaryReferenceImageUrl", key);
+    }
+  }
+}
+
 export async function generateAssets(
   spindle: SpindleAPI,
   plan: TurnPlan,
@@ -1664,6 +1721,9 @@ export async function generateAssets(
           const activeDnaForRefs = !referenceAnchoringEnabled(config) || !cueUsesCharacterReference(cue) || wantsCapture
             ? undefined
             : characterDNALibrary;
+          if (activeDnaForRefs) {
+            await hydrateDnaReferenceImages(spindle, plan.key.chatId, userId, activeDnaForRefs, cue, signal);
+          }
           const v1RefPlan = provider && REFERENCE_PROVIDERS.has(provider) && (portrait || activeDnaForRefs)
             ? resolveReferencePlan({
                 brief: initialCompiled?.brief,
@@ -1844,6 +1904,9 @@ export async function generateAssets(
               const nextDnaForRefs = !referenceAnchoringEnabled(config) || !cueUsesCharacterReference(nextCue) || wantsCapture
                 ? undefined
                 : characterDNALibrary;
+              if (nextDnaForRefs) {
+                await hydrateDnaReferenceImages(spindle, plan.key.chatId, userId, nextDnaForRefs, nextCue, signal);
+              }
               const nextNai = provider === "novelai" ? compileNovelAiRequest(config, relightScene, nextCue, characterAppearance) : null;
               const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt}, {});
               const effectiveConnectionId = options?.connectionId !== undefined ? (options.connectionId.trim() || undefined) : selected?.id;

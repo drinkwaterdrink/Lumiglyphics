@@ -36,6 +36,7 @@ export type SpeechCursor = {
   /** Raw paragraph attribution: "" narrator, name, or null/undefined = unknown. */
   paragraphSpeaker: string | null | undefined;
   turnSpeaker: string;
+  aliases?: readonly string[];
 };
 
 export type SpeechStatus =
@@ -249,6 +250,7 @@ export class SpeechController {
       chatId: cursor.chatId,
       paragraphSpeaker: cursor.paragraphSpeaker,
       turnSpeaker: cursor.turnSpeaker,
+      ...(cursor.aliases !== undefined ? { aliases: cursor.aliases } : {}),
     });
     if (!resolved.ref) {
       const who = resolved.role === "narrator" ? "the narrator" : `“${resolved.speakerName}”`;

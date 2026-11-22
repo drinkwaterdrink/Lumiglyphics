@@ -43,6 +43,23 @@ export const CharacterRelationshipSchema = z.object({
 }).strict();
 export type CharacterRelationship = z.infer<typeof CharacterRelationshipSchema>;
 
+export const CropAspectSchema = z.enum(['1:1', '3:4', '2:3', 'free']);
+export type CropAspect = z.infer<typeof CropAspectSchema>;
+export const NormalizedCropRectSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  width: z.number().min(0.01).max(1),
+  height: z.number().min(0.01).max(1),
+}).strict();
+export type NormalizedCropRect = z.infer<typeof NormalizedCropRectSchema>;
+export const ReferenceCropMetaSchema = z.object({
+  sourceImageId: z.string().trim().max(256).optional(),
+  sourceUrl: z.string().trim().max(2048).optional(),
+  rect: NormalizedCropRectSchema,
+  aspect: CropAspectSchema.optional(),
+}).strict();
+export type ReferenceCropMeta = z.infer<typeof ReferenceCropMetaSchema>;
+
 export const CharacterDNASchema = z.object({
   id: z.string().trim().min(1).max(256),
   name: z.string().trim().min(1).max(160),
@@ -73,6 +90,10 @@ export const CharacterDNASchema = z.object({
   secondaryReferenceImageUrl: z.string().trim().max(5000000).optional(),
   referenceImageId: z.string().trim().max(256).optional(),
   secondaryReferenceImageId: z.string().trim().max(256).optional(),
+  referenceCropMeta: ReferenceCropMetaSchema.optional(),
+  secondaryReferenceCropMeta: ReferenceCropMetaSchema.optional(),
+  lockActiveWardrobe: z.boolean().optional(),
+  wardrobeThumbnails: z.record(z.string().trim().max(60), z.string().trim().max(2048)).optional(),
   relationships: z.array(CharacterRelationshipSchema).max(40).default([]),
   autoDiscovered: z.boolean().optional(),
   seenInSwipes: z.array(z.string().max(160)).max(60).optional(),

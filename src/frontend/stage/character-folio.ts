@@ -12,6 +12,7 @@ import {
 } from '../../shared/character-dna.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import { ImageLightbox } from './image-lightbox.js';
+import { openReferenceCropperModal } from './reference-cropper.js';
 import { InteractionTray } from './interaction-tray.js';
 import type { DraftMergeMode, InteractionDraft } from '../../shared/scene-interactions.js';
 import type { WorkspaceSurface } from './reader-workspace.js';
@@ -28,6 +29,8 @@ export interface CharacterFolioHandlers {
   onMergeDNA?:(id:string,otherId:string,revision:number)=>void;
   onScrubSwipesDNA?: () => void;
   onDeleteImage?: (imageUrl: string) => void;
+  onPickFromHostGallery?: (callback: (imageUrl: string, caption?: string) => void) => void;
+  onConfigureVoice?: (characterName: string) => void;
   onClose?: () => void;
 }
 
@@ -1247,11 +1250,59 @@ export class CharacterFolio implements WorkspaceSurface {
 
     const heroTitle = document.createElement('div');
     heroTitle.className = 'folio-hero-title';
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
     const h2 = document.createElement('h2');
     h2.textContent = char.name;
+    h2.style.margin = '0';
+    titleRow.append(h2);
+
+    const renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.className = 'folio-action-btn';
+    renameBtn.style.cssText = 'font-size:11px;padding:2px 8px;border-radius:4px;';
+    renameBtn.innerHTML = '✏️ <span>Reveal True Name</span>';
+    renameBtn.title = 'Reveal true name or rename character (demotes previous name to alias)';
+    renameBtn.onclick = () => {
+      const current = char.name;
+      const next = typeof window !== 'undefined' ? window.prompt?.(`Enter revealed true name for "${current}" (previous name will be kept as an alias):`, current) : null;
+      if (!next || !next.trim() || next.trim() === current) return;
+      const newName = next.trim();
+      const oldName = char.name;
+      char.name = newName;
+      if (!char.aliases) char.aliases = [];
+      if (!char.aliases.some(a => a.toLowerCase() === oldName.toLowerCase())) {
+        char.aliases.push(oldName);
+      }
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      this.renderRoster();
+      this.renderDetail();
+    };
+    titleRow.append(renameBtn);
 
     const metaTags = document.createElement('div');
     metaTags.className = 'folio-hero-meta';
+
+    const voicePill = document.createElement('button');
+    voicePill.type = 'button';
+    voicePill.className = 'folio-tag folio-voice-pill';
+    voicePill.style.cssText = 'cursor:pointer;background:rgba(99,102,241,0.18);color:#c7d2fe;border:1px solid rgba(99,102,241,0.35);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;';
+    voicePill.textContent = '🎙️ Voice';
+    voicePill.title = 'Assign or preview character voice in Settings';
+    voicePill.onclick = () => {
+      this.handlers.onConfigureVoice?.(char.name);
+    };
+    metaTags.append(voicePill);
+
+    if (lore.observations?.length || (char.mindLedger && ((char.mindLedger.knownFacts?.length ?? 0) > 0 || (char.mindLedger.falseBeliefs?.length ?? 0) > 0))) {
+      const clueChip = document.createElement('span');
+      clueChip.className = 'folio-tag tag-clues';
+      clueChip.style.cssText = 'background:rgba(234,179,8,0.18);color:#fde047;border:1px solid rgba(234,179,8,0.35);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;';
+      clueChip.textContent = '🔍 Clues Active';
+      metaTags.append(clueChip);
+    }
 
     if (char.locked) {
       const lockTag = document.createElement('span');
@@ -1281,7 +1332,7 @@ export class CharacterFolio implements WorkspaceSurface {
       metaTags.append(genderTag);
     }
 
-    heroTitle.append(h2, metaTags);
+    heroTitle.append(titleRow, metaTags);
     heroTop.append(heroAvatar, heroTitle);
 
     // Global Actions
@@ -1571,33 +1622,99 @@ export class CharacterFolio implements WorkspaceSurface {
       }, el => onSingleAutoFill('distinguishingFeatures', el))
     );
     wardCard.append(wardGrid);
-    if (char.wardrobeStates && Object.keys(char.wardrobeStates).length > 0) {
-      const presetWrap = document.createElement('div');
-      presetWrap.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;';
-      const lbl = document.createElement('span');
-      lbl.style.cssText = 'font-size:11px;opacity:0.75;margin-right:2px;';
-      lbl.textContent = 'Wardrobe Presets:';
-      presetWrap.append(lbl);
-      for (const [key, outfitVal] of Object.entries(char.wardrobeStates)) {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'folio-action-btn';
-        const isActive = char.activeWardrobeKey === key || char.activeOutfit === outfitVal;
-        chip.style.cssText = `padding:4px 9px;font-size:11px;border-radius:999px;${isActive ? 'border-color:#6ee7b7;background:rgba(110,231,183,0.18);' : 'opacity:0.85;'}`;
-        chip.textContent = key;
-        chip.title = outfitVal;
-        chip.onclick = () => {
-          char.activeWardrobeKey = key;
-          char.activeOutfit = outfitVal;
-          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
-          this.dirty.add(char.id);
-          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
-          this.renderDetail();
-        };
-        presetWrap.append(chip);
+    // Wardrobe Locker & Presets
+    const lockerBox = document.createElement('div');
+    lockerBox.style.cssText = 'margin-top:10px;padding:10px;border-radius:8px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.2);display:flex;flex-direction:column;gap:8px;';
+
+    const lockerHdr = document.createElement('div');
+    lockerHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;';
+    const lockerTitle = document.createElement('strong');
+    lockerTitle.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#a7f3d0;';
+    lockerTitle.textContent = '👗 Wardrobe Locker & Scene Locking';
+
+    const lockToggleWrap = document.createElement('label');
+    lockToggleWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:11.5px;color:#cbd5e1;cursor:pointer;';
+    const lockBox = document.createElement('input');
+    lockBox.type = 'checkbox';
+    lockBox.checked = Boolean(char.lockActiveWardrobe);
+    lockBox.onchange = () => {
+      char.lockActiveWardrobe = lockBox.checked;
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+    };
+    const lockLbl = document.createElement('span');
+    lockLbl.textContent = '🔒 Lock active wardrobe across scenes';
+    lockToggleWrap.append(lockBox, lockLbl);
+    lockerHdr.append(lockerTitle, lockToggleWrap);
+    lockerBox.append(lockerHdr);
+
+    const presetWrap = document.createElement('div');
+    presetWrap.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;';
+    const states = char.wardrobeStates ?? {};
+    for (const [key, outfitVal] of Object.entries(states)) {
+      const chip = document.createElement('div');
+      chip.style.cssText = 'display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;background:rgba(30,41,59,0.8);border:1px solid rgba(148,163,184,0.3);';
+      const isActive = char.activeWardrobeKey === key || char.activeOutfit === outfitVal;
+      if (isActive) {
+        chip.style.borderColor = '#6ee7b7';
+        chip.style.background = 'rgba(110,231,183,0.18)';
       }
-      wardCard.append(presetWrap);
+      const selectBtn = document.createElement('button');
+      selectBtn.type = 'button';
+      selectBtn.style.cssText = 'background:none;border:none;color:inherit;cursor:pointer;font-size:inherit;font-weight:600;padding:0;';
+      selectBtn.textContent = key;
+      selectBtn.title = outfitVal;
+      selectBtn.onclick = () => {
+        char.activeWardrobeKey = key;
+        char.activeOutfit = outfitVal;
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+        this.renderDetail();
+      };
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.style.cssText = 'background:none;border:none;color:rgba(248,113,113,0.8);cursor:pointer;font-size:12px;padding:0 2px;';
+      delBtn.textContent = '×';
+      delBtn.title = `Delete ${key} preset`;
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        delete states[key];
+        if (char.wardrobeThumbnails) delete char.wardrobeThumbnails[key];
+        if (char.activeWardrobeKey === key) delete char.activeWardrobeKey;
+        char.wardrobeStates = { ...states };
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+        this.renderDetail();
+      };
+      chip.append(selectBtn, delBtn);
+      presetWrap.append(chip);
     }
+
+    const addPresetBtn = document.createElement('button');
+    addPresetBtn.type = 'button';
+    addPresetBtn.className = 'folio-action-btn';
+    addPresetBtn.style.cssText = 'padding:3px 9px;font-size:11px;border-radius:999px;';
+    addPresetBtn.textContent = '+ Add Wardrobe Preset';
+    addPresetBtn.onclick = () => {
+      const name = typeof window !== 'undefined' ? window.prompt?.('Enter name for wardrobe preset (e.g. Formal, Battle Armor, Casual):') : null;
+      if (!name || !name.trim()) return;
+      const desc = typeof window !== 'undefined' ? window.prompt?.(`Enter visual attire description for "${name}":`, char.activeOutfit || char.signatureOutfit || '') : null;
+      if (!desc || !desc.trim()) return;
+      if (!char.wardrobeStates) char.wardrobeStates = {};
+      char.wardrobeStates[name.trim()] = desc.trim();
+      char.activeWardrobeKey = name.trim();
+      char.activeOutfit = desc.trim();
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      this.renderDetail();
+    };
+    presetWrap.append(addPresetBtn);
+    lockerBox.append(presetWrap);
+    wardCard.append(lockerBox);
     if (char.transientConditions?.length) {
       const condWrap = document.createElement('div');
       condWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;';
@@ -1864,6 +1981,21 @@ export class CharacterFolio implements WorkspaceSurface {
             };
             inspActions.append(boostBtn);
           }
+          const jumpTargetId = findMatchingCharacterId(this.library, bond.targetName);
+          if (jumpTargetId && jumpTargetId !== char.id) {
+            const jumpBtn = document.createElement('button');
+            jumpBtn.type = 'button';
+            jumpBtn.className = 'folio-action-btn';
+            jumpBtn.style.cssText = 'padding:3px 9px;min-height:24px;font-size:11px;';
+            jumpBtn.textContent = `Open ${bond.targetName}’s Folio`;
+            jumpBtn.onclick = () => {
+              this.activeCharacterId = jumpTargetId;
+              this.renderRoster();
+              this.renderDetail();
+            };
+            inspActions.append(jumpBtn);
+          }
+
           const editCardBtn = document.createElement('button');
           editCardBtn.type = 'button';
           editCardBtn.className = 'folio-action-btn';
@@ -2574,7 +2706,56 @@ export class CharacterFolio implements WorkspaceSurface {
           this.handlers.onDeleteImage?.(cg.imageUrl);
         };
 
-        btnRow.append(primaryBtn, secondaryBtn, avatarBtn, deleteBtn);
+        const cropBtn = document.createElement('button');
+        cropBtn.type = 'button';
+        cropBtn.className = 'folio-action-btn';
+        cropBtn.style.cssText = 'font-size:11px;padding:4px 8px;';
+        cropBtn.textContent = '✂️ Crop Face Ref';
+        cropBtn.title = 'Open interactive cropper to focus on face for generation consistency';
+        cropBtn.onclick = () => {
+          openReferenceCropperModal({
+            sourceUrl: cg.imageUrl,
+            characterName: char.name,
+            slot: 'face',
+            initialMeta: char.referenceCropMeta,
+            onConfirm: (result) => {
+              char.referenceImageUrl = result.dataUrl;
+              char.referenceCropMeta = result.cropMeta;
+              char.avatarUrl = result.dataUrl;
+              char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+              this.dirty.add(char.id);
+              this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+              this.renderRoster();
+              this.renderDetail();
+            }
+          });
+        };
+
+        const cropOutfitBtn = document.createElement('button');
+        cropOutfitBtn.type = 'button';
+        cropOutfitBtn.className = 'folio-action-btn';
+        cropOutfitBtn.style.cssText = 'font-size:11px;padding:4px 8px;';
+        cropOutfitBtn.textContent = '✂️ Crop Outfit Ref';
+        cropOutfitBtn.title = 'Open interactive cropper to focus on attire/costume';
+        cropOutfitBtn.onclick = () => {
+          openReferenceCropperModal({
+            sourceUrl: cg.imageUrl,
+            characterName: char.name,
+            slot: 'outfit',
+            initialMeta: char.secondaryReferenceCropMeta,
+            onConfirm: (result) => {
+              char.secondaryReferenceImageUrl = result.dataUrl;
+              char.secondaryReferenceCropMeta = result.cropMeta;
+              char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+              this.dirty.add(char.id);
+              this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+              this.renderRoster();
+              this.renderDetail();
+            }
+          });
+        };
+
+        btnRow.append(primaryBtn, secondaryBtn, cropBtn, cropOutfitBtn, avatarBtn, deleteBtn);
         footer.append(cap, btnRow);
         card.append(badges, img, footer);
         grid.append(card);
@@ -2715,6 +2896,14 @@ export class CharacterFolio implements WorkspaceSurface {
           if (!char.avatarUrl && other.avatarUrl) char.avatarUrl = other.avatarUrl;
           if (!char.referenceImageUrl && other.referenceImageUrl) char.referenceImageUrl = other.referenceImageUrl;
           if (!char.secondaryReferenceImageUrl && other.secondaryReferenceImageUrl) char.secondaryReferenceImageUrl = other.secondaryReferenceImageUrl;
+          if (!char.referenceCropMeta && other.referenceCropMeta) char.referenceCropMeta = other.referenceCropMeta;
+          if (!char.secondaryReferenceCropMeta && other.secondaryReferenceCropMeta) char.secondaryReferenceCropMeta = other.secondaryReferenceCropMeta;
+          if (other.wardrobeThumbnails) char.wardrobeThumbnails = { ...other.wardrobeThumbnails, ...(char.wardrobeThumbnails ?? {}) };
+          if (other.wardrobeStates) char.wardrobeStates = { ...other.wardrobeStates, ...(char.wardrobeStates ?? {}) };
+          if (!char.activeWardrobeKey && other.activeWardrobeKey) char.activeWardrobeKey = other.activeWardrobeKey;
+          if (!char.activeOutfit && other.activeOutfit) char.activeOutfit = other.activeOutfit;
+          if (!char.signatureOutfit && other.signatureOutfit) char.signatureOutfit = other.signatureOutfit;
+          if (other.distinguishingFeatures?.length) char.distinguishingFeatures = [...new Set([...(char.distinguishingFeatures ?? []), ...other.distinguishingFeatures])];
           delete this.library[other.id];
           this.discoveredIds.delete(other.id);
           char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);

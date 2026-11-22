@@ -23182,13 +23182,19 @@ var NICKNAME_CLUSTERS = [
   new Set(["gerald", "jerry", "gerry"]),
   new Set(["lawrence", "larry"]),
   new Set(["stephen", "steven", "steve", "stevie"]),
-  new Set(["walter", "walt", "wally"]),
-  new Set(["marche", "marseline", "marseline vane"])
+  new Set(["walter", "walt", "wally"])
 ];
 var LOOKUP_MAP = new Map;
 for (const cluster of NICKNAME_CLUSTERS) {
   for (const name of cluster) {
-    LOOKUP_MAP.set(name, cluster);
+    const existing = LOOKUP_MAP.get(name);
+    if (!existing) {
+      LOOKUP_MAP.set(name, new Set(cluster));
+    } else {
+      for (const item of cluster) {
+        existing.add(item);
+      }
+    }
   }
 }
 function normalizeNameToken(rawName) {
@@ -23229,14 +23235,30 @@ function findMatchingCharacterId(library, candidateName) {
   if (!candidateNorm)
     return null;
   for (const char of Object.values(library)) {
-    if (areNamesEquivalent(char.name, candidateName)) {
+    if (normalizeNameToken(char.name) === candidateNorm) {
       return char.id;
     }
     for (const alias of char.aliases ?? []) {
-      if (areNamesEquivalent(alias, candidateName)) {
+      if (normalizeNameToken(alias) === candidateNorm) {
         return char.id;
       }
     }
+  }
+  const matches = [];
+  for (const char of Object.values(library)) {
+    if (areNamesEquivalent(char.name, candidateName)) {
+      matches.push(char.id);
+      continue;
+    }
+    for (const alias of char.aliases ?? []) {
+      if (areNamesEquivalent(alias, candidateName)) {
+        matches.push(char.id);
+        break;
+      }
+    }
+  }
+  if (matches.length === 1) {
+    return matches[0];
   }
   return null;
 }
@@ -23275,6 +23297,19 @@ var CharacterRelationshipSchema = exports_external.object({
   recentBeats: exports_external.array(CharacterRelationshipBeatSchema).max(12).default([]),
   lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
 }).strict();
+var CropAspectSchema = exports_external.enum(["1:1", "3:4", "2:3", "free"]);
+var NormalizedCropRectSchema = exports_external.object({
+  x: exports_external.number().min(0).max(1),
+  y: exports_external.number().min(0).max(1),
+  width: exports_external.number().min(0.01).max(1),
+  height: exports_external.number().min(0.01).max(1)
+}).strict();
+var ReferenceCropMetaSchema = exports_external.object({
+  sourceImageId: exports_external.string().trim().max(256).optional(),
+  sourceUrl: exports_external.string().trim().max(2048).optional(),
+  rect: NormalizedCropRectSchema,
+  aspect: CropAspectSchema.optional()
+}).strict();
 var CharacterDNASchema = exports_external.object({
   id: exports_external.string().trim().min(1).max(256),
   name: exports_external.string().trim().min(1).max(160),
@@ -23305,6 +23340,10 @@ var CharacterDNASchema = exports_external.object({
   secondaryReferenceImageUrl: exports_external.string().trim().max(5000000).optional(),
   referenceImageId: exports_external.string().trim().max(256).optional(),
   secondaryReferenceImageId: exports_external.string().trim().max(256).optional(),
+  referenceCropMeta: ReferenceCropMetaSchema.optional(),
+  secondaryReferenceCropMeta: ReferenceCropMetaSchema.optional(),
+  lockActiveWardrobe: exports_external.boolean().optional(),
+  wardrobeThumbnails: exports_external.record(exports_external.string().trim().max(60), exports_external.string().trim().max(2048)).optional(),
   relationships: exports_external.array(CharacterRelationshipSchema).max(40).default([]),
   autoDiscovered: exports_external.boolean().optional(),
   seenInSwipes: exports_external.array(exports_external.string().max(160)).max(60).optional(),
@@ -56286,7 +56325,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.166";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.167";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -61203,6 +61242,285 @@ class ImageLightbox {
   }
 }
 
+// src/frontend/stage/reference-cropper.ts
+var MIN_SIZE = 0.08;
+var round4 = (n2) => Number(n2.toFixed(4));
+function clampCropRect(rect) {
+  const fin = (v, d) => Number.isFinite(v) ? v : d;
+  const width = Math.max(MIN_SIZE, Math.min(1, fin(rect.width, 1)));
+  const height = Math.max(MIN_SIZE, Math.min(1, fin(rect.height, 1)));
+  const x = Math.max(0, Math.min(1 - width, fin(rect.x, 0)));
+  const y = Math.max(0, Math.min(1 - height, fin(rect.y, 0)));
+  return { x: round4(x), y: round4(y), width: round4(width), height: round4(height) };
+}
+function aspectRatioValue(aspect) {
+  return aspect === "1:1" ? 1 : aspect === "3:4" ? 3 / 4 : aspect === "2:3" ? 2 / 3 : null;
+}
+function fitAspectCropRect(imgWidth, imgHeight, aspect, center = { x: 0.5, y: 0.42 }, scale = 0.78) {
+  const s = Math.max(0.15, Math.min(1, scale));
+  const ratio2 = aspectRatioValue(aspect);
+  if (!ratio2)
+    return clampCropRect({ x: center.x - s / 2, y: center.y - s / 2, width: s, height: s });
+  const normRatio = ratio2 / (Math.max(1, imgWidth) / Math.max(1, imgHeight));
+  let width = s;
+  let height = width / normRatio;
+  if (height > s) {
+    height = s;
+    width = height * normRatio;
+  }
+  if (width > 1) {
+    width = 1;
+    height = width / normRatio;
+  }
+  if (height > 1) {
+    height = 1;
+    width = height * normRatio;
+  }
+  return clampCropRect({ x: center.x - width / 2, y: center.y - height / 2, width, height });
+}
+function computeExportDimensions(cropPxW, cropPxH, maxEdge = 1024) {
+  const w = Math.max(1, Math.round(cropPxW));
+  const h = Math.max(1, Math.round(cropPxH));
+  const cap = Math.max(64, Math.round(maxEdge));
+  if (w <= cap && h <= cap)
+    return { width: w, height: h };
+  return w >= h ? { width: cap, height: Math.max(1, Math.round(h / w * cap)) } : { width: Math.max(1, Math.round(w / h * cap)), height: cap };
+}
+var BTN = "min-height:44px;padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.06);color:inherit;font-size:12px;font-weight:600;cursor:pointer;";
+function openReferenceCropperModal(options) {
+  let aspect = options.initialMeta?.aspect ?? (options.slot === "face" ? "1:1" : "3:4");
+  let imgW = 1000, imgH = 1000;
+  let rect = options.initialMeta?.rect ? clampCropRect(options.initialMeta.rect) : fitAspectCropRect(imgW, imgH, aspect);
+  let loaded = null;
+  let objectUrl = null;
+  const previousFocus = document.activeElement;
+  const slotLabel = options.slot === "face" ? "Face" : "Outfit";
+  const title = `Crop ${slotLabel} Reference${options.characterName ? ` · ${options.characterName}` : ""}`;
+  const overlay = document.createElement("div");
+  overlay.dataset.vnReferenceCropper = options.slot;
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", title);
+  overlay.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(4,9,16,0.88);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
+  const modal = document.createElement("div");
+  modal.style.cssText = "width:min(560px,100%);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:14px;background:var(--vn-shell-panel,#0f172a);border:1px solid var(--vn-shell-border,rgba(255,255,255,0.16));color:var(--vn-shell-text,#f1f5f9);";
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+  const h3 = document.createElement("h3");
+  h3.style.cssText = "margin:0;font-size:15px;";
+  h3.textContent = `✂️ ${title}`;
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.dataset.cropperClose = "";
+  closeBtn.setAttribute("aria-label", "Cancel crop");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = BTN + "width:44px;padding:0;font-size:18px;";
+  header.append(h3, closeBtn);
+  const hint = document.createElement("p");
+  hint.style.cssText = "margin:0;font-size:12px;opacity:0.8;line-height:1.45;";
+  hint.textContent = "Drag the frame onto one character, then resize with the corner handle or slider. The original gallery picture stays untouched.";
+  const aspectRow = document.createElement("div");
+  aspectRow.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;";
+  const viewport = document.createElement("div");
+  viewport.dataset.cropperViewport = "";
+  viewport.style.cssText = "position:relative;height:300px;background:#05080f;border-radius:10px;overflow:hidden;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center;";
+  const stageBox = document.createElement("div");
+  stageBox.style.cssText = "position:relative;width:280px;height:280px;";
+  const img = document.createElement("img");
+  img.alt = "";
+  img.style.cssText = "display:block;width:100%;height:100%;pointer-events:none;";
+  const box = document.createElement("div");
+  box.dataset.cropperBox = "";
+  box.style.cssText = "position:absolute;box-sizing:border-box;border:2px solid #38bdf8;box-shadow:0 0 0 9999px rgba(0,0,0,0.58);cursor:move;background-image:linear-gradient(to right,transparent 33%,rgba(255,255,255,.25) 33%,rgba(255,255,255,.25) calc(33% + 1px),transparent calc(33% + 1px),transparent 66%,rgba(255,255,255,.25) 66%,rgba(255,255,255,.25) calc(66% + 1px),transparent calc(66% + 1px)),linear-gradient(to bottom,transparent 33%,rgba(255,255,255,.25) 33%,rgba(255,255,255,.25) calc(33% + 1px),transparent calc(33% + 1px),transparent 66%,rgba(255,255,255,.25) 66%,rgba(255,255,255,.25) calc(66% + 1px),transparent calc(66% + 1px));";
+  const handle = document.createElement("div");
+  handle.dataset.cropHandle = "se";
+  handle.style.cssText = "position:absolute;right:-11px;bottom:-11px;width:22px;height:22px;border-radius:50%;background:#38bdf8;border:2px solid #041624;cursor:nwse-resize;";
+  box.append(handle);
+  stageBox.append(img, box);
+  viewport.append(stageBox);
+  const zoomRow = document.createElement("label");
+  zoomRow.style.cssText = "display:flex;align-items:center;gap:10px;font-size:12px;";
+  zoomRow.textContent = "Frame size";
+  const zoom = document.createElement("input");
+  zoom.type = "range";
+  zoom.dataset.cropperScale = "";
+  zoom.min = "15";
+  zoom.max = "100";
+  zoom.style.cssText = "flex:1;min-height:44px;";
+  zoomRow.append(zoom);
+  const sync = () => {
+    rect = clampCropRect(rect);
+    box.style.left = `${rect.x * 100}%`;
+    box.style.top = `${rect.y * 100}%`;
+    box.style.width = `${rect.width * 100}%`;
+    box.style.height = `${rect.height * 100}%`;
+    zoom.value = String(Math.round(Math.max(rect.width, rect.height) * 100));
+    for (const b of aspectRow.querySelectorAll("button[data-crop-aspect]")) {
+      const on = b.dataset.cropAspect === aspect;
+      b.setAttribute("aria-pressed", String(on));
+      b.style.borderColor = on ? "#38bdf8" : "rgba(255,255,255,0.16)";
+    }
+  };
+  const refit = (scale) => {
+    rect = fitAspectCropRect(imgW, imgH, aspect, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, scale);
+    sync();
+  };
+  for (const [id8, label] of [["1:1", "1:1 Face"], ["3:4", "3:4 Portrait"], ["2:3", "2:3 Full Body"], ["free", "Free"]]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.cropAspect = id8;
+    b.textContent = label;
+    b.style.cssText = BTN;
+    b.onclick = () => {
+      aspect = id8;
+      refit(Number(zoom.value) / 100 || 0.78);
+    };
+    aspectRow.append(b);
+  }
+  zoom.oninput = () => refit(Number(zoom.value) / 100);
+  let mode = null;
+  let sx = 0, sy = 0, start = rect;
+  box.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    mode = e.target?.dataset?.cropHandle === "se" ? "resize" : "move";
+    sx = e.clientX;
+    sy = e.clientY;
+    start = { ...rect };
+    box.setPointerCapture?.(e.pointerId);
+  });
+  box.addEventListener("pointermove", (e) => {
+    if (!mode)
+      return;
+    const dx = (e.clientX - sx) / Math.max(40, stageBox.offsetWidth || 280);
+    const dy = (e.clientY - sy) / Math.max(40, stageBox.offsetHeight || 280);
+    if (mode === "move") {
+      rect = { ...start, x: start.x + dx, y: start.y + dy };
+    } else {
+      const width = Math.max(MIN_SIZE, Math.min(1 - start.x, start.width + dx));
+      const ratio2 = aspectRatioValue(aspect);
+      const height = ratio2 ? width / (ratio2 / (imgW / imgH)) : Math.max(MIN_SIZE, Math.min(1 - start.y, start.height + dy));
+      rect = { x: start.x, y: start.y, width, height: Math.min(1 - start.y, height) };
+    }
+    sync();
+  });
+  const end = () => {
+    mode = null;
+  };
+  box.addEventListener("pointerup", end);
+  box.addEventListener("pointercancel", end);
+  const render2 = (r) => {
+    if (!loaded)
+      return options.sourceUrl;
+    try {
+      const px = Math.round(r.x * imgW), py = Math.round(r.y * imgH);
+      const pw = Math.max(1, Math.min(imgW - px, Math.round(r.width * imgW)));
+      const ph = Math.max(1, Math.min(imgH - py, Math.round(r.height * imgH)));
+      const dims = computeExportDimensions(pw, ph, 1024);
+      const canvas = document.createElement("canvas");
+      canvas.width = dims.width;
+      canvas.height = dims.height;
+      const ctx = canvas.getContext?.("2d");
+      if (!ctx)
+        return options.sourceUrl;
+      ctx.drawImage(loaded, px, py, pw, ph, 0, 0, dims.width, dims.height);
+      const webp = canvas.toDataURL("image/webp", 0.9);
+      if (webp.startsWith("data:image/webp"))
+        return webp;
+      return canvas.toDataURL("image/png");
+    } catch {
+      return options.sourceUrl;
+    }
+  };
+  const footer = document.createElement("div");
+  footer.style.cssText = "display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;";
+  const fullBtn = document.createElement("button");
+  fullBtn.type = "button";
+  fullBtn.dataset.cropperUseFull = "";
+  fullBtn.textContent = "Use Full Image (No Crop)";
+  fullBtn.style.cssText = BTN;
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.dataset.cropperCancel = "";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.style.cssText = BTN;
+  const applyBtn = document.createElement("button");
+  applyBtn.type = "button";
+  applyBtn.dataset.cropperApply = "";
+  applyBtn.textContent = `✂️ Apply ${slotLabel} Crop`;
+  applyBtn.style.cssText = BTN + "background:var(--vn-shell-accent,#38bdf8);color:var(--vn-shell-accent-contrast,#041624);border:none;";
+  const right = document.createElement("div");
+  right.style.cssText = "display:flex;gap:8px;";
+  right.append(cancelBtn, applyBtn);
+  footer.append(fullBtn, right);
+  modal.append(header, hint, aspectRow, viewport, zoomRow, footer);
+  overlay.append(modal);
+  const close = () => {
+    if (objectUrl) {
+      try {
+        URL.revokeObjectURL(objectUrl);
+      } catch {}
+      objectUrl = null;
+    }
+    overlay.remove();
+    previousFocus?.focus?.();
+  };
+  const cancel = () => {
+    close();
+    options.onCancel?.();
+  };
+  const confirm = (r, full) => {
+    const dataUrl = render2(r);
+    close();
+    options.onConfirm({
+      dataUrl,
+      cropMeta: {
+        ...options.sourceImageId ? { sourceImageId: options.sourceImageId } : {},
+        ...options.sourceUrl.startsWith("data:") ? {} : { sourceUrl: options.sourceUrl.slice(0, 2048) },
+        rect: r,
+        aspect: full ? "free" : aspect
+      },
+      usedFullImage: full
+    });
+  };
+  closeBtn.onclick = cancel;
+  cancelBtn.onclick = cancel;
+  fullBtn.onclick = () => confirm({ x: 0, y: 0, width: 1, height: 1 }, true);
+  applyBtn.onclick = () => confirm(clampCropRect(rect), false);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      cancel();
+    }
+  });
+  const show = (src) => {
+    img.onload = () => {
+      loaded = img;
+      imgW = Math.max(1, img.naturalWidth || 1000);
+      imgH = Math.max(1, img.naturalHeight || 1000);
+      const edge = 280;
+      stageBox.style.width = `${imgW >= imgH ? edge : Math.round(imgW / imgH * edge)}px`;
+      stageBox.style.height = `${imgW >= imgH ? Math.round(imgH / imgW * edge) : edge}px`;
+      if (!options.initialMeta?.rect)
+        rect = fitAspectCropRect(imgW, imgH, aspect);
+      sync();
+    };
+    img.src = src;
+  };
+  if (options.sourceUrl.startsWith("data:") || typeof fetch !== "function") {
+    show(options.sourceUrl);
+  } else {
+    fetch(options.sourceUrl, { credentials: "include" }).then((r) => r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))).then((blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      show(objectUrl);
+    }).catch(() => show(options.sourceUrl));
+  }
+  sync();
+  (options.mount ?? document.body ?? document.documentElement)?.append(overlay);
+  applyBtn.focus?.();
+  return { close, element: overlay };
+}
+
 // src/frontend/stage/character-folio.ts
 class CharacterFolio {
   handlers;
@@ -62576,10 +62894,57 @@ class CharacterFolio {
     }
     const heroTitle = document.createElement("div");
     heroTitle.className = "folio-hero-title";
+    const titleRow = document.createElement("div");
+    titleRow.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
     const h2 = document.createElement("h2");
     h2.textContent = char.name;
+    h2.style.margin = "0";
+    titleRow.append(h2);
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "folio-action-btn";
+    renameBtn.style.cssText = "font-size:11px;padding:2px 8px;border-radius:4px;";
+    renameBtn.innerHTML = "✏️ <span>Reveal True Name</span>";
+    renameBtn.title = "Reveal true name or rename character (demotes previous name to alias)";
+    renameBtn.onclick = () => {
+      const current = char.name;
+      const next = typeof window !== "undefined" ? window.prompt?.(`Enter revealed true name for "${current}" (previous name will be kept as an alias):`, current) : null;
+      if (!next || !next.trim() || next.trim() === current)
+        return;
+      const newName = next.trim();
+      const oldName = char.name;
+      char.name = newName;
+      if (!char.aliases)
+        char.aliases = [];
+      if (!char.aliases.some((a) => a.toLowerCase() === oldName.toLowerCase())) {
+        char.aliases.push(oldName);
+      }
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      this.renderRoster();
+      this.renderDetail();
+    };
+    titleRow.append(renameBtn);
     const metaTags = document.createElement("div");
     metaTags.className = "folio-hero-meta";
+    const voicePill = document.createElement("button");
+    voicePill.type = "button";
+    voicePill.className = "folio-tag folio-voice-pill";
+    voicePill.style.cssText = "cursor:pointer;background:rgba(99,102,241,0.18);color:#c7d2fe;border:1px solid rgba(99,102,241,0.35);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;";
+    voicePill.textContent = "\uD83C\uDF99️ Voice";
+    voicePill.title = "Assign or preview character voice in Settings";
+    voicePill.onclick = () => {
+      this.handlers.onConfigureVoice?.(char.name);
+    };
+    metaTags.append(voicePill);
+    if (lore.observations?.length || char.mindLedger && ((char.mindLedger.knownFacts?.length ?? 0) > 0 || (char.mindLedger.falseBeliefs?.length ?? 0) > 0)) {
+      const clueChip = document.createElement("span");
+      clueChip.className = "folio-tag tag-clues";
+      clueChip.style.cssText = "background:rgba(234,179,8,0.18);color:#fde047;border:1px solid rgba(234,179,8,0.35);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;";
+      clueChip.textContent = "\uD83D\uDD0D Clues Active";
+      metaTags.append(clueChip);
+    }
     if (char.locked) {
       const lockTag = document.createElement("span");
       lockTag.className = "folio-tag tag-lock folio-lock-badge";
@@ -62604,7 +62969,7 @@ class CharacterFolio {
       genderTag.textContent = char.build.gender;
       metaTags.append(genderTag);
     }
-    heroTitle.append(h2, metaTags);
+    heroTitle.append(titleRow, metaTags);
     heroTop.append(heroAvatar, heroTitle);
     const heroActions = document.createElement("div");
     heroActions.className = "folio-hero-actions";
@@ -62927,33 +63292,99 @@ class CharacterFolio {
       onFieldChange();
     }, (el) => onSingleAutoFill("distinguishingFeatures", el)));
     wardCard.append(wardGrid);
-    if (char.wardrobeStates && Object.keys(char.wardrobeStates).length > 0) {
-      const presetWrap = document.createElement("div");
-      presetWrap.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;";
-      const lbl = document.createElement("span");
-      lbl.style.cssText = "font-size:11px;opacity:0.75;margin-right:2px;";
-      lbl.textContent = "Wardrobe Presets:";
-      presetWrap.append(lbl);
-      for (const [key, outfitVal] of Object.entries(char.wardrobeStates)) {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "folio-action-btn";
-        const isActive = char.activeWardrobeKey === key || char.activeOutfit === outfitVal;
-        chip.style.cssText = `padding:4px 9px;font-size:11px;border-radius:999px;${isActive ? "border-color:#6ee7b7;background:rgba(110,231,183,0.18);" : "opacity:0.85;"}`;
-        chip.textContent = key;
-        chip.title = outfitVal;
-        chip.onclick = () => {
-          char.activeWardrobeKey = key;
-          char.activeOutfit = outfitVal;
-          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
-          this.dirty.add(char.id);
-          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
-          this.renderDetail();
-        };
-        presetWrap.append(chip);
+    const lockerBox = document.createElement("div");
+    lockerBox.style.cssText = "margin-top:10px;padding:10px;border-radius:8px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.2);display:flex;flex-direction:column;gap:8px;";
+    const lockerHdr = document.createElement("div");
+    lockerHdr.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;";
+    const lockerTitle = document.createElement("strong");
+    lockerTitle.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#a7f3d0;";
+    lockerTitle.textContent = "\uD83D\uDC57 Wardrobe Locker & Scene Locking";
+    const lockToggleWrap = document.createElement("label");
+    lockToggleWrap.style.cssText = "display:flex;align-items:center;gap:6px;font-size:11.5px;color:#cbd5e1;cursor:pointer;";
+    const lockBox = document.createElement("input");
+    lockBox.type = "checkbox";
+    lockBox.checked = Boolean(char.lockActiveWardrobe);
+    lockBox.onchange = () => {
+      char.lockActiveWardrobe = lockBox.checked;
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+    };
+    const lockLbl = document.createElement("span");
+    lockLbl.textContent = "\uD83D\uDD12 Lock active wardrobe across scenes";
+    lockToggleWrap.append(lockBox, lockLbl);
+    lockerHdr.append(lockerTitle, lockToggleWrap);
+    lockerBox.append(lockerHdr);
+    const presetWrap = document.createElement("div");
+    presetWrap.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;";
+    const states = char.wardrobeStates ?? {};
+    for (const [key, outfitVal] of Object.entries(states)) {
+      const chip = document.createElement("div");
+      chip.style.cssText = "display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;background:rgba(30,41,59,0.8);border:1px solid rgba(148,163,184,0.3);";
+      const isActive = char.activeWardrobeKey === key || char.activeOutfit === outfitVal;
+      if (isActive) {
+        chip.style.borderColor = "#6ee7b7";
+        chip.style.background = "rgba(110,231,183,0.18)";
       }
-      wardCard.append(presetWrap);
+      const selectBtn = document.createElement("button");
+      selectBtn.type = "button";
+      selectBtn.style.cssText = "background:none;border:none;color:inherit;cursor:pointer;font-size:inherit;font-weight:600;padding:0;";
+      selectBtn.textContent = key;
+      selectBtn.title = outfitVal;
+      selectBtn.onclick = () => {
+        char.activeWardrobeKey = key;
+        char.activeOutfit = outfitVal;
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+        this.renderDetail();
+      };
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.style.cssText = "background:none;border:none;color:rgba(248,113,113,0.8);cursor:pointer;font-size:12px;padding:0 2px;";
+      delBtn.textContent = "×";
+      delBtn.title = `Delete ${key} preset`;
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        delete states[key];
+        if (char.wardrobeThumbnails)
+          delete char.wardrobeThumbnails[key];
+        if (char.activeWardrobeKey === key)
+          delete char.activeWardrobeKey;
+        char.wardrobeStates = { ...states };
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+        this.renderDetail();
+      };
+      chip.append(selectBtn, delBtn);
+      presetWrap.append(chip);
     }
+    const addPresetBtn = document.createElement("button");
+    addPresetBtn.type = "button";
+    addPresetBtn.className = "folio-action-btn";
+    addPresetBtn.style.cssText = "padding:3px 9px;font-size:11px;border-radius:999px;";
+    addPresetBtn.textContent = "+ Add Wardrobe Preset";
+    addPresetBtn.onclick = () => {
+      const name = typeof window !== "undefined" ? window.prompt?.("Enter name for wardrobe preset (e.g. Formal, Battle Armor, Casual):") : null;
+      if (!name || !name.trim())
+        return;
+      const desc = typeof window !== "undefined" ? window.prompt?.(`Enter visual attire description for "${name}":`, char.activeOutfit || char.signatureOutfit || "") : null;
+      if (!desc || !desc.trim())
+        return;
+      if (!char.wardrobeStates)
+        char.wardrobeStates = {};
+      char.wardrobeStates[name.trim()] = desc.trim();
+      char.activeWardrobeKey = name.trim();
+      char.activeOutfit = desc.trim();
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      this.renderDetail();
+    };
+    presetWrap.append(addPresetBtn);
+    lockerBox.append(presetWrap);
+    wardCard.append(lockerBox);
     if (char.transientConditions?.length) {
       const condWrap = document.createElement("div");
       condWrap.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;";
@@ -63170,6 +63601,20 @@ class CharacterFolio {
               }
             };
             inspActions.append(boostBtn);
+          }
+          const jumpTargetId = findMatchingCharacterId(this.library, bond.targetName);
+          if (jumpTargetId && jumpTargetId !== char.id) {
+            const jumpBtn = document.createElement("button");
+            jumpBtn.type = "button";
+            jumpBtn.className = "folio-action-btn";
+            jumpBtn.style.cssText = "padding:3px 9px;min-height:24px;font-size:11px;";
+            jumpBtn.textContent = `Open ${bond.targetName}’s Folio`;
+            jumpBtn.onclick = () => {
+              this.activeCharacterId = jumpTargetId;
+              this.renderRoster();
+              this.renderDetail();
+            };
+            inspActions.append(jumpBtn);
           }
           const editCardBtn = document.createElement("button");
           editCardBtn.type = "button";
@@ -63826,7 +64271,54 @@ class CharacterFolio {
           this.removeCg(cg.imageUrl);
           this.handlers.onDeleteImage?.(cg.imageUrl);
         };
-        btnRow.append(primaryBtn, secondaryBtn, avatarBtn, deleteBtn);
+        const cropBtn = document.createElement("button");
+        cropBtn.type = "button";
+        cropBtn.className = "folio-action-btn";
+        cropBtn.style.cssText = "font-size:11px;padding:4px 8px;";
+        cropBtn.textContent = "✂️ Crop Face Ref";
+        cropBtn.title = "Open interactive cropper to focus on face for generation consistency";
+        cropBtn.onclick = () => {
+          openReferenceCropperModal({
+            sourceUrl: cg.imageUrl,
+            characterName: char.name,
+            slot: "face",
+            initialMeta: char.referenceCropMeta,
+            onConfirm: (result) => {
+              char.referenceImageUrl = result.dataUrl;
+              char.referenceCropMeta = result.cropMeta;
+              char.avatarUrl = result.dataUrl;
+              char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+              this.dirty.add(char.id);
+              this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+              this.renderRoster();
+              this.renderDetail();
+            }
+          });
+        };
+        const cropOutfitBtn = document.createElement("button");
+        cropOutfitBtn.type = "button";
+        cropOutfitBtn.className = "folio-action-btn";
+        cropOutfitBtn.style.cssText = "font-size:11px;padding:4px 8px;";
+        cropOutfitBtn.textContent = "✂️ Crop Outfit Ref";
+        cropOutfitBtn.title = "Open interactive cropper to focus on attire/costume";
+        cropOutfitBtn.onclick = () => {
+          openReferenceCropperModal({
+            sourceUrl: cg.imageUrl,
+            characterName: char.name,
+            slot: "outfit",
+            initialMeta: char.secondaryReferenceCropMeta,
+            onConfirm: (result) => {
+              char.secondaryReferenceImageUrl = result.dataUrl;
+              char.secondaryReferenceCropMeta = result.cropMeta;
+              char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+              this.dirty.add(char.id);
+              this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+              this.renderRoster();
+              this.renderDetail();
+            }
+          });
+        };
+        btnRow.append(primaryBtn, secondaryBtn, cropBtn, cropOutfitBtn, avatarBtn, deleteBtn);
         footer.append(cap, btnRow);
         card.append(badges, img, footer);
         grid.append(card);
@@ -64090,6 +64582,22 @@ class CharacterFolio {
                 char.referenceImageUrl = other.referenceImageUrl;
               if (!char.secondaryReferenceImageUrl && other.secondaryReferenceImageUrl)
                 char.secondaryReferenceImageUrl = other.secondaryReferenceImageUrl;
+              if (!char.referenceCropMeta && other.referenceCropMeta)
+                char.referenceCropMeta = other.referenceCropMeta;
+              if (!char.secondaryReferenceCropMeta && other.secondaryReferenceCropMeta)
+                char.secondaryReferenceCropMeta = other.secondaryReferenceCropMeta;
+              if (other.wardrobeThumbnails)
+                char.wardrobeThumbnails = { ...other.wardrobeThumbnails, ...char.wardrobeThumbnails ?? {} };
+              if (other.wardrobeStates)
+                char.wardrobeStates = { ...other.wardrobeStates, ...char.wardrobeStates ?? {} };
+              if (!char.activeWardrobeKey && other.activeWardrobeKey)
+                char.activeWardrobeKey = other.activeWardrobeKey;
+              if (!char.activeOutfit && other.activeOutfit)
+                char.activeOutfit = other.activeOutfit;
+              if (!char.signatureOutfit && other.signatureOutfit)
+                char.signatureOutfit = other.signatureOutfit;
+              if (other.distinguishingFeatures?.length)
+                char.distinguishingFeatures = [...new Set([...char.distinguishingFeatures ?? [], ...other.distinguishingFeatures])];
               delete this.library[other.id];
               this.discoveredIds.delete(other.id);
               char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
@@ -65406,6 +65914,17 @@ function resolveVoiceForParagraph(settings, input2) {
   const override = settings.characters[characterOverrideKey(input2.chatId, name)];
   if (override)
     return { ref: override, source: "character-override", role: "character", speakerName: name };
+  if (input2.aliases) {
+    const aliasList = Array.isArray(input2.aliases) ? input2.aliases : typeof input2.aliases === "object" ? input2.aliases[name] ?? input2.aliases[speakerNameKey(name)] ?? [] : [];
+    for (const alias of aliasList) {
+      if (!alias || typeof alias !== "string")
+        continue;
+      const aliasOverride = settings.characters[characterOverrideKey(input2.chatId, alias)];
+      if (aliasOverride) {
+        return { ref: aliasOverride, source: "character-override", role: "character", speakerName: name };
+      }
+    }
+  }
   if (settings.characterDefault) {
     return { ref: settings.characterDefault, source: "character-default", role: "character", speakerName: name };
   }
@@ -65575,7 +66094,8 @@ class SpeechController {
     const resolved = resolveVoiceForParagraph(this.settings, {
       chatId: cursor.chatId,
       paragraphSpeaker: cursor.paragraphSpeaker,
-      turnSpeaker: cursor.turnSpeaker
+      turnSpeaker: cursor.turnSpeaker,
+      ...cursor.aliases !== undefined ? { aliases: cursor.aliases } : {}
     });
     if (!resolved.ref) {
       const who = resolved.role === "narrator" ? "the narrator" : `“${resolved.speakerName}”`;
@@ -66905,7 +67425,7 @@ function nameplateForParagraph(view, index) {
   const attributed = effectiveSpeakerAttribution(view, index);
   return attributed === undefined || attributed === null ? view.speaker : attributed;
 }
-function speechCursorFor(view, index) {
+function speechCursorFor(view, index, aliases2) {
   const text3 = view.paragraphs[index];
   if (typeof text3 !== "string")
     return null;
@@ -66918,7 +67438,8 @@ function speechCursorFor(view, index) {
     paragraphIndex: index,
     text: text3,
     paragraphSpeaker: effectiveSpeakerAttribution(view, index),
-    turnSpeaker: view.speaker
+    turnSpeaker: view.speaker,
+    ...aliases2 ? { aliases: aliases2 } : {}
   };
 }
 function effectForParagraph(view, index, intensity = "full") {
@@ -67502,6 +68023,9 @@ function setupVisualNovelFrontend(baseContext) {
       if (owner) {
         ctx.sendToBackend({ type: "vn_delete_image", chatId: owner, imageUrl });
       }
+    },
+    onConfigureVoice: (_charName) => {
+      settingsPanel?.openPage("speech", { focus: true });
     },
     onClose: () => stage.workspace.close()
   });

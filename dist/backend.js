@@ -24421,14 +24421,30 @@ function findMatchingCharacterId(library, candidateName) {
   if (!candidateNorm)
     return null;
   for (const char of Object.values(library)) {
-    if (areNamesEquivalent(char.name, candidateName)) {
+    if (normalizeNameToken(char.name) === candidateNorm) {
       return char.id;
     }
     for (const alias of char.aliases ?? []) {
-      if (areNamesEquivalent(alias, candidateName)) {
+      if (normalizeNameToken(alias) === candidateNorm) {
         return char.id;
       }
     }
+  }
+  const matches = [];
+  for (const char of Object.values(library)) {
+    if (areNamesEquivalent(char.name, candidateName)) {
+      matches.push(char.id);
+      continue;
+    }
+    for (const alias of char.aliases ?? []) {
+      if (areNamesEquivalent(alias, candidateName)) {
+        matches.push(char.id);
+        break;
+      }
+    }
+  }
+  if (matches.length === 1) {
+    return matches[0];
   }
   return null;
 }
@@ -24473,13 +24489,19 @@ var init_nicknames = __esm(() => {
     new Set(["gerald", "jerry", "gerry"]),
     new Set(["lawrence", "larry"]),
     new Set(["stephen", "steven", "steve", "stevie"]),
-    new Set(["walter", "walt", "wally"]),
-    new Set(["marche", "marseline", "marseline vane"])
+    new Set(["walter", "walt", "wally"])
   ];
   LOOKUP_MAP = new Map;
   for (const cluster of NICKNAME_CLUSTERS) {
     for (const name of cluster) {
-      LOOKUP_MAP.set(name, cluster);
+      const existing = LOOKUP_MAP.get(name);
+      if (!existing) {
+        LOOKUP_MAP.set(name, new Set(cluster));
+      } else {
+        for (const item of cluster) {
+          existing.add(item);
+        }
+      }
     }
   }
 });
@@ -24929,7 +24951,7 @@ function scrubCharacterDNASwipes(library, activeMessageSwipes) {
     revision: (library.revision ?? 0) + 1
   });
 }
-var CharacterHairDNASchema, CharacterEyesDNASchema, CharacterBuildDNASchema, CharacterRelationshipBeatSchema, CharacterRelationshipSchema, CharacterDNASchema, CharacterDNALibrarySchema, dnaNameKey = (value) => value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " "), SKIN_WORD_RE, DANGLING_PREPOSITION_RE, NON_VISUAL_DEMEANOR_RE, VISUAL_POSTURE_CUE_RE, STOP_WORDS, GENERIC_ATTIRE_RE;
+var CharacterHairDNASchema, CharacterEyesDNASchema, CharacterBuildDNASchema, CharacterRelationshipBeatSchema, CharacterRelationshipSchema, CropAspectSchema, NormalizedCropRectSchema, ReferenceCropMetaSchema, CharacterDNASchema, CharacterDNALibrarySchema, dnaNameKey = (value) => value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " "), SKIN_WORD_RE, DANGLING_PREPOSITION_RE, NON_VISUAL_DEMEANOR_RE, VISUAL_POSTURE_CUE_RE, STOP_WORDS, GENERIC_ATTIRE_RE;
 var init_character_dna = __esm(() => {
   init_zod();
   init_nicknames();
@@ -24966,6 +24988,19 @@ var init_character_dna = __esm(() => {
     recentBeats: exports_external.array(CharacterRelationshipBeatSchema).max(12).default([]),
     lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
   }).strict();
+  CropAspectSchema = exports_external.enum(["1:1", "3:4", "2:3", "free"]);
+  NormalizedCropRectSchema = exports_external.object({
+    x: exports_external.number().min(0).max(1),
+    y: exports_external.number().min(0).max(1),
+    width: exports_external.number().min(0.01).max(1),
+    height: exports_external.number().min(0.01).max(1)
+  }).strict();
+  ReferenceCropMetaSchema = exports_external.object({
+    sourceImageId: exports_external.string().trim().max(256).optional(),
+    sourceUrl: exports_external.string().trim().max(2048).optional(),
+    rect: NormalizedCropRectSchema,
+    aspect: CropAspectSchema.optional()
+  }).strict();
   CharacterDNASchema = exports_external.object({
     id: exports_external.string().trim().min(1).max(256),
     name: exports_external.string().trim().min(1).max(160),
@@ -24996,6 +25031,10 @@ var init_character_dna = __esm(() => {
     secondaryReferenceImageUrl: exports_external.string().trim().max(5000000).optional(),
     referenceImageId: exports_external.string().trim().max(256).optional(),
     secondaryReferenceImageId: exports_external.string().trim().max(256).optional(),
+    referenceCropMeta: ReferenceCropMetaSchema.optional(),
+    secondaryReferenceCropMeta: ReferenceCropMetaSchema.optional(),
+    lockActiveWardrobe: exports_external.boolean().optional(),
+    wardrobeThumbnails: exports_external.record(exports_external.string().trim().max(60), exports_external.string().trim().max(2048)).optional(),
     relationships: exports_external.array(CharacterRelationshipSchema).max(40).default([]),
     autoDiscovered: exports_external.boolean().optional(),
     seenInSwipes: exports_external.array(exports_external.string().max(160)).max(60).optional(),
@@ -25703,10 +25742,17 @@ async function saveCharacterDNA(spindle2, chatId, dna, userId, revision) {
     const activeById = l.characters[parsed.id];
     if (l.deleted?.[parsed.id] || !activeById && findCharacterDNA(l.deleted ?? {}, parsed.name))
       throw new Error("This character was deleted. Restore it before saving.");
-    const existing = findCharacterDNA(l.characters, parsed.id) || findCharacterDNA(l.characters, parsed.name);
-    if (existing && (existing.id !== parsed.id || existing.name !== parsed.name))
+    const existingById = l.characters[parsed.id];
+    const existingByName = findCharacterDNA(l.characters, parsed.name);
+    if (existingByName && existingByName.id !== parsed.id)
       throw new Error("This character already exists. Open its saved profile or merge identities explicitly.");
+    const existing = existingById ?? existingByName;
     const id3 = existing?.id ?? parsed.id;
+    if (existing && existing.name && existing.name.toLowerCase() !== parsed.name.toLowerCase()) {
+      const aliases = new Set(parsed.aliases ?? []);
+      aliases.add(existing.name);
+      parsed.aliases = Array.from(aliases).slice(0, 16);
+    }
     parsed.fieldSources = { ...existing?.fieldSources, ...parsed.fieldSources };
     for (const path of DNA_FIELDS)
       if (JSON.stringify(existing && dnaFieldValue(existing, path)) !== JSON.stringify(dnaFieldValue(parsed, path)))
@@ -38059,12 +38105,12 @@ async function findSetupDisplayArt(api2, chat, identity2, user) {
   if (token !== castArtToken(api2, chat, user))
     return null;
   const record2 = library.characters.find((r) => [r.name, ...r.setup?.aliases ?? []].some((n) => characterAppearanceKey(n) === characterAppearanceKey(identity2.character))), setup = record2?.setup;
-  if (!setup || setupAppearance(setup) !== identity2.baseIdentity)
+  if (!setup)
     return null;
   const preferred = setup.outfits.find((o) => o.id === setup.defaultOutfitId);
   const outfit = identity2.attire === null ? preferred : preferred?.description === identity2.attire ? preferred : setup.outfits.find((o) => o.description === identity2.attire);
   const target2 = outfit ?? (!identity2.attire && !setup.defaultOutfitId ? setup : undefined);
-  if (!target2?.imageId || target2.imageAppearance !== setup.appearance || "description" in target2 && target2.imageAttire !== target2.description)
+  if (!target2?.imageId)
     return null;
   try {
     const image = await api2.images.get(target2.imageId, user);
@@ -39499,27 +39545,49 @@ function normalizeAppearanceMap(raw) {
 async function loadCharacterAppearance(spindle2, userId, chatId) {
   if (chatId) {
     const map2 = normalizeAppearanceMap(await spindle2.userStorage.getJson(`chats/${safeSegment(chatId)}/characters.json`, { fallback: {}, ...userOptions(userId) ?? {} }));
+    let unlockedDna = [];
+    let curatedDna = [];
+    try {
+      const library = await loadCharacterDNALibrary(spindle2, chatId, userId);
+      for (const dna of Object.values(library.characters)) {
+        if (!dna || !dna.name)
+          continue;
+        if (dna.locked || !dna.autoDiscovered) {
+          curatedDna.push(dna);
+        } else {
+          unlockedDna.push(dna);
+        }
+      }
+    } catch {
+      spindle2.log?.warn?.("Saved DNA could not be read; existing appearance memory remains available.");
+    }
+    for (const dna of unlockedDna) {
+      const appearance = formatCharacterDNAToPromptClause(dna);
+      if (!appearance)
+        continue;
+      for (const name of [dna.name, ...dna.aliases]) {
+        const key = appearanceMapKeyFor(map2, name);
+        if (key)
+          delete map2[key];
+        map2[name] = appearance;
+      }
+    }
     for (const record3 of await manualCastRecords(spindle2, chatId, userId)) {
       const key = appearanceMapKeyFor(map2, record3.name);
       if (key)
         delete map2[key];
       map2[record3.name] = setupAppearance(record3.setup);
     }
-    try {
-      const library = await loadCharacterDNALibrary(spindle2, chatId, userId);
-      for (const dna of Object.values(library.characters)) {
-        const appearance = formatCharacterDNAToPromptClause(dna);
-        if (!appearance)
-          continue;
-        for (const name of [dna.name, ...dna.aliases]) {
-          const key = appearanceMapKeyFor(map2, name);
-          if (key)
-            delete map2[key];
-          map2[name] = appearance;
-        }
+    for (const dna of curatedDna) {
+      const appearance = formatCharacterDNAToPromptClause(dna);
+      if (!appearance)
+        continue;
+      for (const name of [dna.name, ...dna.aliases]) {
+        const key = appearanceMapKeyFor(map2, name);
+        if (key)
+          delete map2[key];
+        map2[name] = appearance;
       }
-    } catch {
-      spindle2.log?.warn?.("Saved DNA could not be read; existing appearance memory remains available.");
     }
     return map2;
   }
@@ -42105,8 +42173,8 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
   const noPeople = template.subjectMode === "none";
   const ensemble = template.subjectMode === "ensemble";
   const { name, sameCharacter, saved, resolved, identity: identity2, lockedDNA } = resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary);
-  const dnaAttire = lockedDNA ? lockedDNA.activeOutfit || lockedDNA.signatureOutfit || null : null;
-  const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null) ?? dnaAttire;
+  const dnaAttire = lockedDNA ? lockedDNA.activeWardrobeKey && lockedDNA.wardrobeStates?.[lockedDNA.activeWardrobeKey] || lockedDNA.activeOutfit || lockedDNA.signatureOutfit || null : null;
+  const attire = lockedDNA?.lockActiveWardrobe && dnaAttire ? dnaAttire : cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null) ?? dnaAttire;
   const manual = cue.visualSources?.includes("manual subject correction");
   const conflicts = !noPeople && !ensemble && saved && resolved && saved !== resolved ? [manual ? "Manual appearance replaces saved appearance for this picture." : lockedDNA?.locked ? "Locked Character DNA takes precedence over story text drift." : "Saved appearance differs from scene evidence; the saved appearance is used."] : [];
   const appearance = attire ? applyAttireOverride(identity2, attire) : identity2;
@@ -42138,8 +42206,10 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
     const cont = scene.continuity?.characters ? Object.entries(scene.continuity.characters).find(([k]) => areNamesEquivalent(k, member.name))?.[1] : undefined;
     const contAppearance = cont?.appearance ? Object.values(cont.appearance).filter(Boolean).join(", ") : undefined;
     const contWardrobe = cont?.wardrobe ? Object.values(cont.wardrobe).filter(Boolean).join(", ") : undefined;
-    const fallbackAppearance = dnaAppearance || saved2 || (member.appearance?.trim() ? member.appearance : contAppearance);
-    const memberAttire = "attire" in member && member.attire ? String(member.attire) : memberDna?.activeOutfit || memberDna?.signatureOutfit || contWardrobe || undefined;
+    const isCuratedDna = memberDna && (memberDna.locked || !memberDna.autoDiscovered);
+    const fallbackAppearance = isCuratedDna ? dnaAppearance || saved2 || (member.appearance?.trim() ? member.appearance : contAppearance) : saved2 || dnaAppearance || (member.appearance?.trim() ? member.appearance : contAppearance);
+    const memberDnaWardrobe = memberDna?.activeWardrobeKey && memberDna.wardrobeStates?.[memberDna.activeWardrobeKey] || memberDna?.activeOutfit || memberDna?.signatureOutfit;
+    const memberAttire = memberDna?.lockActiveWardrobe && memberDnaWardrobe ? memberDnaWardrobe : ("attire" in member) && member.attire ? String(member.attire) : memberDnaWardrobe || contWardrobe || undefined;
     const appearanceBase = manual ? member.appearance : fallbackAppearance || member.appearance;
     const appearance2 = memberAttire ? applyAttireOverride(appearanceBase, "") : appearanceBase;
     return { ...member, appearance: appearance2, attire: memberAttire };
@@ -48158,7 +48228,7 @@ async function collectCharacterDnaEvidence(spindle2, input2) {
     for (const passage of targetDnaPassages(m.content, [target2.name, ...target2.aliases]))
       add(`Story ${m.id}`, passage);
   if (config2.includeSimTrackerContext) {
-    const trackerScope = messages.length ? messages : visible.length ? visible : [];
+    const trackerScope = visible.length ? visible : messages.length ? messages : [];
     const latest = trackerScope.at(-1);
     if (latest) {
       const tracker = scanTrackerCastHistory(trackerScope, latest.id, config2.simTrackerMappings);
@@ -49248,11 +49318,22 @@ var init_reference_plan = __esm(() => {
 });
 
 // src/backend/runtime/reference-plan.ts
-function hydrateDataUrl(raw, mimeType = "image/png") {
+function hydrateDataUrlDetailed(raw, fallbackMime = "image/png") {
   const clean2 = raw?.trim();
   if (!clean2)
     return;
-  return clean2.startsWith("data:") ? clean2 : `data:${mimeType};base64,${clean2}`;
+  const m = DATA_IMAGE_URL_RE.exec(clean2);
+  if (m)
+    return { dataUrl: clean2, mimeType: m[1].toLowerCase() };
+  if (clean2.startsWith("/") || clean2.startsWith(".") || /^[a-z][a-z0-9+.-]*:/i.test(clean2))
+    return;
+  const stripped = clean2.replace(/\s+/g, "");
+  if (!RAW_BASE64_RE.test(stripped) || stripped.length % 4 === 1)
+    return;
+  return { dataUrl: `data:${fallbackMime};base64,${stripped}`, mimeType: fallbackMime };
+}
+function hydrateDataUrl(raw, mimeType = "image/png") {
+  return hydrateDataUrlDetailed(raw, mimeType)?.dataUrl;
 }
 function gatherReferenceCandidates(options3) {
   const candidates = [];
@@ -49303,7 +49384,7 @@ function gatherReferenceCandidates(options3) {
             subject: dna.name,
             label: `${dna.name} primary face reference`,
             dataUrl: primaryUrl,
-            mimeType: "image/png",
+            mimeType: mimeOf(primaryUrl),
             priority: 1
           });
         }
@@ -49315,7 +49396,7 @@ function gatherReferenceCandidates(options3) {
             subject: dna.name,
             label: `${dna.name} outfit reference`,
             dataUrl: secondaryUrl,
-            mimeType: "image/png",
+            mimeType: mimeOf(secondaryUrl),
             priority: 2
           });
         }
@@ -49351,7 +49432,7 @@ function gatherReferenceCandidates(options3) {
               subject: dna.name,
               label: `${dna.name} character reference`,
               dataUrl: memberUrl2,
-              mimeType: "image/png",
+              mimeType: mimeOf(memberUrl2),
               priority: 2
             });
             continue;
@@ -49406,13 +49487,15 @@ function resolveReferencePlan(options3) {
   }
   return finalizeAttachedRefs(kept, maxRefs);
 }
-var MAX_ATTACHED_REFS = 3;
+var MAX_ATTACHED_REFS = 3, DATA_IMAGE_URL_RE, RAW_BASE64_RE, mimeOf = (dataUrl, fallback = "image/png") => DATA_IMAGE_URL_RE.exec(dataUrl)?.[1]?.toLowerCase() ?? fallback;
 var init_reference_plan2 = __esm(() => {
   init_reference_plan();
   init_image_payload_sanitizer();
   init_identity();
   init_nicknames();
   init_reference_plan();
+  DATA_IMAGE_URL_RE = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i;
+  RAW_BASE64_RE = /^[A-Za-z0-9+/=]{16,}$/;
 });
 
 // src/backend/runtime/prompt-budget.ts
@@ -54326,6 +54409,7 @@ __export(exports_images, {
   multiReferenceParametersFor: () => multiReferenceParametersFor,
   locationArtIdentityFor: () => locationArtIdentityFor,
   isClothingTag: () => isClothingTag,
+  hydrateDnaReferenceImages: () => hydrateDnaReferenceImages,
   generateAssets: () => generateAssets,
   describeCue: () => describeCue,
   defaultSceneImageVerifier: () => defaultSceneImageVerifier,
@@ -55280,6 +55364,58 @@ async function resolveImageProfile(spindle2, config2, userId) {
     return { provider: null, model: null, cacheProfile: "unavailable" };
   }
 }
+async function hydrateDnaReferenceImages(spindle2, chatId, userId, dnaLibrary, cue, signal) {
+  if (!dnaLibrary || signal?.aborted)
+    return;
+  const chars = "characters" in dnaLibrary ? dnaLibrary.characters : dnaLibrary;
+  if (!chars || typeof chars !== "object")
+    return;
+  const candidateNames = new Set;
+  if (cue.character)
+    candidateNames.add(cue.character.trim().toLowerCase());
+  if (cue.ensembleSubjects) {
+    for (const sub of cue.ensembleSubjects) {
+      if (sub.name)
+        candidateNames.add(sub.name.trim().toLowerCase());
+    }
+  }
+  const hydrateSlot = async (dna, field, charKey) => {
+    if (signal?.aborted)
+      return;
+    const url3 = dna[field];
+    if (!url3 || typeof url3 !== "string")
+      return;
+    if (url3.startsWith("data:image/"))
+      return;
+    if (url3.startsWith("http://") || url3.startsWith("https://"))
+      return;
+    const imageId = url3.replace(/^\/?(?:api\/v1\/)?images\//, "").trim();
+    if (!imageId)
+      return;
+    try {
+      const dataUrl = await fetchReferenceImageViaFrontend(spindle2, {
+        chatId,
+        imageId,
+        characterKey: charKey,
+        ...userId ? { userId } : {},
+        signal
+      });
+      if (dataUrl && dataUrl.startsWith("data:image/")) {
+        dna[field] = dataUrl;
+      }
+    } catch {}
+  };
+  for (const [key, dna] of Object.entries(chars)) {
+    if (!dna)
+      continue;
+    const names = [dna.name, ...dna.aliases ?? []].map((n) => n.trim().toLowerCase());
+    const isTarget = candidateNames.size === 0 || names.some((n) => candidateNames.has(n));
+    if (isTarget) {
+      await hydrateSlot(dna, "referenceImageUrl", key);
+      await hydrateSlot(dna, "secondaryReferenceImageUrl", key);
+    }
+  }
+}
 async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUpdate, userId, cacheOptions = {}) {
   let jobs = [...initialJobs];
   const dispatchedJobs = new Set;
@@ -55599,6 +55735,9 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
             };
             const activePortraits = compatiblePortraitsFor(characterKey, portrait);
             const activeDnaForRefs = !referenceAnchoringEnabled(config2) || !cueUsesCharacterReference(cue) || wantsCapture ? undefined : characterDNALibrary;
+            if (activeDnaForRefs) {
+              await hydrateDnaReferenceImages(spindle2, plan.key.chatId, userId, activeDnaForRefs, cue, signal);
+            }
             const v1RefPlan = provider && REFERENCE_PROVIDERS.has(provider) && (portrait || activeDnaForRefs) ? resolveReferencePlan({
               brief: initialCompiled?.brief,
               cue,
@@ -55772,6 +55911,9 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
                 wantsCapture = usesReference && Boolean(characterKey) && Boolean(identityFingerprint) && !nextPortrait;
                 const nextPortraitsForCue = compatiblePortraitsFor(characterKey, nextPortrait);
                 const nextDnaForRefs = !referenceAnchoringEnabled(config2) || !cueUsesCharacterReference(nextCue) || wantsCapture ? undefined : characterDNALibrary;
+                if (nextDnaForRefs) {
+                  await hydrateDnaReferenceImages(spindle2, plan.key.chatId, userId, nextDnaForRefs, nextCue, signal);
+                }
                 const nextNai = provider === "novelai" ? compileNovelAiRequest(config2, relightScene, nextCue, characterAppearance) : null;
                 const updated = applyImageEdits({ ...frozen, prompt: nextCompiled.prompt, negativePrompt: nextCompiled.negativePrompt }, {});
                 const effectiveConnectionId = options3?.connectionId !== undefined ? options3.connectionId.trim() || undefined : selected?.id;
@@ -56560,14 +56702,29 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
                   updates.push({ id: existing.id, tag, item });
                 }
               }
-              if (toAdd.length > 0 || updates.length > 0) {
+              const actualUpdates = updates.filter((u) => {
+                const current = library.characters[u.id];
+                if (!current)
+                  return false;
+                const swipes = current.seenInSwipes ?? [];
+                const needsSwipe = current.autoDiscovered && !swipes.includes(u.tag);
+                if (needsSwipe)
+                  return true;
+                if (!current.locked) {
+                  const existingRel = (current.relationships ?? []).find((r) => r.targetName.toLowerCase() === u.item.character.name.toLowerCase() || (u.item.character.aliases ?? []).some((a) => r.targetName.toLowerCase() === a.toLowerCase()));
+                  if (!existingRel && (u.item.character.name || u.item.character.attire))
+                    return true;
+                }
+                return false;
+              });
+              if (toAdd.length > 0 || actualUpdates.length > 0) {
                 await mutateCharacterDnaLibrary(spindle2, request.chatId, userId, library.revision ?? 0, (l) => {
                   for (const dna of toAdd) {
                     if (!l.characters[dna.id] && !l.deleted?.[dna.id] && !findCharacterDNA(l.deleted ?? {}, dna.name)) {
                       l.characters[dna.id] = dna;
                     }
                   }
-                  for (const u of updates) {
+                  for (const u of actualUpdates) {
                     const current = l.characters[u.id];
                     if (!current)
                       continue;
@@ -56696,6 +56853,47 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
           }
         }
         next.aliases = [...new Set([...target2.aliases, other.name, ...other.aliases])].filter((n) => n !== target2.name).slice(0, 16);
+        if (!next.avatarUrl && other.avatarUrl)
+          next.avatarUrl = other.avatarUrl;
+        if (!next.referenceImageUrl && other.referenceImageUrl)
+          next.referenceImageUrl = other.referenceImageUrl;
+        if (!next.referenceImageId && other.referenceImageId)
+          next.referenceImageId = other.referenceImageId;
+        if (!next.referenceCropMeta && other.referenceCropMeta)
+          next.referenceCropMeta = other.referenceCropMeta;
+        if (!next.secondaryReferenceImageUrl && other.secondaryReferenceImageUrl)
+          next.secondaryReferenceImageUrl = other.secondaryReferenceImageUrl;
+        if (!next.secondaryReferenceImageId && other.secondaryReferenceImageId)
+          next.secondaryReferenceImageId = other.secondaryReferenceImageId;
+        if (!next.secondaryReferenceCropMeta && other.secondaryReferenceCropMeta)
+          next.secondaryReferenceCropMeta = other.secondaryReferenceCropMeta;
+        if (other.wardrobeThumbnails)
+          next.wardrobeThumbnails = { ...other.wardrobeThumbnails, ...next.wardrobeThumbnails ?? {} };
+        if (other.wardrobeStates)
+          next.wardrobeStates = { ...other.wardrobeStates, ...next.wardrobeStates ?? {} };
+        if (!next.activeWardrobeKey && other.activeWardrobeKey)
+          next.activeWardrobeKey = other.activeWardrobeKey;
+        if (!next.activeOutfit && other.activeOutfit)
+          next.activeOutfit = other.activeOutfit;
+        if (!next.signatureOutfit && other.signatureOutfit)
+          next.signatureOutfit = other.signatureOutfit;
+        if (other.distinguishingFeatures?.length)
+          next.distinguishingFeatures = [...new Set([...next.distinguishingFeatures ?? [], ...other.distinguishingFeatures])];
+        if (other.relationships?.length) {
+          const existingRels = new Set((next.relationships ?? []).map((r) => r.targetName.toLowerCase()));
+          const mergedRels = [...next.relationships ?? []];
+          for (const rel of other.relationships) {
+            if (!existingRels.has(rel.targetName.toLowerCase())) {
+              mergedRels.push(rel);
+              existingRels.add(rel.targetName.toLowerCase());
+            }
+          }
+          next.relationships = mergedRels;
+        }
+        if (other.seenInSwipes?.length) {
+          next.seenInSwipes = [...new Set([...next.seenInSwipes ?? [], ...other.seenInSwipes])].slice(-60);
+        }
+        next.lastUpdated = Math.max(Date.now(), (target2.lastUpdated ?? 0) + 1);
         l.characters[target2.id] = next;
         l.deleted ??= {};
         l.deleted[other.id] = other;
@@ -57562,6 +57760,8 @@ init_entity_projection();
 init_cast_art();
 init_cast_art2();
 init_storage();
+init_character_dna_store();
+init_character_dna();
 init_simtracker();
 init_planner();
 init_identity();
@@ -57572,7 +57772,7 @@ async function scanCastContext(api2, chatId, userId, characterId2) {
   const token = castArtToken(api2, chatId, userId), messages = await api2.chat.getMessages(chatId);
   const signature = (rows) => JSON.stringify(rows.map((m) => [m.id, fingerprintForMessage(m)]));
   const before = signature(messages), latest = [...messages].reverse().find((m) => !m.is_user && m.role !== "system");
-  const [config2, registry2, library] = await Promise.all([loadConfig(api2, userId), loadCharacterRegistry(api2, chatId, userId), loadCastArt(api2, chatId, userId)]);
+  const [config2, registry2, library, dnaLibrary] = await Promise.all([loadConfig(api2, userId), loadCharacterRegistry(api2, chatId, userId), loadCastArt(api2, chatId, userId), loadCharacterDNALibrary(api2, chatId, userId).catch(() => null)]);
   const target2 = characterId2 ? library.characters.find((record4) => record4.entityId === characterId2) : undefined;
   if (characterId2 && !target2)
     throw new Error("This character is no longer saved. Refresh the cast list.");
@@ -57640,6 +57840,15 @@ async function scanCastContext(api2, chatId, userId, characterId2) {
           const appearance = isUsableIdentity(entity.name, splitTags(visual)) ? visual : "";
           add(entity.name, appearance, entity.aliases, dossier.state.outfit ?? "", appearance ? "Story reference" : "Story reference \xB7 appearance needed", undefined, true);
         }
+    }
+  }
+  if (dnaLibrary?.characters) {
+    for (const dna of Object.values(dnaLibrary.characters)) {
+      if (!dna || !dna.name)
+        continue;
+      const appearance = formatCharacterDNAToPromptClause(dna);
+      const attire = dna.activeWardrobeKey && dna.wardrobeStates?.[dna.activeWardrobeKey] || dna.activeOutfit || dna.signatureOutfit || "";
+      add(dna.name, appearance, dna.aliases, attire, dna.locked ? "Character Folio (Curated DNA)" : "Character Folio (Discovered DNA)");
     }
   }
   for (const entry of Object.values(registry2))
@@ -61012,6 +61221,9 @@ async function handleFrontendMessage(spindle2, request, userId) {
     }
     case "vn_character_dna": {
       await handleCharacterDnaRequest(spindle2, request, userId);
+      if (request.action !== "list" && request.action !== "propose" && request.action !== "cancel") {
+        releaseSceneCacheScope(spindle2, userId, request.chatId, "scope_cleared");
+      }
       return;
     }
     case "vn_set_config": {

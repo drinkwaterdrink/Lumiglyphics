@@ -151,14 +151,26 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
                 updates.push({ id: existing.id, tag, item });
               }
             }
-            if (toAdd.length > 0 || updates.length > 0) {
+            const actualUpdates = updates.filter(u => {
+              const current = library.characters[u.id];
+              if (!current) return false;
+              const swipes = current.seenInSwipes ?? [];
+              const needsSwipe = current.autoDiscovered && !swipes.includes(u.tag);
+              if (needsSwipe) return true;
+              if (!current.locked) {
+                const existingRel = (current.relationships ?? []).find(r => r.targetName.toLowerCase() === u.item.character.name.toLowerCase() || (u.item.character.aliases ?? []).some(a => r.targetName.toLowerCase() === a.toLowerCase()));
+                if (!existingRel && (u.item.character.name || u.item.character.attire)) return true;
+              }
+              return false;
+            });
+            if (toAdd.length > 0 || actualUpdates.length > 0) {
               await mutateCharacterDnaLibrary(spindle, request.chatId, userId, library.revision ?? 0, l => {
                 for (const dna of toAdd) {
                   if (!l.characters[dna.id] && !l.deleted?.[dna.id] && !findCharacterDNA(l.deleted ?? {}, dna.name)) {
                     l.characters[dna.id] = dna;
                   }
                 }
-                for (const u of updates) {
+                for (const u of actualUpdates) {
                   const current = l.characters[u.id];
                   if (!current) continue;
                   const swipes = current.seenInSwipes ?? [];
@@ -216,7 +228,36 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
    await mutateCharacterDnaLibrary(spindle,request.chatId,userId,request.revision,l=>{
     const target=l.characters[request.characterId],other=l.characters[request.otherId];if(!target||!other||target.id===other.id)throw new Error('Select two saved characters to merge.');if(target.locked||other.locked)throw new Error('Unlock both characters before merging.');
     let next=target;for(const path of DNA_FIELDS){const current=dnaFieldValue(next,path),value=dnaFieldValue(other,path);if((!current||(Array.isArray(current)&&!current.length))&&value){next=applyDnaChanges(next,[{path,value,classification:'generated',sourceRefs:[]}]);next.fieldSources={...next.fieldSources,[path]:other.fieldSources?.[path]??{classification:'manual',sources:[`Merged from ${other.name}`]}};}}
-    next.aliases=[...new Set([...target.aliases,other.name,...other.aliases])].filter(n=>n!==target.name).slice(0,16);l.characters[target.id]=next;l.deleted??={};l.deleted[other.id]=other;delete l.characters[other.id];
+    next.aliases=[...new Set([...target.aliases,other.name,...other.aliases])].filter(n=>n!==target.name).slice(0,16);
+    if(!next.avatarUrl&&other.avatarUrl)next.avatarUrl=other.avatarUrl;
+    if(!next.referenceImageUrl&&other.referenceImageUrl)next.referenceImageUrl=other.referenceImageUrl;
+    if(!next.referenceImageId&&other.referenceImageId)next.referenceImageId=other.referenceImageId;
+    if(!next.referenceCropMeta&&other.referenceCropMeta)next.referenceCropMeta=other.referenceCropMeta;
+    if(!next.secondaryReferenceImageUrl&&other.secondaryReferenceImageUrl)next.secondaryReferenceImageUrl=other.secondaryReferenceImageUrl;
+    if(!next.secondaryReferenceImageId&&other.secondaryReferenceImageId)next.secondaryReferenceImageId=other.secondaryReferenceImageId;
+    if(!next.secondaryReferenceCropMeta&&other.secondaryReferenceCropMeta)next.secondaryReferenceCropMeta=other.secondaryReferenceCropMeta;
+    if(other.wardrobeThumbnails)next.wardrobeThumbnails={...other.wardrobeThumbnails,...(next.wardrobeThumbnails??{})};
+    if(other.wardrobeStates)next.wardrobeStates={...other.wardrobeStates,...(next.wardrobeStates??{})};
+    if(!next.activeWardrobeKey&&other.activeWardrobeKey)next.activeWardrobeKey=other.activeWardrobeKey;
+    if(!next.activeOutfit&&other.activeOutfit)next.activeOutfit=other.activeOutfit;
+    if(!next.signatureOutfit&&other.signatureOutfit)next.signatureOutfit=other.signatureOutfit;
+    if(other.distinguishingFeatures?.length)next.distinguishingFeatures=[...new Set([...(next.distinguishingFeatures??[]),...other.distinguishingFeatures])];
+    if(other.relationships?.length){
+     const existingRels=new Set((next.relationships??[]).map(r=>r.targetName.toLowerCase()));
+     const mergedRels=[...(next.relationships??[])];
+     for(const rel of other.relationships){
+      if(!existingRels.has(rel.targetName.toLowerCase())){
+       mergedRels.push(rel);
+       existingRels.add(rel.targetName.toLowerCase());
+      }
+     }
+     next.relationships=mergedRels;
+    }
+    if(other.seenInSwipes?.length){
+     next.seenInSwipes=[...new Set([...(next.seenInSwipes??[]),...other.seenInSwipes])].slice(-60);
+    }
+    next.lastUpdated=Math.max(Date.now(),(target.lastUpdated??0)+1);
+    l.characters[target.id]=next;l.deleted??={};l.deleted[other.id]=other;delete l.characters[other.id];
    });await reply();
   }else if(request.action==='scrub_swipes'){
    const msgs=(await spindle.chat?.getMessages?.(request.chatId)??[]) as Parameters<typeof activeBranchSwipeTags>[0];

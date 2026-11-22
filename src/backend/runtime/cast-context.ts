@@ -5,6 +5,8 @@ import type {SpindleAPI} from 'lumiverse-spindle-types';
 import {CastContextScanSchema,CastSetupInputSchema,type CastContextScan} from '../../shared/cast-art.js';
 import {loadCastArt,castArtToken} from './cast-art.js';
 import {loadConfig,loadCharacterRegistry,loadReadingPosition,loadTurnRecord,turnPath} from './storage.js';
+import {loadCharacterDNALibrary} from './character-dna-store.js';
+import {formatCharacterDNAToPromptClause, type CharacterDNA} from '../../shared/character-dna.js';
 import {scanTrackerCastHistory} from './simtracker.js';
 import {fingerprintForMessage} from './planner.js';
 import {isUsableIdentity,splitTags,normalizeCharacterName} from '../../shared/identity.js';
@@ -14,7 +16,7 @@ export async function scanCastContext(api:SpindleAPI,chatId:string,userId:string
  const token=castArtToken(api,chatId,userId),messages=await api.chat.getMessages(chatId);
  const signature=(rows:typeof messages)=>JSON.stringify(rows.map(m=>[m.id,fingerprintForMessage(m)]));
  const before=signature(messages),latest=[...messages].reverse().find(m=>!m.is_user&&m.role!=='system');
- const [config,registry,library]=await Promise.all([loadConfig(api,userId),loadCharacterRegistry(api,chatId,userId),loadCastArt(api,chatId,userId)]);
+ const [config,registry,library,dnaLibrary]=await Promise.all([loadConfig(api,userId),loadCharacterRegistry(api,chatId,userId),loadCastArt(api,chatId,userId),loadCharacterDNALibrary(api,chatId,userId).catch(()=>null)]);
  const target=characterId?library.characters.find(record=>record.entityId===characterId):undefined;
  if(characterId&&!target)throw new Error('This character is no longer saved. Refresh the cast list.');
  const targetNames=target?new Set([target.name,...(target.setup?.aliases??[])].map(name=>normalizeCharacterName(name).toLowerCase())):null;
@@ -48,6 +50,14 @@ export async function scanCastContext(api:SpindleAPI,chatId:string,userId:string
     const appearance=isUsableIdentity(entity.name,splitTags(visual))?visual:'';
     add(entity.name,appearance,entity.aliases,dossier.state.outfit??'',appearance?'Story reference':'Story reference · appearance needed',undefined,true);
    }
+  }
+ }
+ if(dnaLibrary?.characters){
+  for(const dna of Object.values(dnaLibrary.characters as Record<string, CharacterDNA>)){
+   if(!dna||!dna.name)continue;
+   const appearance=formatCharacterDNAToPromptClause(dna);
+   const attire=(dna.activeWardrobeKey&&dna.wardrobeStates?.[dna.activeWardrobeKey])||dna.activeOutfit||dna.signatureOutfit||'';
+   add(dna.name,appearance,dna.aliases,attire,dna.locked?'Character Folio (Curated DNA)':'Character Folio (Discovered DNA)');
   }
  }
  for(const entry of Object.values(registry))if(!library.characters.some(r=>r.setup&&r.name.toLowerCase()===entry.name.toLowerCase()))add(entry.name,entry.tags,entry.aliases,'','Known story appearance');

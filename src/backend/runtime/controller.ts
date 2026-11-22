@@ -2737,6 +2737,9 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     }
     case "vn_character_dna": {
       await handleCharacterDnaRequest(spindle,request,userId);
+      if (request.action !== "list" && request.action !== "propose" && request.action !== "cancel") {
+        releaseSceneCacheScope(spindle, userId, request.chatId, "scope_cleared");
+      }
       return;
     }
     case "vn_set_config": {

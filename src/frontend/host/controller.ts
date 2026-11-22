@@ -212,7 +212,7 @@ export function nameplateForParagraph(view: TurnView, index: number): string {
  * resolution can mirror the nameplate exactly. Returns null for missing
  * paragraphs so planning/error states never produce a speakable cursor.
  */
-export function speechCursorFor(view: TurnView, index: number): SpeechCursor | null {
+export function speechCursorFor(view: TurnView, index: number, aliases?: readonly string[]): SpeechCursor | null {
   const text = view.paragraphs[index];
   if (typeof text !== "string") return null;
   return {
@@ -224,6 +224,7 @@ export function speechCursorFor(view: TurnView, index: number): SpeechCursor | n
     text,
     paragraphSpeaker: effectiveSpeakerAttribution(view, index),
     turnSpeaker: view.speaker,
+    ...(aliases ? { aliases } : {}),
   };
 }
 
@@ -791,6 +792,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if(owner){
         ctx.sendToBackend({type:'vn_delete_image',chatId:owner,imageUrl});
       }
+    },
+    onConfigureVoice:(_charName)=>{
+      settingsPanel?.openPage('speech', { focus: true });
     },
     onClose:()=>stage.workspace.close()
   });

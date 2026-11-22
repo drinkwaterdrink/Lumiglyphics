@@ -147,11 +147,11 @@ export async function findSetupDisplayArt(api:SpindleAPI,chat:string,identity:{c
  const token=castArtToken(api,chat,user),library=await loadCastArt(api,chat,user);
  if(token!==castArtToken(api,chat,user))return null;
  const record=library.characters.find(r=>[r.name,...(r.setup?.aliases??[])].some(n=>characterAppearanceKey(n)===characterAppearanceKey(identity.character))),setup=record?.setup;
- if(!setup||setupAppearance(setup)!==identity.baseIdentity)return null;
+ if(!setup)return null;
  const preferred=setup.outfits.find(o=>o.id===setup.defaultOutfitId);
  const outfit=identity.attire===null?preferred:preferred?.description===identity.attire?preferred:setup.outfits.find(o=>o.description===identity.attire);
  const target=outfit??(!identity.attire&&!setup.defaultOutfitId?setup:undefined);
- if(!target?.imageId||target.imageAppearance!==setup.appearance||('description' in target&&target.imageAttire!==target.description))return null;
+ if(!target?.imageId)return null;
  try{const image=await api.images.get(target.imageId,user);if(token!==castArtToken(api,chat,user)||!image||!isCastStillImage(image.mime_type))return null;return `/api/v1/images/${encodeURIComponent(image.id)}`;}catch{return null;}
 }
 

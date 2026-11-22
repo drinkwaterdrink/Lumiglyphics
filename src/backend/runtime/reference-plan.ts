@@ -34,11 +34,26 @@ export interface ResolveReferencePlanOptions {
   compressDataUrl?: CompressDataUrlFn | undefined;
 }
 
-function hydrateDataUrl(raw?: string | null, mimeType = 'image/png'): string | undefined {
+const DATA_IMAGE_URL_RE = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i;
+const RAW_BASE64_RE = /^[A-Za-z0-9+/=]{16,}$/;
+
+/** Returns a verified pixel data URL, or undefined. Never wraps URLs/paths as base64. */
+export function hydrateDataUrlDetailed(raw?: string | null, fallbackMime = 'image/png'): { dataUrl: string; mimeType: string } | undefined {
   const clean = raw?.trim();
   if (!clean) return undefined;
-  return clean.startsWith('data:') ? clean : `data:${mimeType};base64,${clean}`;
+  const m = DATA_IMAGE_URL_RE.exec(clean);
+  if (m) return { dataUrl: clean, mimeType: m[1]!.toLowerCase() };
+  if (clean.startsWith('/') || clean.startsWith('.') || /^[a-z][a-z0-9+.-]*:/i.test(clean)) return undefined;
+  const stripped = clean.replace(/\s+/g, '');
+  if (!RAW_BASE64_RE.test(stripped) || stripped.length % 4 === 1) return undefined;
+  return { dataUrl: `data:${fallbackMime};base64,${stripped}`, mimeType: fallbackMime };
 }
+
+export function hydrateDataUrl(raw?: string | null, mimeType = 'image/png'): string | undefined {
+  return hydrateDataUrlDetailed(raw, mimeType)?.dataUrl;
+}
+
+const mimeOf = (dataUrl: string, fallback = 'image/png'): string => DATA_IMAGE_URL_RE.exec(dataUrl)?.[1]?.toLowerCase() ?? fallback;
 
 function gatherReferenceCandidates(options: ResolveReferencePlanOptions): Array<ReferenceItem & { priority: number }> {
   const candidates: Array<ReferenceItem & { priority: number }> = [];
@@ -93,7 +108,7 @@ function gatherReferenceCandidates(options: ResolveReferencePlanOptions): Array<
             subject: dna.name,
             label: `${dna.name} primary face reference`,
             dataUrl: primaryUrl,
-            mimeType: 'image/png',
+            mimeType: mimeOf(primaryUrl),
             priority: 1,
           });
         }
@@ -105,7 +120,7 @@ function gatherReferenceCandidates(options: ResolveReferencePlanOptions): Array<
             subject: dna.name,
             label: `${dna.name} outfit reference`,
             dataUrl: secondaryUrl,
-            mimeType: 'image/png',
+            mimeType: mimeOf(secondaryUrl),
             priority: 2,
           });
         }
@@ -143,7 +158,7 @@ function gatherReferenceCandidates(options: ResolveReferencePlanOptions): Array<
               subject: dna.name,
               label: `${dna.name} character reference`,
               dataUrl: memberUrl,
-              mimeType: 'image/png',
+              mimeType: mimeOf(memberUrl),
               priority: 2,
             });
             continue;
