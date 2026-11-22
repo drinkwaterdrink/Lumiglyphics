@@ -20338,6 +20338,22 @@ function matchesBoundaryCandidate(queryLower, candidateRaw) {
   }
   return false;
 }
+function splitCompositeLocationParts(raw) {
+  return raw.replace(/\s*\([^)]*\)\s*$/, "").split(/\s*(?:\u2014|\u2013|\s-\s|:\s+)\s*/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+function isCompositeLocationConflict(query, locName) {
+  const queryParts = splitCompositeLocationParts(query);
+  const locParts = splitCompositeLocationParts(locName);
+  if (queryParts.length <= 1 && locParts.length <= 1)
+    return false;
+  if (queryParts.length > 1 && locParts.length > 1) {
+    return queryParts.join(" :: ") !== locParts.join(" :: ");
+  }
+  if (queryParts.length === 1 && locParts.length > 1) {
+    return locParts[0] === queryParts[0];
+  }
+  return queryParts[0] === locParts[0];
+}
 function findMatchingLocation(locations, name) {
   const query = name.trim().toLowerCase();
   if (!query)
@@ -20347,16 +20363,25 @@ function findMatchingLocation(locations, name) {
   const directId = createLocationId(query);
   if (locations[directId])
     return locations[directId];
-  const exact = Object.values(locations).find((loc) => {
-    if (loc.name.trim().toLowerCase() === query)
-      return true;
-    if (createLocationId(loc.name) === directId)
-      return true;
-    return loc.aliases.some((a) => a.trim().toLowerCase() === query || createLocationId(a) === directId);
+  const exactName = Object.values(locations).find((loc) => loc.name.trim().toLowerCase() === query || createLocationId(loc.name) === directId);
+  if (exactName)
+    return exactName;
+  const exactAlias = Object.values(locations).find((loc) => {
+    const locParts = splitCompositeLocationParts(loc.name);
+    return loc.aliases.some((a) => {
+      const aLower = a.trim().toLowerCase();
+      if (aLower !== query && createLocationId(a) !== directId)
+        return false;
+      if (loc.autoDiscovered && locParts.length > 1 && aLower === locParts[0])
+        return false;
+      return !isCompositeLocationConflict(query, loc.name) || aLower === locParts.at(-1);
+    });
   });
-  if (exact)
-    return exact;
+  if (exactAlias)
+    return exactAlias;
   return Object.values(locations).find((loc) => {
+    if (isCompositeLocationConflict(query, loc.name))
+      return false;
     const candidates = [loc.name, ...deriveShortAliases(loc.name, loc.aliases)];
     return candidates.some((candidate) => matchesBoundaryCandidate(query, candidate));
   });
@@ -20542,9 +20567,10 @@ var init_story_dna = __esm(() => {
   ThoughtCabinetEntrySchema = exports_external.object({
     id: exports_external.string().trim().min(1).max(256),
     title: exports_external.string().trim().min(1).max(160),
-    category: exports_external.enum(["mystery", "clue", "promise", "foreshadowing", "secret"]).default("mystery"),
+    category: exports_external.enum(["goal", "bond", "quest", "mystery", "secret", "foreshadowing", "promise", "conspiracy", "fact", "clue"]).catch("quest").default("quest"),
     description: exports_external.string().trim().max(1500),
-    status: exports_external.enum(["germinating", "internalized", "resolved"]).default("germinating"),
+    status: exports_external.enum(["active", "developing", "resolved", "germinating", "internalized"]).catch("active").default("active"),
+    linkedEntities: exports_external.array(exports_external.string().trim().max(160)).max(12).optional(),
     seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
     updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
   }).strict();
@@ -20605,7 +20631,7 @@ var init_story_dna = __esm(() => {
     documents: exports_external.record(exports_external.string(), StoryDocumentLedgerEntrySchema).optional(),
     customLexicon: exports_external.array(exports_external.object({
       term: exports_external.string().trim().min(2).max(160),
-      kind: exports_external.enum(["document", "place", "item", "npc"])
+      kind: exports_external.enum(["document", "place", "object", "item", "npc"])
     }).strict()).max(64).optional(),
     thoughtCabinet: exports_external.array(ThoughtCabinetEntrySchema).max(40).optional(),
     chapterCodex: exports_external.array(ChapterCodexEntrySchema).max(40).optional(),
@@ -20860,6 +20886,86 @@ var init_story_dna = __esm(() => {
       itemId: exports_external.string().optional(),
       itemName: exports_external.string(),
       messageId: exports_external.string().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("restore_location"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      locationId: exports_external.string().min(1).max(256),
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("restore_item"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      itemId: exports_external.string().min(1).max(256),
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("merge_location"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      sourceId: exports_external.string().min(1).max(256),
+      targetId: exports_external.string().min(1).max(256),
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("merge_item"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      sourceId: exports_external.string().min(1).max(256),
+      targetId: exports_external.string().min(1).max(256),
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("toggle_route"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      fromLocationId: exports_external.string().min(1).max(256),
+      toLocationId: exports_external.string().min(1).max(256),
+      connected: exports_external.boolean(),
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("save_thread"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      thread: ThoughtCabinetEntrySchema,
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("delete_thread"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      threadId: exports_external.string().min(1).max(256),
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("save_document_note"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      documentId: exports_external.string().min(1).max(256),
+      name: exports_external.string().trim().min(1).max(256),
+      kind: exports_external.string().trim().min(1).max(60).optional(),
+      note: exports_external.string().max(4000),
+      revision: exports_external.number().int().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("add_custom_lexicon"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      term: exports_external.string().trim().min(2).max(120),
+      kind: exports_external.enum(["place", "object", "item", "document", "npc"]),
+      revision: exports_external.number().int().optional()
     })
   ]);
 });
@@ -35790,7 +35896,7 @@ var init_story_dna_harvester = __esm(() => {
     "plastic",
     "ceramic"
   ]);
-  SIGNIFICANCE_HINT_RE = /\b(heirloom|artifact|relic|enchanted|cursed|rune|runic|sigil|cipher|letter|journal|grimoire|talisman|amulet|medallion|locket|codex|scroll|crest|signet|royal|ancient|sacred|blessed|forbidden|brass|iron|silver|gold|bloody|blood[- ]?stained|burner|poisoned|folded|stamped|wax[- ]?sealed|tarnished|engraved|key|token|slip|ledger|form|pass|permit|badge|dossier|notice|flier|flyer|poster|map|ticket|receipt|diary|blueprint|cracked)\b/i;
+  SIGNIFICANCE_HINT_RE = /\b(heirloom|artifact|relic|enchanted|cursed|rune|runic|sigil|cipher|letter|journal|grimoire|talisman|amulet|medallion|locket|codex|scroll|crest|signet|royal|ancient|sacred|blessed|forbidden|silver|gold|bloody|blood[- ]?stained|burner|poisoned|folded|stamped|wax[- ]?sealed|tarnished|engraved|key|token|slip|ledger|form|pass|permit|badge|dossier|notice|flier|flyer|poster|map|ticket|receipt|diary|blueprint|cracked)\b/i;
   LocationAutofillOutputSchema = exports_external.object({
     environmentDescription: exports_external.string().trim().max(2000).optional(),
     lighting: exports_external.string().trim().max(500).optional(),
@@ -45018,6 +45124,211 @@ async function deleteItemDNA(spindle2, chatId, itemId, userId, revision) {
       set2.deletedItems ??= {};
       set2.deletedItems[itemId] = it;
       delete set2.items[itemId];
+    }
+  });
+}
+function dedupeStrings(values, excludeLower, max = 24) {
+  const seen = new Set(excludeLower ? [...excludeLower] : []);
+  const out = [];
+  for (const raw of values) {
+    const clean2 = raw.trim();
+    const key = clean2.toLowerCase();
+    if (!clean2 || seen.has(key))
+      continue;
+    seen.add(key);
+    out.push(clean2);
+    if (out.length >= max)
+      break;
+  }
+  return out;
+}
+function joinDistinctText(primary, secondary, max) {
+  const a = primary?.trim() ?? "";
+  const b = secondary?.trim() ?? "";
+  if (!a && !b)
+    return;
+  if (!a)
+    return b.slice(0, max);
+  if (!b || a.toLowerCase().includes(b.toLowerCase()))
+    return a.slice(0, max);
+  if (b.toLowerCase().includes(a.toLowerCase()))
+    return b.slice(0, max);
+  return `${a}
+
+${b}`.slice(0, max);
+}
+async function restoreLocationDNA(spindle2, chatId, locationId, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const deleted = set2.deletedLocations?.[locationId];
+    if (!deleted)
+      throw new Error("Deleted location record was not found.");
+    set2.locations[locationId] = { ...deleted, lastUpdated: Date.now() };
+    delete set2.deletedLocations[locationId];
+  });
+}
+async function restoreItemDNA(spindle2, chatId, itemId, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const deleted = set2.deletedItems?.[itemId];
+    if (!deleted)
+      throw new Error("Deleted item record was not found.");
+    set2.items[itemId] = { ...deleted, lastUpdated: Date.now() };
+    delete set2.deletedItems[itemId];
+  });
+}
+async function mergeLocationDNA(spindle2, chatId, sourceId, targetId, userId, revision) {
+  if (sourceId === targetId)
+    throw new Error("Choose a different location to merge with.");
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const source = set2.locations[sourceId];
+    const target2 = set2.locations[targetId];
+    if (!source || !target2)
+      throw new Error("One of the locations to merge no longer exists.");
+    const targetNameLower = target2.name.trim().toLowerCase();
+    const sourceNameLower = source.name.trim().toLowerCase();
+    const excludeNames = new Set([targetNameLower, sourceNameLower]);
+    const aliases = dedupeStrings([...target2.aliases, source.name, ...source.aliases], new Set([targetNameLower]), 16);
+    const persistentElements = dedupeStrings([...target2.persistentElements ?? [], ...source.persistentElements ?? []], undefined, 24);
+    const connectedLocations = dedupeStrings([...target2.connectedLocations ?? [], ...source.connectedLocations ?? []], excludeNames, 24);
+    const merged = {
+      ...target2,
+      aliases,
+      persistentElements,
+      connectedLocations,
+      ...target2.environmentDescription || source.environmentDescription ? { environmentDescription: joinDistinctText(target2.environmentDescription, source.environmentDescription, 2000) } : {},
+      ...target2.architecture || source.architecture ? { architecture: target2.architecture?.trim() || source.architecture?.trim() } : {},
+      ...target2.lighting || source.lighting ? { lighting: target2.lighting?.trim() || source.lighting?.trim() } : {},
+      ...target2.atmosphere || source.atmosphere ? { atmosphere: target2.atmosphere?.trim() || source.atmosphere?.trim() } : {},
+      ...target2.loreText || source.loreText ? { loreText: joinDistinctText(target2.loreText, source.loreText, 4000) } : {},
+      ...target2.notes || source.notes ? { notes: joinDistinctText(target2.notes, source.notes, 2000) } : {},
+      ...target2.referenceImageUrl || source.referenceImageUrl ? { referenceImageUrl: target2.referenceImageUrl || source.referenceImageUrl } : {},
+      seenInSwipes: dedupeStrings([...target2.seenInSwipes ?? [], ...source.seenInSwipes ?? []], undefined, 64),
+      locked: Boolean(target2.locked || source.locked),
+      autoDiscovered: false,
+      lastUpdated: Date.now()
+    };
+    set2.locations[targetId] = merged;
+    set2.deletedLocations ??= {};
+    set2.deletedLocations[sourceId] = source;
+    delete set2.locations[sourceId];
+    for (const [id7, other] of Object.entries(set2.locations)) {
+      if (id7 === targetId || !other.connectedLocations?.length)
+        continue;
+      if (other.connectedLocations.some((c) => c.trim().toLowerCase() === sourceNameLower || createLocationId(c) === sourceId)) {
+        other.connectedLocations = dedupeStrings(other.connectedLocations.map((c) => c.trim().toLowerCase() === sourceNameLower || createLocationId(c) === sourceId ? target2.name : c), new Set([other.name.trim().toLowerCase()]), 24);
+      }
+    }
+  });
+}
+async function mergeItemDNA(spindle2, chatId, sourceId, targetId, userId, revision) {
+  if (sourceId === targetId)
+    throw new Error("Choose a different item to merge with.");
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const source = set2.items[sourceId];
+    const target2 = set2.items[targetId];
+    if (!source || !target2)
+      throw new Error("One of the items to merge no longer exists.");
+    const targetNameLower = target2.name.trim().toLowerCase();
+    const targetDesc = target2.description?.trim() === target2.name.trim() ? "" : target2.description;
+    const description = joinDistinctText(targetDesc, source.description, 2000) || target2.name;
+    const merged = {
+      ...target2,
+      aliases: dedupeStrings([...target2.aliases, source.name, ...source.aliases], new Set([targetNameLower]), 16),
+      ...target2.itemType || source.itemType ? { itemType: target2.itemType?.trim() || source.itemType?.trim() } : {},
+      description,
+      ...target2.materials || source.materials ? { materials: target2.materials?.trim() || source.materials?.trim() } : {},
+      distinctiveFeatures: dedupeStrings([...target2.distinctiveFeatures ?? [], ...source.distinctiveFeatures ?? []], undefined, 24),
+      colors: dedupeStrings([...target2.colors ?? [], ...source.colors ?? []], undefined, 12),
+      ...target2.heldBy || source.heldBy ? { heldBy: target2.heldBy?.trim() || source.heldBy?.trim() } : {},
+      ...target2.loreText || source.loreText ? { loreText: joinDistinctText(target2.loreText, source.loreText, 4000) } : {},
+      ...target2.notes || source.notes ? { notes: joinDistinctText(target2.notes, source.notes, 2000) } : {},
+      ...target2.referenceImageUrl || source.referenceImageUrl ? { referenceImageUrl: target2.referenceImageUrl || source.referenceImageUrl } : {},
+      seenInSwipes: dedupeStrings([...target2.seenInSwipes ?? [], ...source.seenInSwipes ?? []], undefined, 64),
+      locked: Boolean(target2.locked || source.locked),
+      autoDiscovered: false,
+      lastUpdated: Date.now()
+    };
+    set2.items[targetId] = merged;
+    set2.deletedItems ??= {};
+    set2.deletedItems[sourceId] = source;
+    delete set2.items[sourceId];
+  });
+}
+async function toggleLocationRoute(spindle2, chatId, fromLocationId, toLocationId, connected, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const fromLoc = set2.locations[fromLocationId] ?? findMatchingLocation(set2.locations, fromLocationId);
+    const toLoc = set2.locations[toLocationId] ?? findMatchingLocation(set2.locations, toLocationId);
+    if (!fromLoc || !toLoc || fromLoc.id === toLoc.id) {
+      throw new Error("Select two distinct saved locations to link or unlink a route.");
+    }
+    const updateSide = (loc, peer) => {
+      const peerLower = peer.name.trim().toLowerCase();
+      const filtered = (loc.connectedLocations ?? []).filter((c) => c.trim().toLowerCase() !== peerLower && createLocationId(c) !== peer.id);
+      loc.connectedLocations = connected ? dedupeStrings([...filtered, peer.name], undefined, 24) : filtered;
+      loc.autoDiscovered = false;
+      loc.lastUpdated = Date.now();
+    };
+    updateSide(fromLoc, toLoc);
+    updateSide(toLoc, fromLoc);
+  });
+}
+async function saveStoryThread(spindle2, chatId, thread, userId, revision) {
+  const parsed = ThoughtCabinetEntrySchema.parse(thread);
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const existing = set2.thoughtCabinet ?? [];
+    const idx = existing.findIndex((t) => t.id === parsed.id);
+    const nextEntry = { ...parsed, updatedAt: Date.now() };
+    if (idx >= 0) {
+      existing[idx] = nextEntry;
+    } else {
+      existing.push(nextEntry);
+    }
+    set2.thoughtCabinet = existing.slice(-40);
+  });
+}
+async function deleteStoryThread(spindle2, chatId, threadId, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    if (!set2.thoughtCabinet?.length)
+      return;
+    set2.thoughtCabinet = set2.thoughtCabinet.filter((t) => t.id !== threadId);
+  });
+}
+async function saveDocumentTranscriptNote(spindle2, chatId, params, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    set2.documents ??= {};
+    const existing = set2.documents[params.documentId];
+    const cleanNote = params.note.trim().slice(0, 4000);
+    if (existing) {
+      if (cleanNote)
+        existing.customNotes = cleanNote;
+      else
+        delete existing.customNotes;
+      existing.locked = true;
+      existing.autoDiscovered = false;
+      existing.lastUpdated = Date.now();
+    } else {
+      set2.documents[params.documentId] = StoryDocumentLedgerEntrySchema.parse({
+        id: params.documentId,
+        name: params.name,
+        kind: params.kind ?? "note",
+        aliases: [],
+        sections: [],
+        ...cleanNote ? { customNotes: cleanNote } : {},
+        locked: true,
+        autoDiscovered: false,
+        lastUpdated: Date.now()
+      });
+    }
+  });
+}
+async function addCustomLexiconTerm(spindle2, chatId, params, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const clean2 = params.term.trim();
+    if (clean2.length < 2)
+      throw new Error("Term must be at least 2 characters.");
+    const normalizedKind = params.kind === "item" ? "object" : params.kind;
+    const list = set2.customLexicon ?? [];
+    if (!list.some((x) => x.term.toLowerCase() === clean2.toLowerCase() && x.kind === normalizedKind)) {
+      set2.customLexicon = [...list, { term: clean2.slice(0, 160), kind: normalizedKind }].slice(-64);
     }
   });
 }
@@ -56449,6 +56760,59 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
       await reply(storyDna);
       return;
     }
+    if (request.action === "restore_location") {
+      const storyDna = await restoreLocationDNA(spindle2, request.chatId, request.locationId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "restore_item") {
+      const storyDna = await restoreItemDNA(spindle2, request.chatId, request.itemId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "merge_location") {
+      const storyDna = await mergeLocationDNA(spindle2, request.chatId, request.sourceId, request.targetId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "merge_item") {
+      const storyDna = await mergeItemDNA(spindle2, request.chatId, request.sourceId, request.targetId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "toggle_route") {
+      const storyDna = await toggleLocationRoute(spindle2, request.chatId, request.fromLocationId, request.toLocationId, request.connected, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "save_thread") {
+      const storyDna = await saveStoryThread(spindle2, request.chatId, request.thread, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "delete_thread") {
+      const storyDna = await deleteStoryThread(spindle2, request.chatId, request.threadId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "save_document_note") {
+      const storyDna = await saveDocumentTranscriptNote(spindle2, request.chatId, {
+        documentId: request.documentId,
+        name: request.name,
+        kind: request.kind,
+        note: request.note
+      }, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === "add_custom_lexicon") {
+      const storyDna = await addCustomLexiconTerm(spindle2, request.chatId, {
+        term: request.term,
+        kind: request.kind
+      }, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
     if (request.action === "autofill_location") {
       const current = await loadStoryDNASet(spindle2, request.chatId, userId);
       const drafted = await autofillLocationDNA(spindle2, {
@@ -56484,8 +56848,12 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
         const scrubbed = scrubStoryDNASwipes(set2, activeMap);
         set2.locations = scrubbed.locations;
         set2.items = scrubbed.items;
+        if (scrubbed.documents !== undefined)
+          set2.documents = scrubbed.documents;
         set2.thoughtCabinet = scrubbed.thoughtCabinet;
         set2.chapterCodex = scrubbed.chapterCodex;
+        if (scrubbed.npcBeliefs !== undefined)
+          set2.npcBeliefs = scrubbed.npcBeliefs;
       }) : await loadStoryDNASet(spindle2, request.chatId, userId);
       await reply(updated);
       return;

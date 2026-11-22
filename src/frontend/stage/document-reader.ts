@@ -20,9 +20,28 @@ export type DocumentReaderOptions = {
   asset?: DocumentAssetView | null;
   busy?: boolean;
   error?: string;
+  customNote?: string;
   onGenerate?: (regenerate: boolean) => void;
   onLightbox?: (asset: DocumentAssetView) => void;
+  onSaveNote?: (note: string) => void;
+  onExamineCloser?: () => void;
 };
+
+const TITLE_SMALL_WORDS = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
+
+export function formatDocumentDisplayTitle(rawName: string, kind: StoryDocument['kind']): string {
+  const clean = rawName.trim();
+  if (!clean) return kinds[kind];
+  if (/[A-Z]/.test(clean)) return clean;
+  return clean
+    .split(/\s+/)
+    .map((word, idx) => {
+      const lower = word.toLowerCase();
+      if (idx > 0 && TITLE_SMALL_WORDS.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ');
+}
 
 export function populateDocumentArtStage(
   stage: HTMLElement,
@@ -97,6 +116,7 @@ export function createDocumentReader(
   close: () => void,
   options: DocumentReaderOptions = {},
 ): HTMLElement {
+  const displayTitle = formatDocumentDisplayTitle(documentRecord.name, documentRecord.kind);
   const panel = document.createElement('section');
   panel.dataset.vnDossierCard = '';
   panel.dataset.vnDocumentReader = '';
@@ -104,7 +124,7 @@ export function createDocumentReader(
   panel.dataset.documentKind = documentRecord.kind;
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
-  panel.setAttribute('aria-label', `Read ${documentRecord.name}`);
+  panel.setAttribute('aria-label', `Read ${displayTitle}`);
 
   const header = document.createElement('header');
   const backButton = document.createElement('button');
@@ -115,7 +135,7 @@ export function createDocumentReader(
   backButton.title = 'Back to item';
   backButton.setAttribute('aria-label', 'Back to item');
   backButton.onclick = back;
-  title.textContent = documentRecord.name;
+  title.textContent = displayTitle;
   closeButton.textContent = '×';
   closeButton.title = 'Close document';
   closeButton.setAttribute('aria-label', 'Close document');
@@ -140,6 +160,7 @@ export function createDocumentReader(
 
   const obs = documentRecord.observations ?? [];
   const hasVisualSummary = Boolean(documentRecord.visualDetails) || obs.some(o => Boolean(o.summary || o.visualDetails?.length || o.condition || o.material));
+  const collectedObservationLines: string[] = [];
   if (hasVisualSummary) {
     const obsBox = document.createElement('div');
     obsBox.dataset.documentObservations = '';
@@ -158,6 +179,7 @@ export function createDocumentReader(
       const line = [...new Set(parts)].join(' · ');
       if (!line || seenLines.has(line.toLowerCase())) continue;
       seenLines.add(line.toLowerCase());
+      collectedObservationLines.push(line);
       const p = document.createElement('p');
       p.textContent = line;
       const src = document.createElement('small');
@@ -165,6 +187,7 @@ export function createDocumentReader(
       obsBox.append(p, src);
     }
     if (!seenLines.size && documentRecord.visualDetails) {
+      collectedObservationLines.push(documentRecord.visualDetails);
       const p = document.createElement('p');
       p.textContent = documentRecord.visualDetails;
       obsBox.append(p);
@@ -192,30 +215,116 @@ export function createDocumentReader(
   } else {
     const emptyText = document.createElement('p');
     emptyText.dataset.documentEmptyText = '';
-    emptyText.textContent = 'No verbatim text transcribed yet. Visual cues above reflect what has been seen so far.';
+    emptyText.textContent = hasVisualSummary
+      ? 'No verbatim text transcribed yet. Visual cues above reflect what has been seen so far.'
+      : 'No verbatim text transcribed yet.';
     transcript.append(emptyText);
   }
   scrollWrap.append(transcript);
+
+  let currentNote = options.customNote?.trim() ?? '';
+  const customNoteWrap = document.createElement('div');
+  customNoteWrap.dataset.documentCustomNote = '';
+  customNoteWrap.hidden = !currentNote;
+  const renderCustomNote = () => {
+    customNoteWrap.replaceChildren();
+    customNoteWrap.hidden = !currentNote;
+    if (!currentNote) return;
+    const h = document.createElement('h3');
+    h.textContent = 'Your Transcript & Notes';
+    const p = document.createElement('p');
+    p.textContent = currentNote;
+    customNoteWrap.append(h, p);
+  };
+  renderCustomNote();
+  scrollWrap.append(customNoteWrap);
+
+  const noteEditor = document.createElement('div');
+  noteEditor.dataset.documentNoteBox = '';
+  noteEditor.hidden = true;
+  if (options.onSaveNote) {
+    const textarea = document.createElement('textarea');
+    textarea.maxLength = 4000;
+    textarea.placeholder = 'Add missing transcript lines or investigation notes…';
+    textarea.value = currentNote;
+    const editorActions = document.createElement('div');
+    editorActions.dataset.documentNoteActions = '';
+    const saveNoteBtn = document.createElement('button');
+    saveNoteBtn.type = 'button';
+    saveNoteBtn.dataset.documentSaveNote = '';
+    saveNoteBtn.textContent = 'Save Note';
+    const cancelNoteBtn = document.createElement('button');
+    cancelNoteBtn.type = 'button';
+    cancelNoteBtn.textContent = 'Cancel';
+    saveNoteBtn.onclick = () => {
+      currentNote = textarea.value.trim();
+      renderCustomNote();
+      noteEditor.hidden = true;
+      options.onSaveNote?.(currentNote);
+      status.textContent = currentNote ? 'Transcript note saved.' : 'Transcript note cleared.';
+    };
+    cancelNoteBtn.onclick = () => {
+      textarea.value = currentNote;
+      noteEditor.hidden = true;
+    };
+    editorActions.append(cancelNoteBtn, saveNoteBtn);
+    noteEditor.append(textarea, editorActions);
+    scrollWrap.append(noteEditor);
+  }
 
   const footer = document.createElement('footer');
   const copy = document.createElement('button');
   const status = document.createElement('span');
   status.setAttribute('role', 'status');
   copy.type = 'button';
-  copy.textContent = 'Copy text';
-  copy.title = 'Copy revealed text';
-  copy.setAttribute('aria-label', 'Copy revealed text');
-  copy.disabled = documentRecord.sections.length === 0;
+  const copyTextPayload = documentRecord.sections.length > 0
+    ? documentRecord.sections.map(s => s.text).join('\n\n')
+    : [...collectedObservationLines, ...(currentNote ? [currentNote] : [])].join('\n\n');
+  copy.textContent = documentRecord.sections.length > 0 ? 'Copy text' : 'Copy observations';
+  copy.title = documentRecord.sections.length > 0 ? 'Copy revealed text' : 'Copy revealed observations';
+  copy.setAttribute('aria-label', copy.title);
+  copy.disabled = !copyTextPayload.trim();
   copy.onclick = async () => {
-    if (!panel.isConnected || !documentRecord.sections.length) return;
+    const payload = documentRecord.sections.length > 0
+      ? documentRecord.sections.map(s => s.text).join('\n\n')
+      : [...collectedObservationLines, ...(currentNote ? [currentNote] : [])].join('\n\n');
+    if (!panel.isConnected || !payload.trim()) return;
     try {
-      await navigator.clipboard.writeText(documentRecord.sections.map(s => s.text).join('\n\n'));
+      await navigator.clipboard.writeText(payload);
       if (panel.isConnected) status.textContent = 'Copied.';
     } catch {
       if (panel.isConnected) status.textContent = 'Copy unavailable. Select the text to copy it.';
     }
   };
-  footer.append(copy, status);
+  footer.append(copy);
+
+  if (options.onSaveNote) {
+    const editNoteBtn = document.createElement('button');
+    editNoteBtn.type = 'button';
+    editNoteBtn.dataset.documentEditNote = '';
+    editNoteBtn.textContent = currentNote ? '✎ Edit note' : '✎ Transcribe / Add note';
+    editNoteBtn.onclick = () => {
+      noteEditor.hidden = !noteEditor.hidden;
+      if (!noteEditor.hidden) {
+        noteEditor.querySelector('textarea')?.focus();
+      }
+    };
+    footer.append(editNoteBtn);
+  }
+
+  if (options.onExamineCloser) {
+    const examineBtn = document.createElement('button');
+    examineBtn.type = 'button';
+    examineBtn.dataset.documentExamineCloser = '';
+    examineBtn.textContent = 'Examine closer';
+    examineBtn.title = 'Insert a reply draft to inspect or read this document closely';
+    examineBtn.onclick = () => {
+      options.onExamineCloser?.();
+    };
+    footer.append(examineBtn);
+  }
+
+  footer.append(status);
 
   panel.append(header, meta, scrollWrap, footer);
   return panel;
@@ -260,7 +369,13 @@ export const DOCUMENT_READER_CSS = `
 [data-vn-document-reader][data-document-kind="phone"] [data-document-body]{font-family:system-ui,-apple-system,sans-serif;background:color-mix(in srgb,#0b101b 75%,var(--vn-panel-solid,#171b26));border-radius:16px;padding:14px}
 [data-vn-document-reader][data-document-kind="phone"] [data-document-body] section{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 14%,rgba(255,255,255,.04));border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 26%,transparent);border-radius:14px 14px 14px 4px;padding:10px 12px;margin-top:10px}
 [data-vn-document-reader][data-document-kind="terminal"] [data-document-body]{font-family:ui-monospace,"Cascadia Mono","Fira Code",monospace;line-height:1.55;background:linear-gradient(180deg,rgba(8,20,16,.88),rgba(5,14,11,.94));color:#9ef5c2;border-color:rgba(82,214,145,.36);box-shadow:inset 0 0 24px rgba(16,185,129,.08)}
-[data-vn-document-reader] footer{flex:none;display:flex;align-items:center;gap:12px;padding-top:8px;border-top:1px solid var(--vn-panel-border,#666)}
-[data-vn-document-reader] footer button{margin:0;min-width:44px}[data-vn-document-reader] [role="status"]{font-size:.75em}
+[data-document-custom-note]{margin:14px 0 6px;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 10%,transparent);border-left:3px solid var(--vn-accent,#9ec6f0)}
+[data-document-custom-note] h3{margin:0 0 6px;font-size:.72em;letter-spacing:.07em;text-transform:uppercase;opacity:.78;font-family:inherit}
+[data-document-custom-note] p{margin:0;white-space:pre-wrap;font-size:.94em;line-height:1.55}
+[data-document-note-box]{margin:12px 0 4px;padding:10px;border-radius:8px;border:1px solid var(--vn-panel-border,#666);background:rgba(0,0,0,.22)}
+[data-document-note-box] textarea{box-sizing:border-box;width:100%;min-height:84px;margin:0 0 8px;padding:8px;border-radius:6px;border:1px solid var(--vn-panel-border,#666);background:rgba(0,0,0,.3);color:inherit;font:inherit;font-size:.9em}
+[data-document-note-actions]{display:flex;justify-content:flex-end;gap:8px}
+[data-vn-document-reader] footer{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:8px;border-top:1px solid var(--vn-panel-border,#666)}
+[data-vn-document-reader] footer button{margin:0;min-width:44px;min-height:44px}[data-vn-document-reader] [role="status"]{font-size:.75em}
 [data-document-body]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:2px}
 `;

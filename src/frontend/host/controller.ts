@@ -805,6 +805,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.workspace.open('character');
   });
   stage.setStoryDnaRequester((body) => sendStoryDna(body));
+  stage.setLocationArtRequester((action) => {
+    const owner = chatId();
+    if (!owner) return;
+    ctx.sendToBackend({ type: 'vn_location_art', version: 1, chatId: owner, requestId: createUiId(), ...action });
+  });
   stage.setCharacterDnaSaver((dna) => sendDna({ action: 'save', dna, revision: dnaRevision }));
   stage.setDocumentArtRequester?.((documentId, throughParagraphIndex, forceRegenerate) => {
     if (!turn) return;
@@ -1318,7 +1323,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_gallery'){if(message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
     if(type==='vn_cast_art_notice'&&message.type==='vn_cast_art_notice'){if(message.chatId===chatId())settingsPanel?.castArtNotice(message.error);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
-    if(type==='vn_location_art'&&message.type==='vn_location_art'){settingsPanel?.setLocationArt(message.chatId,message.requestId,message.library);return;}
+    if(type==='vn_location_art'&&message.type==='vn_location_art'){settingsPanel?.setLocationArt(message.chatId,message.requestId,message.library);if(message.chatId===chatId())stage.setLocationArtLibrary(message.library);return;}
     if(type==='vn_location_art_notice'&&message.type==='vn_location_art_notice'){if(message.chatId===chatId())settingsPanel?.locationArtNotice(message.error);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_location_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.locationArtError(message.error,message.requestId);return;}
     if(type==='vn_context_sources' && message.type==='vn_context_sources') {settingsPanel?.setContextSourceReport(message.report);return;}

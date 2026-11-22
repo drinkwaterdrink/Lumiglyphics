@@ -11,6 +11,15 @@ import {
   saveItemDNA,
   deleteLocationDNA,
   deleteItemDNA,
+  restoreLocationDNA,
+  restoreItemDNA,
+  mergeLocationDNA,
+  mergeItemDNA,
+  toggleLocationRoute,
+  saveStoryThread,
+  deleteStoryThread,
+  saveDocumentTranscriptNote,
+  addCustomLexiconTerm,
   mutateStoryDNASet,
 } from './story-dna-store.js';
 import { activeBranchSwipeTags, activeMessageSwipeMap } from './character-dna-workflow.js';
@@ -67,6 +76,59 @@ export async function handleStoryDnaRequest(
       await reply(storyDna);
       return;
     }
+    if (request.action === 'restore_location') {
+      const storyDna = await restoreLocationDNA(spindle, request.chatId, request.locationId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'restore_item') {
+      const storyDna = await restoreItemDNA(spindle, request.chatId, request.itemId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'merge_location') {
+      const storyDna = await mergeLocationDNA(spindle, request.chatId, request.sourceId, request.targetId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'merge_item') {
+      const storyDna = await mergeItemDNA(spindle, request.chatId, request.sourceId, request.targetId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'toggle_route') {
+      const storyDna = await toggleLocationRoute(spindle, request.chatId, request.fromLocationId, request.toLocationId, request.connected, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'save_thread') {
+      const storyDna = await saveStoryThread(spindle, request.chatId, request.thread, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'delete_thread') {
+      const storyDna = await deleteStoryThread(spindle, request.chatId, request.threadId, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'save_document_note') {
+      const storyDna = await saveDocumentTranscriptNote(spindle, request.chatId, {
+        documentId: request.documentId,
+        name: request.name,
+        kind: request.kind,
+        note: request.note,
+      }, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'add_custom_lexicon') {
+      const storyDna = await addCustomLexiconTerm(spindle, request.chatId, {
+        term: request.term,
+        kind: request.kind,
+      }, userId, request.revision);
+      await reply(storyDna);
+      return;
+    }
     if (request.action === 'autofill_location') {
       const current = await loadStoryDNASet(spindle, request.chatId, userId);
       const drafted = await autofillLocationDNA(spindle, {
@@ -104,8 +166,10 @@ export async function handleStoryDnaRequest(
             const scrubbed = scrubStoryDNASwipes(set, activeMap);
             set.locations = scrubbed.locations;
             set.items = scrubbed.items;
+            if (scrubbed.documents !== undefined) set.documents = scrubbed.documents;
             set.thoughtCabinet = scrubbed.thoughtCabinet;
             set.chapterCodex = scrubbed.chapterCodex;
+            if (scrubbed.npcBeliefs !== undefined) set.npcBeliefs = scrubbed.npcBeliefs;
           })
         : await loadStoryDNASet(spindle, request.chatId, userId);
       await reply(updated);

@@ -24,7 +24,12 @@ export function eligibleEntities(entities:readonly PresentationEntity[],prefs:To
 }
 export type DossierAnchor={start:number;end:number;entityId:string};
 /** Incremental mention accounting needs reveal names, never state replay. */
-export function createReferenceLinkBudget(value:ReaderPresentation,paragraphs:readonly string[],prefs:TooltipPreferences):(index:number)=>{used:number;priorIds:Set<string>} {
+export function createReferenceLinkBudget(
+  value:ReaderPresentation,
+  paragraphs:readonly string[],
+  prefs:TooltipPreferences,
+  salientByParagraph?:ReadonlyMap<number,ReadonlySet<string>>
+):(index:number)=>{used:number;priorIds:Set<string>} {
  const counts=[0],firstLinkedAt=new Map<string,number>();let processed=0;
  const chatId=presentationTurnKey(value)?.chatId??'';
  return index=>{
@@ -33,7 +38,8 @@ export function createReferenceLinkBudget(value:ReaderPresentation,paragraphs:re
    let used=counts[processed]!;
    if(used<24){
     const entities=value.version===2?(processed<=value.availableThrough?value.entities.filter(e=>e.firstParagraph<=processed):[]):value.snapshots[processed]?.entities??[];
-    const anchors=linkEntityMentions(paragraphs[processed]??'',entities,prefs,chatId,Math.min(prefs.maxLinksPerParagraph,24-used),[],prefs.linking==='important'?new Set(firstLinkedAt.keys()):new Set());
+    const salient=salientByParagraph?.get(processed);
+    const anchors=linkEntityMentions(paragraphs[processed]??'',entities,prefs,chatId,Math.min(prefs.maxLinksPerParagraph,24-used),[],prefs.linking==='important'?new Set(firstLinkedAt.keys()):new Set(),salient);
     used+=anchors.length;for(const anchor of anchors)if(!firstLinkedAt.has(anchor.entityId))firstLinkedAt.set(anchor.entityId,processed);
    }
    counts[processed+1]=used;
@@ -41,28 +47,61 @@ export function createReferenceLinkBudget(value:ReaderPresentation,paragraphs:re
   return {used:counts[target]??0,priorIds:new Set([...firstLinkedAt].filter(([,at])=>at<target).map(([id])=>id))};
  };
 }
-/** Exact explicit names/aliases only; Unicode word boundaries and ambiguous
+function isShadowFallbackId(id:string):boolean {
+ return id.startsWith('dna:')||id.startsWith('earlier:');
+}
+function buildEntityMatchPattern(rawTerm:string,allowPlural:boolean):string {
+ const escaped=rawTerm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ if(!allowPlural||!/^[a-zA-Z][a-zA-Z\s'-]{2,}$/.test(rawTerm)||/s$/i.test(rawTerm))return escaped;
+ return /(?:sh|ch|x|z)$/i.test(rawTerm)?`${escaped}(?:es)?`:`${escaped}s?`;
+}
+/** Exact explicit names/aliases only (plus safe simple plurals on objects/places); Unicode word boundaries and ambiguous
  * aliases are conservative. Offsets are UTF-16, never HTML replacement offsets. */
-export function linkEntityMentions(text:string,entities:readonly PresentationEntity[],prefs:TooltipPreferences,chatId='',limit=prefs.maxLinksPerParagraph,protectedRanges:readonly (readonly [number,number])[]=[],excludedEntityIds:ReadonlySet<string>=new Set()):DossierAnchor[] {
+export function linkEntityMentions(
+ text:string,
+ entities:readonly PresentationEntity[],
+ prefs:TooltipPreferences,
+ chatId='',
+ limit=prefs.maxLinksPerParagraph,
+ protectedRanges:readonly (readonly [number,number])[]=[],
+ excludedEntityIds:ReadonlySet<string>=new Set(),
+ salientEntityIds:ReadonlySet<string>=new Set()
+):DossierAnchor[] {
  if(prefs.linking==='menu-only'||text.length>20000||limit<=0)return [];
- const eligible=eligibleEntities(entities,prefs,chatId).filter(e=>!excludedEntityIds.has(e.id)||entityOverride(prefs,chatId,e)?.pinned);
+ const eligible=eligibleEntities(entities,prefs,chatId).filter(e=>!excludedEntityIds.has(e.id)||salientEntityIds.has(e.id)||entityOverride(prefs,chatId,e)?.pinned);
  const owners=new Map<string,Set<string>>();
- for(const e of entities)for(const name of [e.name,...e.aliases]){const key=name.trim().toLowerCase();if(!key)continue;const ids=owners.get(key)??new Set<string>();ids.add(e.id);owners.set(key,ids);}
+ const eligibleIds=new Set(eligible.map(e=>e.id));
+ for(const e of entities){
+  // Preserve first-mention exclusions (same real turn entity set), while never letting synthetic dna:/earlier: shadows or suppressed entities block active links
+  const suppressedNonExcluded=!isShadowFallbackId(e.id)&&entityOverride(prefs,chatId,e)?.suppressed===true&&!excludedEntityIds.has(e.id);
+  if(isShadowFallbackId(e.id)||suppressedNonExcluded)continue;
+  for(const name of [e.name,...e.aliases]){
+   const key=name.trim().toLowerCase();
+   if(!key)continue;
+   const ids=owners.get(key)??new Set<string>();
+   ids.add(e.id);
+   owners.set(key,ids);
+  }
+ }
  const excluded=[...protectedRanges,...[...text.matchAll(/`[^`]*`|\[[^\]]*\]\([^)]*\)/g)].map(m=>[m.index!,m.index!+m[0].length] as const)];
- const candidates:Array<DossierAnchor&{pinned:boolean}>=[];
- for(const e of eligible)for(const name of [e.name,...e.aliases]) {const key=name.trim().toLowerCase();
-  if((/^[\x00-\x7F]+$/.test(key)&&key.length<3)||owners.get(key)?.size!==1||/^(?:he|she|they|it|you|we|i|him|her|them|me|us|the|a|an|in|on|at|to|of|or|by|as|is|go|do|so|no|up|my)$/i.test(key))continue;
-  const nameRe=new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu');let m:RegExpExecArray|null;let scanned=0;
+ const candidates:Array<DossierAnchor&{pinned:boolean;salient:boolean}>=[];
+ for(const e of eligible)for(const name of [e.name,...e.aliases]) {
+  const trimmed=name.trim(),key=trimmed.toLowerCase();
+  const keyOwners=owners.get(key);
+  const ownedSolelyBySelf=keyOwners?keyOwners.size===1&&keyOwners.has(e.id):isShadowFallbackId(e.id);
+  const resolvedUnique=ownedSolelyBySelf||(keyOwners&&[...keyOwners].filter(id=>eligibleIds.has(id)||excludedEntityIds.has(id)).length===1&&(eligibleIds.has(e.id)&&keyOwners.has(e.id)));
+  if((/^[\x00-\x7F]+$/.test(key)&&key.length<3)||!resolvedUnique||/^(?:he|she|they|it|you|we|i|him|her|them|me|us|the|a|an|in|on|at|to|of|or|by|as|is|go|do|so|no|up|my)$/i.test(key))continue;
+  const allowPlural=(e.kind==='object'||e.kind==='place')&&!(owners.get(`${key}s`)?.size)&&!(owners.get(`${key}es`)?.size);
+  const nameRe=new RegExp(buildEntityMatchPattern(trimmed,allowPlural),'giu');let m:RegExpExecArray|null;let scanned=0;
   while((m=nameRe.exec(text))&&scanned++<12) {if(m[0].length===0){nameRe.lastIndex++;continue;}const start=m.index;
    const end=start+(m[0].length), before=Array.from(text.slice(Math.max(0,start-2),start)).at(-1)??'',after=Array.from(text.slice(end,end+2))[0]??'';
    if(e.kind==='object'&&isIdiomaticDocumentMention(text,start,end))continue;
-   if(!/[\p{L}\p{N}_]/u.test(before)&&!/[\p{L}\p{N}_]/u.test(after)&&!excluded.some(([a,b])=>start>=a!&&start<b!))candidates.push({start,end,entityId:e.id,pinned:entityOverride(prefs,chatId,e)?.pinned===true});
-
+   if(!/[\p{L}\p{N}_]/u.test(before)&&!/[\p{L}\p{N}_]/u.test(after)&&!excluded.some(([a,b])=>start>=a!&&start<b!))candidates.push({start,end,entityId:e.id,pinned:entityOverride(prefs,chatId,e)?.pinned===true,salient:salientEntityIds.has(e.id)});
   }
  }
- candidates.sort((a,b)=>Number(b.pinned)-Number(a.pinned)||a.start-b.start||b.end-a.end);
+ candidates.sort((a,b)=>Number(b.pinned)-Number(a.pinned)||Number(b.salient)-Number(a.salient)||a.start-b.start||b.end-a.end);
  const selected:DossierAnchor[]=[];const linked=new Set<string>();
- for(const {pinned:_,...a} of candidates) {
+ for(const {pinned:_,salient:__,...a} of candidates) {
   if(linked.has(a.entityId)||selected.some(b=>a.start<b.end&&a.end>b.start))continue;
   selected.push(a);linked.add(a.entityId);if(selected.length>=Math.min(6,limit))break;
  }

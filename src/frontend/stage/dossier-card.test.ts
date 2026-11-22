@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { normalizeTooltipPreferences } from '../../shared/dossiers.js';
 import { DossierCard } from './dossier-card.js';
+import { StageDossiers } from './dossiers.js';
 import { installFakeDocument, FakeNode } from './stage-test-dom.js';
 
 describe('DossierCard & World Lens Header', () => {
@@ -322,6 +324,220 @@ describe('DossierCard & World Lens Header', () => {
       expect(swapBtn).not.toBeNull();
       swapBtn.click();
       expect(wardrobeCalls).toEqual([{ char: 'dna-dana', key: 'coat', outfit: 'yellow rain slicker' }]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('Wave 2: zero-fake-edges Atlas + Link Places toggle_route + Story Threads + Perspectives + Hidden Drawer', () => {
+    const restore = installFakeDocument();
+    try {
+      const host = new FakeNode('div');
+      const card = new DossierCard(host as unknown as HTMLElement);
+      const sentBodies: any[] = [];
+      let unhid = '';
+      card.setStoryDnaRequester((body) => sentBodies.push(body));
+      card.setStoryDna({
+        revision: 4,
+        locations: {
+          'loc-a': { id: 'loc-a', name: 'Marten House Lobby', aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: 1 },
+          'loc-b': { id: 'loc-b', name: 'Fourth Floor Corridor', aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: 2 },
+        },
+        items: {},
+        deletedLocations: {
+          'loc-old': { id: 'loc-old', name: 'Collapsed Shed', aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: 1 },
+        },
+        thoughtCabinet: [
+          { id: 'th-1', title: 'Who signed the pass', category: 'mystery', description: 'Check registrar ledger', status: 'active', updatedAt: 10 },
+        ],
+        npcBeliefs: {
+          'Naomi': [{ topic: 'Pipes', belief: 'Thinks pipes knock at ten', knowsSecret: false, updatedAt: 1 }],
+          'Pim': [{ topic: 'Scholarship', belief: 'Doubts the scholarship stamp', knowsSecret: false, updatedAt: 2 }],
+        },
+      });
+      card.setSceneHubContext({
+        activeLocationName: 'Marten House Lobby',
+        presentCast: [],
+        activeItems: [],
+        hiddenOverrides: [{ kind: 'place', name: 'Basement' }],
+        onUnhideOverride: (kind, name) => { unhid = `${kind}:${name}`; },
+      });
+
+      const trigger = new FakeNode('button');
+      card.openTray([], trigger as unknown as HTMLElement, () => {}, undefined);
+      (card.host.querySelector('[data-world-hub-tab="atlas"]') as unknown as HTMLButtonElement).click();
+
+      // Zero fake sequential edges
+      expect(card.host.querySelector('[data-atlas-empty-routes]')?.textContent).toContain('No routes mapped yet');
+      expect(card.host.querySelectorAll('line').length).toBe(0);
+
+      // Link Places mode connects two nodes via toggle_route
+      const linkBtn = card.host.querySelector('[data-atlas-link-toggle]') as unknown as HTMLButtonElement;
+      linkBtn.click();
+      const mapNodes = card.host.querySelectorAll('.map-node-pill');
+      expect(mapNodes.length).toBeGreaterThanOrEqual(2);
+      (mapNodes[0] as unknown as HTMLButtonElement).click();
+      (card.host.querySelectorAll('.map-node-pill')[1] as unknown as HTMLButtonElement).click();
+      const routeReq = sentBodies.find((b) => b.action === 'toggle_route');
+      expect(routeReq).toBeDefined();
+      expect(routeReq.connected).toBe(true);
+
+      // Thread status cycles active -> developing & + New Thread saves
+      (card.host.querySelector('[data-thread-status-btn="th-1"]') as unknown as HTMLButtonElement).click();
+      expect(sentBodies.some((b) => b.action === 'save_thread' && b.thread.status === 'developing')).toBe(true);
+
+      (card.host.querySelector('[data-add-thread-btn]') as unknown as HTMLButtonElement).click();
+      const titleInput = card.host.querySelector('[data-new-thread-title]') as unknown as HTMLInputElement;
+      const descInput = card.host.querySelector('[data-new-thread-desc]') as unknown as HTMLTextAreaElement;
+      titleInput.value = 'Fix radiator leak';
+      descInput.value = 'Inspect basement boiler';
+      (card.host.querySelector('[data-save-thread-btn]') as unknown as HTMLButtonElement).click();
+      expect(sentBodies.some((b) => b.action === 'save_thread' && b.thread.title === 'Fix radiator leak')).toBe(true);
+
+      // Perspectives filter
+      const perspSection = card.host.querySelector('[data-world-perspectives-section]');
+      expect(perspSection?.textContent).toContain('Naomi');
+      (card.host.querySelector('[data-perspective-filter="Naomi"]') as unknown as HTMLButtonElement).click();
+      expect(card.host.querySelector('[data-world-perspectives-section]')?.textContent).toContain('Thinks pipes knock');
+
+      // Hidden / Deleted drawer Unhide & Restore
+      const drawer = card.host.querySelector('[data-hidden-deleted-drawer]');
+      expect(drawer).not.toBeNull();
+      (card.host.querySelector('[data-unhide-override="place:Basement"]') as unknown as HTMLButtonElement).click();
+      expect(unhid).toBe('place:Basement');
+      (card.host.querySelector('[data-restore-location-id="loc-old"]') as unknown as HTMLButtonElement).click();
+      expect(sentBodies.some((b) => b.action === 'restore_location' && b.locationId === 'loc-old')).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('Wave 2: Documents tab, + Add validation, inline fact edit sync, DNA drawer Merge & embedded Location Art', () => {
+    const restore = installFakeDocument();
+    try {
+      const host = new FakeNode('div');
+      const updates: any[] = [];
+      const card = new DossierCard(host as unknown as HTMLElement, () => {}, (entity, patch) => {
+        updates.push({ entity, patch });
+        return true;
+      });
+      const dnaSent: any[] = [];
+      const artSent: any[] = [];
+      card.setStoryDnaRequester((body) => dnaSent.push(body));
+      card.setLocationArtRequester((act) => artSent.push(act));
+      card.setStoryDna({
+        revision: 2,
+        locations: {
+          'loc-main': { id: 'loc-main', name: 'Marten House', aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: 1 },
+          'loc-dup': { id: 'loc-dup', name: 'Marten Hall', aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: 2 },
+        },
+        items: {},
+        documents: {
+          'doc-intake': {
+            id: 'doc-intake',
+            name: 'intake ledger',
+            kind: 'note',
+            aliases: [],
+            sections: [{ paragraphIndex: 0, text: 'Signed by Pim Dole' }],
+            lastUpdated: 10,
+          },
+        },
+      });
+      card.setLocationArtLibrary({
+        version: 1,
+        locations: [{
+          entityId: 'marten house',
+          name: 'Marten House',
+          artRevision: 1,
+          description: 'Brick hall',
+          preferredVariantId: 'img-2',
+          variants: [
+            { id: 'img-1', imageId: 'asset-1', requestFingerprint: 'rf-1', environmentFingerprint: 'ef-1', approved: true, createdAt: '2026-01-01' },
+            { id: 'img-2', imageId: 'asset-2', requestFingerprint: 'rf-2', environmentFingerprint: 'ef-2', approved: true, createdAt: '2026-01-02' },
+          ],
+        }],
+      });
+      card.setSceneHubContext({ activeLocationName: 'Marten House', presentCast: [], activeItems: [] });
+
+      const trigger = new FakeNode('button');
+      card.openTray([], trigger as unknown as HTMLElement, () => {}, undefined);
+
+      // + Add validation shows [data-add-ref-error] when empty, then creates dna:item:* when valid
+      (card.host.querySelector('.add-ref-chip') as unknown as HTMLButtonElement).click();
+      (card.host.querySelector('[data-add-ref-save]') as unknown as HTMLButtonElement).click();
+      expect((card.host.querySelector('[data-add-ref-error]') as HTMLElement)?.hidden).toBe(false);
+
+      const addName = card.host.querySelector('[data-add-ref-name]') as unknown as HTMLInputElement;
+      const addDesc = card.host.querySelector('[data-add-ref-desc]') as unknown as HTMLTextAreaElement;
+      addName.value = 'Brass Key';
+      addDesc.value = 'Cool brass key numbered 47';
+      (card.host.querySelector('[data-add-ref-save]') as unknown as HTMLButtonElement).click();
+      expect((card.host.querySelector('[data-add-ref-error]') as HTMLElement)?.hidden).toBe(true);
+      expect(dnaSent.some((b) => b.action === 'save_item' && b.item.name === 'Brass Key')).toBe(true);
+
+      // Documents tab opens Document Reader directly
+      (card.host.querySelector('[data-reference-category="document"]') as unknown as HTMLButtonElement).click();
+      const docReadBtn = card.host.querySelector('.world-lens-cta') as unknown as HTMLButtonElement;
+      expect(docReadBtn?.textContent).toContain('Read');
+      docReadBtn?.click();
+      expect(card.host.querySelector('[data-vn-document-reader]')).not.toBeNull();
+
+      // Open place dossier: verify inline fact edit syncs .folio-quote-callout & .observations-grid, Merge & Location Art
+      card.open({
+        entity: {
+          id: 'loc-main',
+          kind: 'place',
+          name: 'Marten House',
+          aliases: [],
+          firstParagraph: 0,
+          facts: [{ id: 'f1', entityId: 'loc-main', field: 'description', value: 'smells of wet wool', visibility: 'observed', source: { provider: 'model' } as any, revealedAt: {} as any }],
+        },
+        facts: [{ id: 'f1', entityId: 'loc-main', field: 'description', value: 'smells of wet wool', visibility: 'observed', source: { provider: 'model' } as any, revealedAt: {} as any }],
+        state: { description: 'smells of wet wool' },
+      } as any, normalizeTooltipPreferences({ enabled: true }), 'chat-1', trigger as unknown as HTMLElement);
+
+      expect(card.host.querySelector('[data-story-dna-drawer="place"]')).not.toBeNull();
+      expect(card.host.querySelector('[data-location-art-embedded]')).not.toBeNull();
+
+      // Inline fact edit updates quote callout and observations grid live
+      (card.host.querySelector('.fact-edit-btn') as unknown as HTMLButtonElement).click();
+      const editInput = card.host.querySelector('.fact-edit-input input') as unknown as HTMLInputElement;
+      editInput.value = 'rain-lashed gables';
+      (card.host.querySelector('.fact-edit-input button') as unknown as HTMLButtonElement).click();
+      expect(updates.length).toBe(1);
+      expect(card.host.querySelector('.folio-quote-callout')?.textContent).toContain('rain-lashed gables');
+      expect(card.host.querySelector('.observations-grid')?.textContent).toContain('rain-lashed gables');
+
+      // Prefer img-1 dispatches select action
+      (card.host.querySelector('[data-location-art-prefer="img-1"]') as unknown as HTMLButtonElement).click();
+      expect(artSent.some((a) => a.action === 'select' && a.variantId === 'img-1')).toBe(true);
+
+      // Merge into loc-dup
+      const mergeSel = card.host.querySelector('[data-dna-merge-select]') as unknown as HTMLSelectElement;
+      mergeSel.value = 'loc-dup';
+      (card.host.querySelector('[data-dna-merge-btn]') as unknown as HTMLButtonElement).click();
+      expect(dnaSent.some((b) => b.action === 'merge_location' && b.sourceId === 'loc-main' && b.targetId === 'loc-dup')).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('Wave 2: StageDossiers.trackSelectedPhrase emits custom lexicon and item/document entries', () => {
+    const restore = installFakeDocument();
+    try {
+      const root = new FakeNode('div') as unknown as HTMLElement;
+      const text = new FakeNode('div', 'Pim checked the brass ledger.') as unknown as HTMLElement;
+      const controls = new FakeNode('div') as unknown as HTMLElement;
+      const sent: any[] = [];
+      const dossiers = new StageDossiers(root, text, controls, () => {}, () => {}, () => {});
+      dossiers.setStoryDnaRequester((body) => sent.push(body));
+
+      dossiers.trackSelectedPhrase('Brass Ledger', 'object', 'Heavy green ledger behind the desk');
+      expect(sent.some((b) => b.action === 'add_custom_lexicon' && b.term === 'Brass Ledger' && b.kind === 'object')).toBe(true);
+      expect(sent.some((b) => b.action === 'save_item' && b.item.name === 'Brass Ledger')).toBe(true);
+
+      dossiers.trackSelectedPhrase('Pipe Maintenance Notice', 'document', 'Turn off steam valves at ten');
+      expect(sent.some((b) => b.action === 'save_document_note' && b.name === 'Pipe Maintenance Notice')).toBe(true);
     } finally {
       restore();
     }

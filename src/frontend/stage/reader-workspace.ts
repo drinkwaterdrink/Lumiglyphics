@@ -13,7 +13,7 @@ export interface WorkspaceSurface {
   back?: () => boolean;
 }
 const destinations: ReadonlyArray<{ id: ReaderDestination; label: string; icon: string; hint: string }> = [
-  { id: 'story', label: 'Story', icon: 'world', hint: 'People, places & revealed documents' },
+  { id: 'story', label: 'World Lens', icon: 'world', hint: 'Places, items, threads & revealed documents' },
   { id: 'character', label: 'Cast', icon: 'cast', hint: 'Character Folio & appearance DNA' },
   { id: 'artwork', label: 'Artwork', icon: 'art', hint: 'Review, replace & inspect pictures' },
   { id: 'history', label: 'History', icon: 'history', hint: 'Earlier passages & saved pictures' },

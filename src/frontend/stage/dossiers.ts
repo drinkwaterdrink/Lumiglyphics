@@ -8,6 +8,9 @@ import {referenceHistoryFor,type ReferenceHistory} from '../../shared/reference-
 import {samePresentationTurn,type ReaderPresentation,type PresentationEntity,type PresentationSnapshot} from '../../shared/presentation-entities.js';
 import {parseReaderPresentation,presentationTurnKey,createPresentationCursor} from '../../shared/presentation-selectors.js';
 import {
+  createItemId,
+  createLocationId,
+  deriveShortAliases,
   findMatchingItem,
   findMatchingLocation,
   formatItemDNAToPromptClause,
@@ -18,6 +21,7 @@ import {
 import { findCharacterDNA, type CharacterDNA } from '../../shared/character-dna.js';
 import type {AssetView,DocumentAssetView,TurnView} from '../../protocol.js';
 import type { StoryDocument } from '../../shared/story-documents.js';
+import type { LocationArtAction, LocationArtLibrary } from '../../shared/stage-assets.js';
 import {applyEntityAnchors,clearEntityAnchors,protectedEntityRanges} from './entity-anchors.js';
 import {DossierCard,DOSSIER_CSS,DOCKED_DOSSIER_CSS,type DossierSceneHubContext,type DossierVisualContext} from './dossier-card.js';
 export class StageDossiers {
@@ -25,10 +29,15 @@ export class StageDossiers {
  private history:ReferenceHistory|undefined;
  private storyDna:StoryDNASet={locations:{},items:{},revision:0};
  private storyDnaRequester?:(body:StoryDnaActionBody)=>void;
+ private locationArtLibrary:LocationArtLibrary={version:1,locations:[]};
+ private locationArtRequester?:(action:LocationArtAction)=>void;
  private characterDnaLibrary:Record<string,CharacterDNA>={};
  private characterDnaSaver?:(dna:CharacterDNA)=>void;
  private tooltipPopover:HTMLElement|null=null;
  private tooltipDismissCleanup:(()=>void)|null=null;
+ private tooltipHolding=false;
+ private trackPill:HTMLElement|null=null;
+ private trackCleanup:(()=>void)|null=null;
  private documentAssets:Record<string,DocumentAssetView>={};
  private documentArtBusy=new Set<string>();
  private documentArtErrors=new Map<string,string>();
@@ -36,7 +45,63 @@ export class StageDossiers {
  private lightboxOpener?:(imageUrl:string,alt:string)=>void;
  private snapshotAt:(index:number)=>PresentationSnapshot|undefined=()=>undefined;
  private priorLinks:(index:number)=>{used:number;priorIds:Set<string>}=()=>({used:0,priorIds:new Set()});
- private resetLinkBudget():void{this.priorLinks=this.presentation?createReferenceLinkBudget(this.presentation,this.paragraphs,this.prefs):()=>({used:0,priorIds:new Set()});}
+ private salientByParagraph=new Map<number,Set<string>>();
+ private rebuildSalientIndex():void {
+  this.salientByParagraph.clear();
+  if(!this.presentation)return;
+  const mark=(pIdx:number,entityId:string)=>{
+   if(pIdx<0)return;
+   let set=this.salientByParagraph.get(pIdx);
+   if(!set){set=new Set();this.salientByParagraph.set(pIdx,set);}
+   set.add(entityId);
+  };
+  const entities=this.presentation.version===2
+   ? this.presentation.entities
+   : (this.presentation.snapshots[this.presentation.snapshots.length-1]?.entities??[]);
+  for(const e of entities){
+   for(const f of e.facts){
+    if(f.visibility==='observed'&&f.revealedAt&&f.revealedAt.paragraphIndex>e.firstParagraph){
+     mark(f.revealedAt.paragraphIndex,e.id);
+    }
+   }
+   if(e.kind==='object'){
+    const doc=this.matchStoryDocument(e,this.presentation.documents??[]);
+    if(doc){
+     for(const sec of doc.sections){
+      if(sec.paragraphIndex>e.firstParagraph)mark(sec.paragraphIndex,e.id);
+     }
+     for(const obs of doc.observations??[]){
+      if(obs.paragraphIndex>e.firstParagraph)mark(obs.paragraphIndex,e.id);
+     }
+    }
+   }
+  }
+ }
+ private resetLinkBudget():void{
+  this.rebuildSalientIndex();
+  const normalizedParagraphs=this.paragraphs.map(p=>stripTextEffectTags(p));
+  this.priorLinks=this.presentation?createReferenceLinkBudget(this.presentation,normalizedParagraphs,this.prefs,this.salientByParagraph):()=>({used:0,priorIds:new Set()});
+ }
+ private visibleCombinedDocuments():StoryDocument[] {
+  const docs=[...visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,this.index))];
+  const seen=new Set(docs.map(d=>d.name.trim().toLowerCase()));
+  for(const entry of Object.values(this.storyDna.documents??{})){
+   const key=entry.name.trim().toLowerCase();
+   if(seen.has(key))continue;
+   seen.add(key);
+   docs.push({
+    id:entry.id,
+    name:entry.name,
+    kind:(entry.kind as StoryDocument['kind'])||'note',
+    paragraphIndex:entry.observations?.[0]?.paragraphIndex??entry.sections?.[0]?.paragraphIndex??0,
+    aliases:entry.aliases??[],
+    ...(entry.visualDetails?{visualDetails:entry.visualDetails}:{}),
+    ...(entry.observations?{observations:entry.observations}:{}),
+    sections:(entry.sections??[]).map(s=>({paragraphIndex:s.paragraphIndex,start:0,end:s.text.length,text:s.text})),
+   });
+  }
+  return docs;
+ }
  private workspace:ReaderWorkspace|undefined;
  private workspaceMounted=false;
  private turnMedia:TurnView|null=null; private card:DossierCard;private tray=document.createElement('button');private ready=false;
@@ -47,6 +112,31 @@ export class StageDossiers {
    asset:this.documentAssets[docId]??null,
    busy:this.documentArtBusy.has(docId),
    ...(this.documentArtErrors.get(docId)?{error:this.documentArtErrors.get(docId)!}:{}),
+   ...(this.storyDna.documents?.[docId]?.customNotes?{customNote:this.storyDna.documents[docId]!.customNotes}:{}),
+   ...(this.storyDnaRequester?{
+    onSaveNote:(note:string)=>{
+     const doc=this.visibleCombinedDocuments().find(d=>d.id===docId);
+     this.storyDnaRequester?.({
+      action:'save_document_note',
+      documentId:docId,
+      name:doc?.name??docId,
+      ...(doc?.kind?{kind:doc.kind}:{}),
+      note,
+     });
+    },
+   }:{}),
+   ...(this.prefs.actionsEnabled&&this.draftTools?{
+    onExamineCloser:()=>{
+     const doc=this.visibleCombinedDocuments().find(d=>d.id===docId);
+     const docName=doc?.name??'the document';
+     const merged=mergeInteractionDraft(this.draftTools!.current(),`I carefully inspect and read ${docName} in full.`,'insert');
+     if(merged!==null&&this.draftTools!.apply(merged)){
+      this.card.close();
+      this.workspace?.close();
+      this.draftTools!.focus();
+     }
+    },
+   }:{}),
    ...(this.documentArtRequester?{
     onGenerate:(regenerate:boolean)=>{
      this.documentArtBusy.add(docId);
@@ -59,12 +149,14 @@ export class StageDossiers {
     onLightbox:(asset)=>this.lightboxOpener?.(asset.imageUrl,'Document closeup'),
    }:{}),
   }));
-  this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='Scene references';this.tray.setAttribute('aria-label','Scene references');this.tray.hidden=true;
-  this.tray.onclick=event=>{event.stopPropagation();this.dismissTooltipPopover();if(this.workspace)this.workspace.open('story',this.tray);else this.openReferences();};controls.append(this.tray);
+  this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='World Lens';this.tray.setAttribute('aria-label','World Lens');this.tray.hidden=true;
+  this.tray.onclick=event=>{event.stopPropagation();this.dismissTooltipPopover();this.dismissTrackPill();if(this.workspace)this.workspace.open('story',this.tray);else this.openReferences();};controls.append(this.tray);
+  this.bindHighlightTracker();
  }
  setStoryDna(storyDna:StoryDNASet):void {
   this.storyDna=storyDna;
   this.card.setStoryDna(storyDna);
+  if(this.card.isOpen())this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
  }
  setStoryDnaRequester(fn:(body:StoryDnaActionBody)=>void):void {
   this.storyDnaRequester=fn;
@@ -72,6 +164,14 @@ export class StageDossiers {
  }
  setStoryDnaError(error:string):void {
   this.card.setStoryDnaError(error);
+ }
+ setLocationArtLibrary(library:LocationArtLibrary):void {
+  this.locationArtLibrary=library;
+  this.card.setLocationArtLibrary(library);
+ }
+ setLocationArtRequester(fn:(action:LocationArtAction)=>void):void {
+  this.locationArtRequester=fn;
+  this.card.setLocationArtRequester(fn);
  }
  setDocumentArtRequester(fn:(documentId:string,throughParagraphIndex:number,forceRegenerate?:boolean)=>void):void {
   this.documentArtRequester=fn;
@@ -186,6 +286,10 @@ export class StageDossiers {
    };
   });
   const activeItems=eligible.filter(e=>e.kind==='object').map(e=>({id:e.id,name:e.name,imageUrl:this.resolveVisualContext(e).imageUrl}));
+  const activeChatId=snapshot?.at.key.chatId??'';
+  const hiddenOverrides=this.prefs.overrides
+   .filter(o=>o.suppressed&&(!activeChatId||o.chatId===activeChatId||o.chatId==='local'))
+   .map(o=>({kind:o.kind,name:o.name}));
   return {
    ...(activePlace?{activeLocationId:activePlace.id}:{}),
    ...(activeLocationName?{activeLocationName}:{}),
@@ -193,6 +297,23 @@ export class StageDossiers {
    ...(locationDna?{locationDna}:{}),
    presentCast,
    activeItems,
+   sceneDocuments:visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,this.index)),
+   hiddenOverrides,
+   onUnhideOverride:(kind,name)=>{
+    this.updateOverride({id:`unhide:${kind}:${name}`,kind,name,aliases:[],firstParagraph:0,facts:[]},{suppressed:false});
+    this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+   },
+   actionsEnabled:Boolean(this.prefs.enabled&&this.prefs.actionsEnabled&&this.draftTools),
+   ...(this.draftTools?{
+    onDraftAction:(draftText:string)=>{
+     const merged=mergeInteractionDraft(this.draftTools!.current(),draftText,'insert');
+     if(merged!==null&&this.draftTools!.apply(merged)){
+      this.card.close();
+      this.workspace?.close();
+      this.draftTools!.focus();
+     }
+    },
+   }:{}),
    ...(this.characterDnaSaver?{onSelectWardrobe:(charIdOrName:string,key:string,outfit:string)=>{
      const target=this.characterDnaLibrary[charIdOrName]??findCharacterDNA(this.characterDnaLibrary,charIdOrName);
      if(!target)return;
@@ -205,9 +326,11 @@ export class StageDossiers {
  }
  private mergedTrayEntries(snapshot:PresentationSnapshot|undefined) {
   const base=snapshot?referenceEntriesWithHistory(snapshot,this.prefs,this.history):[];
+  const chatId=snapshot?.at.key.chatId??'';
   const merged=[...base];
   for (const loc of Object.values(this.storyDna.locations)) {
    if (base.some(e=>e.entity.kind==='place'&&Boolean(findMatchingLocation({[loc.id]:loc}, e.entity.name)))) continue;
+   if (chatId && entityOverride(this.prefs, chatId, { kind: 'place', name: loc.name })?.suppressed) continue;
    const desc=formatLocationDNAToPromptClause(loc) || loc.notes || 'Saved location profile.';
    merged.push({
     entity:{id:`dna:loc:${loc.id}`,kind:'place',name:loc.name,aliases:loc.aliases,firstParagraph:0,facts:desc?[{id:`dna_loc_${loc.id}`,entityId:`dna:loc:${loc.id}`,field:'description',value:desc,visibility:'observed',source:{provider:'user' as any,recordId:loc.id,chatId:snapshot?.at.key.chatId??'local',messageId:'story-dna',sourceFingerprint:'dna',observedAt:loc.lastUpdated},revealedAt:{key:snapshot?.at.key??({chatId:'local',assistantMessageId:'0',swipeId:0,sourceFingerprint:'0'} as any),paragraphIndex:0}}]:[]},
@@ -220,6 +343,7 @@ export class StageDossiers {
   }
   for (const item of Object.values(this.storyDna.items)) {
    if (base.some(e=>e.entity.kind==='object'&&Boolean(findMatchingItem({[item.id]:item}, e.entity.name)))) continue;
+   if (chatId && entityOverride(this.prefs, chatId, { kind: 'object', name: item.name })?.suppressed) continue;
    const desc=formatItemDNAToPromptClause(item) || item.description || 'Saved item profile.';
    merged.push({
     entity:{id:`dna:item:${item.id}`,kind:'object',name:item.name,aliases:item.aliases,firstParagraph:0,facts:desc?[{id:`dna_item_${item.id}`,entityId:`dna:item:${item.id}`,field:'description',value:desc,visibility:'observed',source:{provider:'user' as any,recordId:item.id,chatId:snapshot?.at.key.chatId??'local',messageId:'story-dna',sourceFingerprint:'dna',observedAt:item.lastUpdated},revealedAt:{key:snapshot?.at.key??({chatId:'local',assistantMessageId:'0',swipeId:0,sourceFingerprint:'0'} as any),paragraphIndex:0}}]:[]},
@@ -233,7 +357,7 @@ export class StageDossiers {
   return merged;
  }
  private openReferences():void {
-  const snapshot=this.snapshot();this.hold();this.dismissTooltipPopover();
+  const snapshot=this.snapshot();this.hold();this.dismissTooltipPopover();this.dismissTrackPill();
   this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
   this.card.openTray(this.mergedTrayEntries(snapshot),this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':this.limitationNote()??(!snapshot&&!Object.keys(this.storyDna.locations).length&&!Object.keys(this.storyDna.items).length?'No established references are available at this reading position.':this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined),entity=>this.resolveVisualContext(entity));
  }
@@ -251,10 +375,41 @@ export class StageDossiers {
   this.documentArtBusy.clear();
   this.documentArtErrors.clear();
  }
+ scenePostcardSummary():{
+  locationName?:string|undefined;
+  locationImageUrl?:string|undefined;
+  lighting?:string|undefined;
+  presentCast:Array<{id:string;name:string}>;
+  documents:Array<{id:string;name:string;kind:string}>;
+ } {
+  const snapshot=this.snapshot();
+  const hub=this.buildSceneHubContext(snapshot);
+  const docs=visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,this.index));
+  return {
+   locationName:hub.activeLocationName,
+   locationImageUrl:hub.locationImageUrl,
+   lighting:hub.locationDna?.lighting,
+   presentCast:hub.presentCast.filter(c=>c.present!==false).map(c=>({id:c.id,name:c.name})),
+   documents:docs.map(d=>({id:d.id,name:d.name,kind:d.kind})),
+  };
+ }
+ openDocumentById(docId:string,trigger:HTMLElement):boolean {
+  const docs=this.visibleCombinedDocuments();
+  const target=docs.find(d=>d.id===docId);
+  if(!target)return false;
+  this.hold();this.dossierOpen?.(true);this.dismissTooltipPopover();this.dismissTrackPill();
+  this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+  if(this.workspace&&this.workspace.destination!=='story'){this.workspace.open('story',trigger);this.card.clearBack();}
+  this.card.openDocument(target,()=>this.openReferences(),trigger);
+  return true;
+ }
  openTrayFromStage():boolean{
-  const snapshot=this.snapshot();if(this.tray.hidden&&!Object.keys(this.storyDna.locations).length&&!Object.keys(this.storyDna.items).length)return false;
-  const entries=this.mergedTrayEntries(snapshot);if(!entries.length)return false;
-  this.hold();this.dossierOpen?.(true);this.dismissTooltipPopover();
+  const snapshot=this.snapshot();
+  const entries=this.mergedTrayEntries(snapshot);
+  const hasDocs=this.visibleCombinedDocuments().length>0;
+  if(this.tray.hidden&&!entries.length&&!hasDocs)return false;
+  if(!entries.length&&!hasDocs)return false;
+  this.hold();this.dossierOpen?.(true);this.dismissTooltipPopover();this.dismissTrackPill();
   this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
   if(this.workspace){this.workspace.open('story',this.root.querySelector<HTMLElement>('[data-vn-control="lens"]')??this.tray);return true;}
   this.card.openTray(entries,this.tray,(id,trigger)=>this.open(id,trigger),this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined,entity=>this.resolveVisualContext(entity));
@@ -270,7 +425,7 @@ export class StageDossiers {
   return [...places,...others].slice(0,6).map(e=>({id:e.entity.id,name:e.entity.name,kind:e.entity.kind,pinned:e.pinned}));
  }
  setContext(value:ReaderPresentation|undefined,paragraphs:readonly string[],history?:ReferenceHistory):void {
-  this.dismissTooltipPopover();
+  this.dismissTooltipPopover();this.dismissTrackPill();
   this.card.close();this.card.resetForContext();this.index=-1;this.ready=false;this.paragraphs=paragraphs;
   this.presentation=parseReaderPresentation(value,undefined,paragraphs.length);
   this.snapshotAt=this.presentation?createPresentationCursor(this.presentation):()=>undefined;
@@ -289,18 +444,129 @@ export class StageDossiers {
   this.history=key?referenceHistoryFor(history,key):undefined;
   if(this.ready&&this.index>=0)this.refresh(this.index);
  }
- setHistory(history:ReferenceHistory|undefined):void{const key=this.presentation?presentationTurnKey(this.presentation):undefined,next=key?referenceHistoryFor(history,key):undefined;if(JSON.stringify(next)===JSON.stringify(this.history))return;this.history=next;this.dismissTooltipPopover();this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);}
- setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.resetLinkBudget();this.dismissTooltipPopover();this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
- cursor(index:number):void{if(index!==this.index){this.dismissTooltipPopover();this.card.close();this.dossierOpen?.(false);this.npcActionToolsHandler?.(null);this.index=index;this.ready=false;this.tray.hidden=true;}}
+ setHistory(history:ReferenceHistory|undefined):void{const key=this.presentation?presentationTurnKey(this.presentation):undefined,next=key?referenceHistoryFor(history,key):undefined;if(JSON.stringify(next)===JSON.stringify(this.history))return;this.history=next;this.dismissTooltipPopover();this.dismissTrackPill();this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);}
+ setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.resetLinkBudget();this.dismissTooltipPopover();this.dismissTrackPill();this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
+ cursor(index:number):void{if(index!==this.index){this.dismissTooltipPopover();this.dismissTrackPill();this.card.close();this.dossierOpen?.(false);this.npcActionToolsHandler?.(null);this.index=index;this.ready=false;this.tray.hidden=true;}}
  private snapshot(){return this.snapshotAt(this.index);}
  private dismissTooltipPopover():void {
   if(this.tooltipDismissCleanup){this.tooltipDismissCleanup();this.tooltipDismissCleanup=null;}
   if(this.tooltipPopover){this.tooltipPopover.remove();this.tooltipPopover=null;}
+  if(this.tooltipHolding){
+   this.tooltipHolding=false;
+   if(!this.card.isOpen())this.release();
+  }
+ }
+ private dismissTrackPill():void {
+  if(this.trackPill){this.trackPill.remove();this.trackPill=null;}
+ }
+ private bindHighlightTracker():void {
+  const onPointerOrKeyUp=()=>{
+   if(typeof window==='undefined'||typeof window.getSelection!=='function')return;
+   const sel=window.getSelection();
+   if(!sel||sel.isCollapsed)return;
+   const phrase=sel.toString().replace(/\s+/g,' ').trim();
+   if(phrase.length<2||phrase.length>80)return;
+   const anchorNode=sel.anchorNode;
+   const contains=typeof (this.text as unknown as {contains?:(n:Node|null)=>boolean}).contains==='function'
+    ? (this.text as unknown as {contains:(n:Node|null)=>boolean}).contains(anchorNode)
+    : false;
+   if(!contains)return;
+   let rect:{left:number;top:number;bottom:number}|null=null;
+   try{rect=sel.rangeCount>0?sel.getRangeAt(0).getBoundingClientRect():null;}catch{rect=null;}
+   this.showTrackSelectionPill(phrase,rect);
+  };
+  const onDocClick=(e:Event)=>{
+   const target=e.target as Element|null;
+   if(this.trackPill&&(!target||typeof (this.trackPill as any).contains!=='function'||!(this.trackPill as any).contains(target)))this.dismissTrackPill();
+  };
+  this.text.addEventListener?.('pointerup',onPointerOrKeyUp);
+  this.text.addEventListener?.('mouseup',onPointerOrKeyUp);
+  this.text.addEventListener?.('keyup',onPointerOrKeyUp);
+  const doc=this.root.ownerDocument;
+  doc?.addEventListener?.('pointerdown',onDocClick);
+  this.trackCleanup=()=>{doc?.removeEventListener?.('pointerdown',onDocClick);};
+ }
+ showTrackSelectionPill(phrase:string,rect?:{left:number;top:number;bottom:number}|null):void {
+  const clean=phrase.replace(/\s+/g,' ').trim();
+  if(clean.length<2||clean.length>80||(!this.storyDnaRequester&&!this.folioOpener))return;
+  this.dismissTrackPill();
+  const bar=document.createElement('div');
+  bar.dataset.vnTrackSelection='';
+  bar.setAttribute('role','toolbar');
+  bar.setAttribute('aria-label',`Track "${clean}" in World Lens`);
+  bar.addEventListener('click',e=>e.stopPropagation());
+  const lbl=document.createElement('span');
+  lbl.textContent=`＋ Track “${clean.length>24?`${clean.slice(0,22)}…`:clean}”:`;
+  bar.append(lbl);
+  const btns:Array<[string,'document'|'place'|'object'|'npc']>=[
+   ['📄 Doc','document'],
+   ['📍 Place','place'],
+   ['💎 Item','object'],
+   ['👤 NPC','npc'],
+  ];
+  for(const [label,kind] of btns){
+   const b=document.createElement('button');
+   b.type='button';
+   b.dataset.trackKind=kind;
+   b.textContent=label;
+   b.onclick=()=>{
+    this.trackSelectedPhrase(clean,kind);
+    this.dismissTrackPill();
+   };
+   bar.append(b);
+  }
+  const closeBtn=document.createElement('button');
+  closeBtn.type='button';
+  closeBtn.textContent='×';
+  closeBtn.setAttribute('aria-label','Dismiss selection tracker');
+  closeBtn.onclick=()=>this.dismissTrackPill();
+  bar.append(closeBtn);
+  const stageRect=typeof this.root.getBoundingClientRect==='function'?this.root.getBoundingClientRect():null;
+  const top=rect&&rect.top>54?rect.top-48:((stageRect?.top??0)+54);
+  const left=rect?Math.max(12,rect.left):((stageRect?.left??0)+16);
+  bar.style.top=`${top}px`;
+  bar.style.left=`${left}px`;
+  this.root.append(bar);
+  this.trackPill=bar;
+ }
+ trackSelectedPhrase(phrase:string,kind:'document'|'place'|'object'|'npc',excerptOverride?:string):void {
+  const clean=phrase.replace(/\s+/g,' ').trim();
+  if(clean.length<2)return;
+  const excerpt=(excerptOverride??stripTextEffectTags(this.paragraphs[this.index]??this.text.textContent??clean)).trim().slice(0,600)||clean;
+  if(this.storyDnaRequester){
+   this.storyDnaRequester({action:'add_custom_lexicon',term:clean,kind});
+   if(kind==='place'){
+    this.storyDnaRequester({
+     action:'save_location',
+     location:{id:createLocationId(clean),name:clean,aliases:deriveShortAliases(clean),environmentDescription:excerpt,persistentElements:[],connectedLocations:[],autoDiscovered:false,lastUpdated:Date.now()},
+    });
+   }else if(kind==='object'){
+    this.storyDnaRequester({
+     action:'save_item',
+     item:{id:createItemId(clean),name:clean,aliases:deriveShortAliases(clean),description:excerpt,distinctiveFeatures:[],colors:[],autoDiscovered:false,lastUpdated:Date.now()},
+    });
+   }else if(kind==='document'){
+    this.storyDnaRequester({
+     action:'save_document_note',
+     documentId:`doc-manual-${createItemId(clean)}`,
+     name:clean,
+     kind:'note',
+     note:excerpt,
+    });
+   }
+  }
+  if(kind==='npc'&&this.folioOpener){
+   this.folioOpener(clean);
+   this.workspace?.open('character');
+  }
+  if(this.ready&&this.index>=0)this.refresh(this.index);
  }
  private showTooltipPopover(id:string,trigger:HTMLElement):void {
   const snapshot=this.snapshot();if(!snapshot){this.open(id,trigger);return;}
   if(this.tooltipPopover?.dataset.entityId===id){this.dismissTooltipPopover();return;}
   this.dismissTooltipPopover();
+  this.tooltipHolding=true;
+  this.hold();
   const current=eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId).some(e=>e.id===id);
   const rawSelected=current?selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups,this.prefs.maxFactsPerEntity):selectEarlierDossier(id,snapshot,this.prefs,this.history);
   if(!rawSelected){this.open(id,trigger);return;}
@@ -338,6 +604,35 @@ export class StageDossiers {
   const docQuote=matchedDoc?.sections[0]?.text?`“${matchedDoc.sections[0].text.slice(0,140)}”`:'';
   const factLines=selected.facts.slice(0,2).map(f=>f.value);
   body.textContent=(matchedDoc?[docObsSummary,docQuote,...factLines]:[dnaSummary,...factLines]).filter(Boolean).slice(0,2).join('\n')||(visual.summarySnippet??'Established story reference.');
+
+  const microRow=document.createElement('div');
+  microRow.className='vn-inline-tooltip-actions';
+  if(this.prefs.actionsEnabled&&this.draftTools){
+   const microOptions:Array<{label:string;text:string}>=[];
+   if(matchedDoc){
+    microOptions.push({label:'📖 Read closely',text:`I read ${entity.name} closely.`});
+   }else if(entity.kind==='place'&&!visual.isActiveLocation){
+    microOptions.push({label:`🚶 Head to ${entity.name}`,text:`I head to ${entity.name}.`});
+   }else if(entity.kind==='object'){
+    microOptions.push({label:'🔍 Inspect',text:`I examine ${entity.name} carefully.`});
+   }else if(entity.kind==='npc'&&visual.isPresent){
+    microOptions.push({label:`💬 Talk to ${entity.name}`,text:`I speak with ${entity.name}.`});
+   }
+   for(const opt of microOptions.slice(0,2)){
+    const mb=document.createElement('button');
+    mb.type='button';
+    mb.className='vn-inline-tooltip-micro';
+    mb.dataset.tooltipMicroDraft='';
+    mb.textContent=opt.label;
+    mb.onclick=()=>{
+     const merged=mergeInteractionDraft(this.draftTools!.current(),opt.text,'insert');
+     this.dismissTooltipPopover();
+     if(merged!==null&&this.draftTools!.apply(merged))this.draftTools!.focus();
+    };
+    microRow.append(mb);
+   }
+  }
+
   const cta=document.createElement('button');cta.type='button';cta.className='vn-inline-tooltip-cta';
   cta.textContent=matchedDoc?'Inspect / Read Document →':entity.kind==='npc'?'Open in Character Folio →':'Inspect & Edit DNA in World Lens →';
   cta.onclick=()=>{
@@ -355,7 +650,8 @@ export class StageDossiers {
    }
    else this.open(id,trigger);
   };
-  pop.append(head,body,cta);
+  if(microRow.childElementCount>0)pop.append(head,body,microRow,cta);
+  else pop.append(head,body,cta);
   this.root.append(pop);
   const rect=typeof trigger.getBoundingClientRect==='function'?trigger.getBoundingClientRect():null;
   const stageRect=typeof this.root.getBoundingClientRect==='function'?this.root.getBoundingClientRect():null;
@@ -391,7 +687,8 @@ export class StageDossiers {
   const {used,priorIds}=this.priorLinks(index);
   const visibleDocs=visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,index));
   const docEntityIds=new Set(eligible.filter(e=>e.kind==='object'&&Boolean(this.matchStoryDocument(e,visibleDocs))).map(e=>e.id));
-  const anchors=linkEntityMentions(this.text.textContent??'',snapshot.entities,this.prefs,snapshot.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),protectedEntityRanges(this.text),this.prefs.linking==='important'?priorIds:new Set());
+  const salient=this.salientByParagraph.get(index)??new Set<string>();
+  const anchors=linkEntityMentions(this.text.textContent??'',snapshot.entities,this.prefs,snapshot.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),protectedEntityRanges(this.text),this.prefs.linking==='important'?priorIds:new Set(),salient);
   applyEntityAnchors(this.text,anchors,(id,trigger)=>this.showTooltipPopover(id,trigger),id=>{
    const raw=selectReaderDossier(id,snapshot,'brief',this.prefs.fieldGroups);
    const edited=raw?applyOverrideFactEdits(raw,entityOverride(this.prefs,snapshot.at.key.chatId,raw.entity)):undefined;
@@ -449,7 +746,7 @@ export class StageDossiers {
   };
  }
  private open(id:string,trigger:HTMLElement):void {
-  this.dismissTooltipPopover();
+  this.dismissTooltipPopover();this.dismissTrackPill();
   const snapshot=this.snapshot();
   if(id.startsWith('dna:loc:')||id.startsWith('dna:item:')){
    const isLoc=id.startsWith('dna:loc:');
@@ -473,6 +770,7 @@ export class StageDossiers {
     }:undefined;
     const itemDocument=!isLoc?this.matchStoryDocument(entity,visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,this.index))):undefined;
     this.hold();this.dossierOpen?.(true);
+    this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
     if(this.workspace&&this.workspace.destination!=='story'){this.workspace.open('story',trigger);this.card.clearBack();}
     this.card.open(synthetic as unknown as NonNullable<ReturnType<typeof selectReaderDossier>>,this.prefs,snapshot?.at.key.chatId??'local',trigger,syntheticActions,itemDocument,this.resolveVisualContext(entity));
    }
@@ -502,12 +800,14 @@ export class StageDossiers {
   }:undefined;
   const storyDocument=current&&dossier.entity.kind==='object'?this.matchStoryDocument(dossier.entity,visibleStoryDocuments(this.presentation?.documents??[],this.index)):undefined;
 
+  this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
   // Inline story links must enter the workspace before exposing its docked card.
   if(this.workspace&&this.workspace.destination!=='story'){this.workspace.open('story',trigger);this.card.clearBack();}
   this.card.open(dossier,this.prefs,snapshot.at.key.chatId,trigger,actions,storyDocument,this.resolveVisualContext(dossier.entity));
  }
  private updateOverride(entity:PresentationEntity,patch:{suppressed?:boolean;pinned?:boolean;note?:string;factEdits?:Record<string,string|null>}):boolean {
-  const snapshot=this.snapshot();if(!snapshot)return false;const chatId=snapshot.at.key.chatId;
+  const snapshot=this.snapshot();
+  const chatId=snapshot?.at.key.chatId??'local';
   const existing=entityOverride(this.prefs,chatId,entity);
   if(!existing&&this.prefs.overrides.length>=64)return false;
   const {factEdits:patchFactEdits,...restPatch}=patch;
@@ -515,7 +815,9 @@ export class StageDossiers {
   const override={chatId,kind:entity.kind,name:entity.name,suppressed:false,pinned:false,note:'',...existing,...restPatch,...(mergedFactEdits?{factEdits:mergedFactEdits}:{})};
   this.prefs={...this.prefs,overrides:[override,...this.prefs.overrides.filter(o=>!(o.chatId===chatId&&o.kind===entity.kind&&o.name===entity.name))].slice(0,64)};
   this.resetLinkBudget();
-  this.save(this.prefs);this.refresh(this.index);return true;
+  this.save(this.prefs);
+  if(this.ready&&this.index>=0)this.refresh(this.index);
+  return true;
  }
- destroy():void{this.dismissTooltipPopover();this.card.destroy();this.tray.remove();}
+ destroy():void{this.dismissTooltipPopover();this.dismissTrackPill();this.trackCleanup?.();this.card.destroy();this.tray.remove();}
 }

@@ -10,10 +10,11 @@ import type {ReferenceHistory} from '../../shared/reference-history.js';
 import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
 import { FullscreenLightbox } from "./fullscreen-lightbox.js";
-import { renderWorldAtmosphereStrip } from "./world-strip.js";
+import { createScenePostcardPopover, renderWorldAtmosphereStrip } from "./world-strip.js";
 import { atmosphereForPosition } from "../../shared/scene-atmosphere.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
 import type { StoryDnaActionBody, StoryDNASet } from "../../shared/story-dna.js";
+import type { LocationArtAction, LocationArtLibrary } from "../../shared/stage-assets.js";
 import { findCharacterDNA, type CharacterDNA } from "../../shared/character-dna.js";
 import { gameMoveKey, type GameMoveSnapshot } from '../../shared/game-moves.js';
 import { mergeInteractionDraft } from '../../shared/scene-interactions.js';
@@ -185,6 +186,8 @@ export class VnStage {
   private speakerPeekEl: HTMLElement | null = null;
   private bondBannerEl: HTMLElement | null = null;
   private bondBannerTimer: ReturnType<typeof setTimeout> | null = null;
+  private scenePostcardEl: HTMLElement | null = null;
+  private scenePostcardCleanup: (() => void) | null = null;
   private readonly predecodedUrls = new Set<string>();
   private readonly statusStack: HTMLElement;
   private readonly emptyState: HTMLElement;
@@ -456,6 +459,8 @@ export class VnStage {
   setStoryDna(storyDna: StoryDNASet): void { this.dossiers.setStoryDna(storyDna); }
   setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void { this.dossiers.setStoryDnaRequester(fn); }
   setStoryDnaError(error: string): void { this.dossiers.setStoryDnaError(error); }
+  setLocationArtLibrary(library: LocationArtLibrary): void { this.dossiers.setLocationArtLibrary(library); }
+  setLocationArtRequester(fn: (action: LocationArtAction) => void): void { this.dossiers.setLocationArtRequester(fn); }
 
   setCharacterDnaLibrary(library: Record<string, CharacterDNA>): void {
     const prev = this.bondSnapshots;
@@ -523,10 +528,76 @@ export class VnStage {
     if (this.bondBannerTimer) { clearTimeout(this.bondBannerTimer); this.bondBannerTimer = null; }
   }
 
+  private dismissScenePostcard(): void {
+    this.scenePostcardCleanup?.();
+    this.scenePostcardCleanup = null;
+    this.scenePostcardEl?.remove();
+    this.scenePostcardEl = null;
+    this.workspace?.worldStrip?.setAttribute("aria-expanded", "false");
+  }
+
+  private toggleScenePostcard(): void {
+    if (this.scenePostcardEl) {
+      this.dismissScenePostcard();
+      return;
+    }
+    const atmo = this.state.worldAtmosphere?.length
+      ? atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex)
+      : null;
+    const summary = this.dossiers.scenePostcardSummary();
+    if (!atmo && !summary.locationName && !summary.documents.length && !summary.presentCast.length) return;
+    const pop = createScenePostcardPopover(
+      {
+        locationName: summary.locationName ?? this.turnLocation ?? undefined,
+        locationImageUrl: summary.locationImageUrl ?? this.state.displayedImage?.url,
+        lighting: summary.lighting,
+        atmosphere: atmo,
+        presentCast: summary.presentCast,
+        documents: summary.documents,
+      },
+      {
+        onClose: () => this.dismissScenePostcard(),
+        onOpenLens: () => {
+          if (!this.dossiers.openTrayFromStage()) {
+            this.workspace.open("story", this.workspace.worldStrip);
+          }
+        },
+        onOpenCharacter: (charName) => {
+          if (this.folioOpenCallback) {
+            this.folioOpenCallback(charName);
+          } else {
+            this.workspace.open("character", this.workspace.worldStrip);
+          }
+        },
+        onOpenDocument: (docId) => {
+          if (!this.dossiers.openDocumentById(docId, this.workspace.worldStrip)) {
+            this.dossiers.openTrayFromStage();
+          }
+        },
+      },
+    );
+    const hostEl = this.root;
+    hostEl.append(pop);
+    this.scenePostcardEl = pop;
+    this.workspace.worldStrip.setAttribute("aria-expanded", "true");
+    const doc = this.root.ownerDocument;
+    const onOutside = () => this.dismissScenePostcard();
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") this.dismissScenePostcard();
+    };
+    doc?.addEventListener?.("click", onOutside);
+    doc?.addEventListener?.("keydown", onEsc);
+    this.scenePostcardCleanup = () => {
+      doc?.removeEventListener?.("click", onOutside);
+      doc?.removeEventListener?.("keydown", onEsc);
+    };
+  }
+
   private dismissTransientOverlays(): void {
     this.dismissChapterCard();
     this.closeSpeakerPeek();
     this.dismissBondBanner();
+    this.dismissScenePostcard();
   }
 
   private showBondResonanceBanner(info: { name: string; target: string; label: string; affinity: number; tier: string }): void {
@@ -1989,6 +2060,17 @@ export class VnStage {
       this.openBacklog();
     });
 
+    this.workspace.worldStrip.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.toggleScenePostcard();
+    });
+    this.workspace.worldStrip.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.toggleScenePostcard();
+    });
+
     const lensBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='lens']");
     lensBtn?.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -2379,7 +2461,10 @@ export class VnStage {
     const atmo = this.narrative.hidden || !this.state.worldAtmosphere?.length
       ? null
       : atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex);
-    renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo);
+    renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo, {
+      documentCount: this.dossiers.scenePostcardSummary().documents.length,
+      expanded: Boolean(this.scenePostcardEl),
+    });
     if (!this.sceneHud) return;
     const entries = this.dossiers.sceneHudEntries();
     if (!entries.length || this.narrative.hidden) {

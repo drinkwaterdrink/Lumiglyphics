@@ -32,13 +32,22 @@ function capitalizeWord(value: string): string {
 }
 
 /** Populate the compact Row-2 topbar strip cleanly without placeholder dashes when context is absent. */
+export type WorldStripRenderOptions = {
+  documentCount?: number | undefined;
+  expanded?: boolean | undefined;
+};
+
 export function renderWorldAtmosphereStrip(
   strip: HTMLElement | null,
   snapshot: WorldAtmosphereSnapshot | null,
+  options?: WorldStripRenderOptions,
 ): void {
   if (!strip) return;
   if (!snapshot) {
     strip.hidden = true;
+    strip.removeAttribute('role');
+    strip.removeAttribute('tabindex');
+    strip.removeAttribute('aria-expanded');
     strip.replaceChildren();
     return;
   }
@@ -48,13 +57,21 @@ export function renderWorldAtmosphereStrip(
   const tempText = snapshot.temperature?.trim() || '';
   const weatherText = snapshot.weather?.trim() ? capitalizeWord(snapshot.weather) : '';
 
-  if (!timeText && !dateText && !tempText && !weatherText) {
+  if (!timeText && !dateText && !tempText && !weatherText && !(options?.documentCount && options.documentCount > 0)) {
     strip.hidden = true;
+    strip.removeAttribute('role');
+    strip.removeAttribute('tabindex');
+    strip.removeAttribute('aria-expanded');
     strip.replaceChildren();
     return;
   }
 
   strip.replaceChildren();
+  strip.setAttribute('role', 'button');
+  strip.tabIndex = 0;
+  strip.setAttribute('aria-expanded', String(Boolean(options?.expanded)));
+  strip.setAttribute('aria-haspopup', 'dialog');
+
   const glyphWrap = document.createElement('span');
   glyphWrap.className = 'vn-world-glyph';
   glyphWrap.setAttribute('aria-hidden', 'true');
@@ -86,8 +103,133 @@ export function renderWorldAtmosphereStrip(
     strip.append(span);
   });
 
+  if (options?.documentCount && options.documentCount > 0) {
+    const docBadge = document.createElement('span');
+    docBadge.className = 'vn-world-doc-badge';
+    docBadge.dataset.vnWorldDocCount = String(options.documentCount);
+    docBadge.textContent = `📄 ${options.documentCount}`;
+    strip.append(docBadge);
+  }
+
+  const chevron = document.createElement('span');
+  chevron.className = 'vn-world-chevron';
+  chevron.setAttribute('aria-hidden', 'true');
+  chevron.textContent = '▾';
+  strip.append(chevron);
+
   if (snapshot.source) {
     strip.dataset.worldSource = snapshot.source;
   }
   strip.hidden = false;
+}
+
+export type ScenePostcardModel = {
+  locationName?: string | undefined;
+  locationImageUrl?: string | undefined;
+  lighting?: string | undefined;
+  atmosphere?: WorldAtmosphereSnapshot | null;
+  presentCast?: ReadonlyArray<{ id: string; name: string }> | undefined;
+  documents?: ReadonlyArray<{ id: string; name: string; kind: string }> | undefined;
+};
+
+export function createScenePostcardPopover(
+  model: ScenePostcardModel,
+  handlers: {
+    onClose: () => void;
+    onOpenLens: () => void;
+    onOpenCharacter?: ((charName: string) => void) | undefined;
+    onOpenDocument?: ((docId: string) => void) | undefined;
+  },
+): HTMLElement {
+  const card = document.createElement('section');
+  card.dataset.vnScenePostcard = '';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-label', model.locationName ? `${model.locationName} scene summary` : 'Scene summary');
+  card.addEventListener('click', (e) => e.stopPropagation());
+
+  const header = document.createElement('header');
+  const thumb = document.createElement('div');
+  thumb.className = 'vn-postcard-thumb';
+  if (model.locationImageUrl) {
+    const img = document.createElement('img');
+    img.src = model.locationImageUrl;
+    img.alt = '';
+    thumb.append(img);
+  } else {
+    thumb.textContent = '📍';
+  }
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'vn-postcard-title';
+  const titleStrong = document.createElement('strong');
+  titleStrong.textContent = model.locationName || 'Current Scene';
+  const sub = document.createElement('small');
+  const atmoParts = [
+    model.atmosphere?.time || model.atmosphere?.timeOfDay,
+    model.atmosphere?.date || model.atmosphere?.season,
+    model.atmosphere?.temperature,
+    model.atmosphere?.weather ? (model.atmosphere.indoor ? `${model.atmosphere.weather} outside` : model.atmosphere.weather) : undefined,
+    model.lighting,
+  ].filter((x): x is string => Boolean(x && x.trim()));
+  sub.textContent = atmoParts.join(' · ') || 'Active reading moment';
+  titleWrap.append(titleStrong, sub);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'vn-postcard-close';
+  closeBtn.textContent = '×';
+  closeBtn.setAttribute('aria-label', 'Close scene postcard');
+  closeBtn.onclick = () => handlers.onClose();
+
+  header.append(thumb, titleWrap, closeBtn);
+  card.append(header);
+
+  if (model.presentCast?.length) {
+    const castRow = document.createElement('div');
+    castRow.className = 'vn-postcard-pills';
+    for (const c of model.presentCast.slice(0, 6)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'vn-postcard-pill';
+      btn.dataset.postcardCast = c.name;
+      btn.textContent = `👤 ${c.name}`;
+      btn.onclick = () => {
+        handlers.onClose();
+        handlers.onOpenCharacter?.(c.name);
+      };
+      castRow.append(btn);
+    }
+    card.append(castRow);
+  }
+
+  if (model.documents?.length) {
+    const docRow = document.createElement('div');
+    docRow.className = 'vn-postcard-pills';
+    for (const d of model.documents.slice(0, 4)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'vn-postcard-pill';
+      btn.dataset.postcardDoc = d.id;
+      btn.textContent = `📄 ${d.name}`;
+      btn.onclick = () => {
+        handlers.onClose();
+        handlers.onOpenDocument?.(d.id);
+      };
+      docRow.append(btn);
+    }
+    card.append(docRow);
+  }
+
+  const cta = document.createElement('button');
+  cta.type = 'button';
+  cta.className = 'vn-postcard-cta';
+  cta.dataset.postcardOpenLens = '';
+  cta.textContent = 'Open in World Lens →';
+  cta.onclick = () => {
+    handlers.onClose();
+    handlers.onOpenLens();
+  };
+  card.append(cta);
+
+  return card;
 }

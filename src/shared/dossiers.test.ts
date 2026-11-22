@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {normalizeTooltipPreferences,linkEntityMentions,selectReaderDossier,referenceEntries,eligibleEntities} from './dossiers.js';
+import {normalizeTooltipPreferences,linkEntityMentions,selectReaderDossier,referenceEntries,eligibleEntities,createReferenceLinkBudget} from './dossiers.js';
 const entity={id:'m',kind:'npc' as const,name:'Mira',aliases:[],firstParagraph:0,facts:[]};
 test('reference field groups default on and reject malformed saved preferences',()=>{
  expect(normalizeTooltipPreferences({}).fieldGroups.appearance).toBe(true);
@@ -93,4 +93,51 @@ test('scenario/institution card titles are never eligible as NPC entities in Wor
  const mira = { id: 'm', kind: 'npc' as const, name: 'Mira', aliases: [], firstParagraph: 0, facts: [] };
  const eligible = eligibleEntities([academy, mira], prefs);
  expect(eligible.map(e => e.name)).toEqual(['Mira']);
+});
+
+test('Wave 2: plural object/place matching, shadow dna: fallback safety, and salient re-linking', () => {
+ const prefs = normalizeTooltipPreferences({ enabled: true });
+ const flyer = { id: 'item-flyer', kind: 'object' as const, name: 'Flyer', aliases: [], firstParagraph: 0, facts: [] };
+ const watch = { id: 'item-watch', kind: 'object' as const, name: 'Watch', aliases: [], firstParagraph: 0, facts: [] };
+ expect(linkEntityMentions('Two crumpled flyers and silver watches.', [flyer, watch], prefs)).toEqual([
+  { start: 13, end: 19, entityId: 'item-flyer' },
+  { start: 31, end: 38, entityId: 'item-watch' },
+ ]);
+
+ // Shadow dna: fallback with matching name does NOT make the real entity ambiguous
+ const realMira = { ...entity, name: 'Rose' };
+ const shadowRose = { ...entity, id: 'dna:item:rose', kind: 'object' as const, name: 'Rose' };
+ expect(linkEntityMentions('Rose spoke.', [realMira, shadowRose], prefs)).toEqual([
+  { start: 0, end: 4, entityId: 'm' },
+ ]);
+
+ // Two real turn entities with colliding names remain blocked conservatively
+ const duplicateRose = { ...entity, id: 'other-rose', kind: 'object' as const, name: 'Rose' };
+ expect(linkEntityMentions('Rose spoke.', [realMira, duplicateRose], prefs)).toEqual([]);
+
+ // createReferenceLinkBudget re-links salient entity when a new observed fact arrives on a later paragraph
+ const key = { chatId: 'c', assistantMessageId: 'm', swipeId: 0, sourceFingerprint: '12345678', revision: 0 };
+ const src = { provider: 'story' as const, recordId: 'm', chatId: 'c', messageId: 'm', sourceFingerprint: '12345678', observedAt: 'today' };
+ const pres = {
+  version: 2 as const,
+  availableThrough: 2,
+  entities: [{
+   ...entity,
+   firstParagraph: 0,
+   facts: [{ id: 'f-salient', entityId: 'm', field: 'mood', value: 'startled', visibility: 'observed' as const, source: src, revealedAt: { key, paragraphIndex: 2 } }],
+  }],
+  key,
+  stateByEntity: {},
+  locations: [],
+  snapshots: [],
+ };
+ const salientMap = new Map<number, Set<string>>([[2, new Set(['m'])]]);
+ const budget = createReferenceLinkBudget(pres as any, ['Mira enters.', 'She pauses.', 'Mira flushes red.'], prefs, salientMap);
+ expect(budget(1).priorIds.has('m')).toBe(true);
+ // Without salience on paragraph 1, important linking excludes 'm'
+ expect(linkEntityMentions('Mira pauses.', pres.entities, prefs, 'c', 3, [], budget(1).priorIds, salientMap.get(1))).toEqual([]);
+ // With salience on paragraph 2, 'm' re-links despite having been linked at paragraph 0
+ expect(linkEntityMentions('Mira flushes red.', pres.entities, prefs, 'c', 3, [], budget(2).priorIds, salientMap.get(2))).toEqual([
+  { start: 0, end: 4, entityId: 'm' },
+ ]);
 });

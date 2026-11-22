@@ -19287,9 +19287,10 @@ var ItemDNASchema = exports_external.object({
 var ThoughtCabinetEntrySchema = exports_external.object({
   id: exports_external.string().trim().min(1).max(256),
   title: exports_external.string().trim().min(1).max(160),
-  category: exports_external.enum(["mystery", "clue", "promise", "foreshadowing", "secret"]).default("mystery"),
+  category: exports_external.enum(["goal", "bond", "quest", "mystery", "secret", "foreshadowing", "promise", "conspiracy", "fact", "clue"]).catch("quest").default("quest"),
   description: exports_external.string().trim().max(1500),
-  status: exports_external.enum(["germinating", "internalized", "resolved"]).default("germinating"),
+  status: exports_external.enum(["active", "developing", "resolved", "germinating", "internalized"]).catch("active").default("active"),
+  linkedEntities: exports_external.array(exports_external.string().trim().max(160)).max(12).optional(),
   seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
   updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
 }).strict();
@@ -19350,7 +19351,7 @@ var StoryDNASetSchema = exports_external.object({
   documents: exports_external.record(exports_external.string(), StoryDocumentLedgerEntrySchema).optional(),
   customLexicon: exports_external.array(exports_external.object({
     term: exports_external.string().trim().min(2).max(160),
-    kind: exports_external.enum(["document", "place", "item", "npc"])
+    kind: exports_external.enum(["document", "place", "object", "item", "npc"])
   }).strict()).max(64).optional(),
   thoughtCabinet: exports_external.array(ThoughtCabinetEntrySchema).max(40).optional(),
   chapterCodex: exports_external.array(ChapterCodexEntrySchema).max(40).optional(),
@@ -19644,6 +19645,22 @@ function matchesBoundaryCandidate(queryLower, candidateRaw) {
   }
   return false;
 }
+function splitCompositeLocationParts(raw) {
+  return raw.replace(/\s*\([^)]*\)\s*$/, "").split(/\s*(?:—|–|\s-\s|:\s+)\s*/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+function isCompositeLocationConflict(query, locName) {
+  const queryParts = splitCompositeLocationParts(query);
+  const locParts = splitCompositeLocationParts(locName);
+  if (queryParts.length <= 1 && locParts.length <= 1)
+    return false;
+  if (queryParts.length > 1 && locParts.length > 1) {
+    return queryParts.join(" :: ") !== locParts.join(" :: ");
+  }
+  if (queryParts.length === 1 && locParts.length > 1) {
+    return locParts[0] === queryParts[0];
+  }
+  return queryParts[0] === locParts[0];
+}
 function findMatchingLocation(locations, name) {
   const query = name.trim().toLowerCase();
   if (!query)
@@ -19653,16 +19670,25 @@ function findMatchingLocation(locations, name) {
   const directId = createLocationId(query);
   if (locations[directId])
     return locations[directId];
-  const exact = Object.values(locations).find((loc) => {
-    if (loc.name.trim().toLowerCase() === query)
-      return true;
-    if (createLocationId(loc.name) === directId)
-      return true;
-    return loc.aliases.some((a) => a.trim().toLowerCase() === query || createLocationId(a) === directId);
+  const exactName = Object.values(locations).find((loc) => loc.name.trim().toLowerCase() === query || createLocationId(loc.name) === directId);
+  if (exactName)
+    return exactName;
+  const exactAlias = Object.values(locations).find((loc) => {
+    const locParts = splitCompositeLocationParts(loc.name);
+    return loc.aliases.some((a) => {
+      const aLower = a.trim().toLowerCase();
+      if (aLower !== query && createLocationId(a) !== directId)
+        return false;
+      if (loc.autoDiscovered && locParts.length > 1 && aLower === locParts[0])
+        return false;
+      return !isCompositeLocationConflict(query, loc.name) || aLower === locParts.at(-1);
+    });
   });
-  if (exact)
-    return exact;
+  if (exactAlias)
+    return exactAlias;
   return Object.values(locations).find((loc) => {
+    if (isCompositeLocationConflict(query, loc.name))
+      return false;
     const candidates = [loc.name, ...deriveShortAliases(loc.name, loc.aliases)];
     return candidates.some((candidate) => matchesBoundaryCandidate(query, candidate));
   });
@@ -19808,6 +19834,86 @@ var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
     itemId: exports_external.string().optional(),
     itemName: exports_external.string(),
     messageId: exports_external.string().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("restore_location"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    locationId: exports_external.string().min(1).max(256),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("restore_item"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    itemId: exports_external.string().min(1).max(256),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("merge_location"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    sourceId: exports_external.string().min(1).max(256),
+    targetId: exports_external.string().min(1).max(256),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("merge_item"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    sourceId: exports_external.string().min(1).max(256),
+    targetId: exports_external.string().min(1).max(256),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("toggle_route"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    fromLocationId: exports_external.string().min(1).max(256),
+    toLocationId: exports_external.string().min(1).max(256),
+    connected: exports_external.boolean(),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("save_thread"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    thread: ThoughtCabinetEntrySchema,
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("delete_thread"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    threadId: exports_external.string().min(1).max(256),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("save_document_note"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    documentId: exports_external.string().min(1).max(256),
+    name: exports_external.string().trim().min(1).max(256),
+    kind: exports_external.string().trim().min(1).max(60).optional(),
+    note: exports_external.string().max(4000),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("add_custom_lexicon"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    term: exports_external.string().trim().min(2).max(120),
+    kind: exports_external.enum(["place", "object", "item", "document", "npc"]),
+    revision: exports_external.number().int().optional()
   })
 ]);
 
@@ -25272,14 +25378,133 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   gap: 6px !important;
   flex-wrap: nowrap !important;
   overflow: hidden !important;
-  padding: 2px 10px 2px 42px !important;
+  padding: 4px 10px 4px 42px !important;
+  min-height: 28px !important;
   margin: 0 !important;
   font-size: 11px !important;
   line-height: 1.3 !important;
   letter-spacing: 0.02em !important;
-  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 88%, transparent) !important;
+  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 90%, transparent) !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  border-radius: 999px !important;
+  transition: background 0.15s ease !important;
+}
+[data-vn-world-strip]:hover,
+[data-vn-world-strip][aria-expanded="true"] {
+  background: color-mix(in srgb, var(--aperture-accent, #a8d3c8) 12%, rgba(6, 15, 22, 0.48)) !important;
+}
+[data-vn-world-strip] .vn-world-doc-badge {
+  margin-left: 4px !important;
+  padding: 1px 6px !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  background: color-mix(in srgb, var(--aperture-accent, #a8d3c8) 22%, rgba(0, 0, 0, 0.45)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #a8d3c8) 45%, transparent) !important;
+  color: var(--aperture-text, #f4f7f5) !important;
+  flex: none !important;
+}
+[data-vn-world-strip] .vn-world-chevron {
+  margin-left: 2px !important;
+  opacity: 0.65 !important;
+  font-size: 10px !important;
+  flex: none !important;
+}
+[data-vn-scene-postcard] {
+  position: fixed !important;
+  top: calc(74px + env(safe-area-inset-top, 0px)) !important;
+  left: 14px !important;
+  right: 14px !important;
+  max-width: 380px !important;
+  z-index: 255 !important;
+  padding: 12px 14px !important;
+  border-radius: 14px !important;
+  background: var(--vn-shell-panel, rgba(12, 22, 28, 0.94)) !important;
+  border: 1px solid var(--vn-shell-border-strong, rgba(168, 211, 200, 0.35)) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.62) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  color: var(--vn-shell-text, #f1f5f9) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  pointer-events: auto !important;
+}
+[data-vn-scene-postcard] header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-thumb {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  flex: none !important;
+  display: grid !important;
+  place-items: center !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  font-size: 18px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-thumb img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+[data-vn-scene-postcard] .vn-postcard-title {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+[data-vn-scene-postcard] .vn-postcard-title strong {
+  display: block !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+}
+[data-vn-scene-postcard] .vn-postcard-title small {
+  display: block !important;
+  font-size: 11px !important;
+  opacity: 0.78 !important;
+}
+[data-vn-scene-postcard] .vn-postcard-close {
+  min-width: 44px !important;
+  min-height: 44px !important;
+  border-radius: 50% !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  background: transparent !important;
+  color: inherit !important;
+  cursor: pointer !important;
+  font-size: 16px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-pills {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-pill {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: inherit !important;
+}
+[data-vn-scene-postcard] button.vn-postcard-pill {
+  min-height: 36px !important;
+  cursor: pointer !important;
+}
+[data-vn-scene-postcard] .vn-postcard-cta {
+  width: 100% !important;
+  min-height: 44px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: var(--vn-shell-accent, #a8d3c8) !important;
+  color: var(--vn-shell-accent-contrast, #0b1922) !important;
+  font-weight: 750 !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
 }
 [data-vn-world-strip] .vn-world-glyph {
   display: inline-flex !important;
@@ -25343,9 +25568,10 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   color: var(--vn-quote-color, var(--aperture-accent, #d68c73)) !important;
 }
 
-/* World Lens: hide duplicate vertical list to fix icon ghosting */
+/* World Lens: show unified vertical directory list cleanly */
 [data-vn-reference-sheet] [data-reference-list] {
-  display: none !important;
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 /* Character Folio: transparent overview container */
@@ -26064,12 +26290,12 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
    ========================================================================= */
 
 .world-sheet-map {
-  margin-top: 16px;
-  height: calc(min(48vh, 380px));
-  min-height: 280px;
+  margin-top: 12px;
+  height: auto;
+  min-height: 0;
   border-radius: 6px 6px 22px 22px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   background: var(--vn-shell-field, #0f1e2e);
   border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
 }
@@ -28760,7 +28986,7 @@ var APERTURE_THEME_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_ROUTE_BAR_READER
 
 // src/frontend/stage/reader-workspace.ts
 var destinations = [
-  { id: "story", label: "Story", icon: "world", hint: "People, places & revealed documents" },
+  { id: "story", label: "World Lens", icon: "world", hint: "Places, items, threads & revealed documents" },
   { id: "character", label: "Cast", icon: "cast", hint: "Character Folio & appearance DNA" },
   { id: "artwork", label: "Artwork", icon: "art", hint: "Review, replace & inspect pictures" },
   { id: "history", label: "History", icon: "history", hint: "Earlier passages & saved pictures" },
@@ -30151,7 +30377,7 @@ function eligibleEntities(entities, prefs, chatId = "") {
     return [];
   return entities.filter((e) => prefs.categories[e.kind === "npc" ? "npcs" : e.kind === "place" ? "locations" : "objects"] && !entityOverride(prefs, chatId, e)?.suppressed && !(e.kind === "npc" && isScenarioTitle(e.name)));
 }
-function createReferenceLinkBudget(value, paragraphs, prefs) {
+function createReferenceLinkBudget(value, paragraphs, prefs, salientByParagraph) {
   const counts = [0], firstLinkedAt = new Map;
   let processed = 0;
   const chatId = presentationTurnKey(value)?.chatId ?? "";
@@ -30161,7 +30387,8 @@ function createReferenceLinkBudget(value, paragraphs, prefs) {
       let used = counts[processed];
       if (used < 24) {
         const entities = value.version === 2 ? processed <= value.availableThrough ? value.entities.filter((e) => e.firstParagraph <= processed) : [] : value.snapshots[processed]?.entities ?? [];
-        const anchors = linkEntityMentions(paragraphs[processed] ?? "", entities, prefs, chatId, Math.min(prefs.maxLinksPerParagraph, 24 - used), [], prefs.linking === "important" ? new Set(firstLinkedAt.keys()) : new Set);
+        const salient = salientByParagraph?.get(processed);
+        const anchors = linkEntityMentions(paragraphs[processed] ?? "", entities, prefs, chatId, Math.min(prefs.maxLinksPerParagraph, 24 - used), [], prefs.linking === "important" ? new Set(firstLinkedAt.keys()) : new Set, salient);
         used += anchors.length;
         for (const anchor2 of anchors)
           if (!firstLinkedAt.has(anchor2.entityId))
@@ -30172,12 +30399,25 @@ function createReferenceLinkBudget(value, paragraphs, prefs) {
     return { used: counts[target2] ?? 0, priorIds: new Set([...firstLinkedAt].filter(([, at]) => at < target2).map(([id6]) => id6)) };
   };
 }
-function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.maxLinksPerParagraph, protectedRanges = [], excludedEntityIds = new Set) {
+function isShadowFallbackId(id6) {
+  return id6.startsWith("dna:") || id6.startsWith("earlier:");
+}
+function buildEntityMatchPattern(rawTerm, allowPlural) {
+  const escaped = rawTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!allowPlural || !/^[a-zA-Z][a-zA-Z\s'-]{2,}$/.test(rawTerm) || /s$/i.test(rawTerm))
+    return escaped;
+  return /(?:sh|ch|x|z)$/i.test(rawTerm) ? `${escaped}(?:es)?` : `${escaped}s?`;
+}
+function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.maxLinksPerParagraph, protectedRanges = [], excludedEntityIds = new Set, salientEntityIds = new Set) {
   if (prefs.linking === "menu-only" || text.length > 20000 || limit <= 0)
     return [];
-  const eligible = eligibleEntities(entities, prefs, chatId).filter((e) => !excludedEntityIds.has(e.id) || entityOverride(prefs, chatId, e)?.pinned);
+  const eligible = eligibleEntities(entities, prefs, chatId).filter((e) => !excludedEntityIds.has(e.id) || salientEntityIds.has(e.id) || entityOverride(prefs, chatId, e)?.pinned);
   const owners = new Map;
-  for (const e of entities)
+  const eligibleIds = new Set(eligible.map((e) => e.id));
+  for (const e of entities) {
+    const suppressedNonExcluded = !isShadowFallbackId(e.id) && entityOverride(prefs, chatId, e)?.suppressed === true && !excludedEntityIds.has(e.id);
+    if (isShadowFallbackId(e.id) || suppressedNonExcluded)
+      continue;
     for (const name of [e.name, ...e.aliases]) {
       const key = name.trim().toLowerCase();
       if (!key)
@@ -30186,14 +30426,19 @@ function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.ma
       ids.add(e.id);
       owners.set(key, ids);
     }
+  }
   const excluded = [...protectedRanges, ...[...text.matchAll(/`[^`]*`|\[[^\]]*\]\([^)]*\)/g)].map((m) => [m.index, m.index + m[0].length])];
   const candidates = [];
   for (const e of eligible)
     for (const name of [e.name, ...e.aliases]) {
-      const key = name.trim().toLowerCase();
-      if (/^[\x00-\x7F]+$/.test(key) && key.length < 3 || owners.get(key)?.size !== 1 || /^(?:he|she|they|it|you|we|i|him|her|them|me|us|the|a|an|in|on|at|to|of|or|by|as|is|go|do|so|no|up|my)$/i.test(key))
+      const trimmed = name.trim(), key = trimmed.toLowerCase();
+      const keyOwners = owners.get(key);
+      const ownedSolelyBySelf = keyOwners ? keyOwners.size === 1 && keyOwners.has(e.id) : isShadowFallbackId(e.id);
+      const resolvedUnique = ownedSolelyBySelf || keyOwners && [...keyOwners].filter((id6) => eligibleIds.has(id6) || excludedEntityIds.has(id6)).length === 1 && (eligibleIds.has(e.id) && keyOwners.has(e.id));
+      if (/^[\x00-\x7F]+$/.test(key) && key.length < 3 || !resolvedUnique || /^(?:he|she|they|it|you|we|i|him|her|them|me|us|the|a|an|in|on|at|to|of|or|by|as|is|go|do|so|no|up|my)$/i.test(key))
         continue;
-      const nameRe = new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
+      const allowPlural = (e.kind === "object" || e.kind === "place") && !owners.get(`${key}s`)?.size && !owners.get(`${key}es`)?.size;
+      const nameRe = new RegExp(buildEntityMatchPattern(trimmed, allowPlural), "giu");
       let m;
       let scanned = 0;
       while ((m = nameRe.exec(text)) && scanned++ < 12) {
@@ -30206,13 +30451,13 @@ function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.ma
         if (e.kind === "object" && isIdiomaticDocumentMention(text, start, end))
           continue;
         if (!/[\p{L}\p{N}_]/u.test(before) && !/[\p{L}\p{N}_]/u.test(after) && !excluded.some(([a, b]) => start >= a && start < b))
-          candidates.push({ start, end, entityId: e.id, pinned: entityOverride(prefs, chatId, e)?.pinned === true });
+          candidates.push({ start, end, entityId: e.id, pinned: entityOverride(prefs, chatId, e)?.pinned === true, salient: salientEntityIds.has(e.id) });
       }
     }
-  candidates.sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.start - b.start || b.end - a.end);
+  candidates.sort((a, b) => Number(b.pinned) - Number(a.pinned) || Number(b.salient) - Number(a.salient) || a.start - b.start || b.end - a.end);
   const selected = [];
   const linked = new Set;
-  for (const { pinned: _, ...a } of candidates) {
+  for (const { pinned: _, salient: __, ...a } of candidates) {
     if (linked.has(a.entityId) || selected.some((b) => a.start < b.end && a.end > b.start))
       continue;
     selected.push(a);
@@ -30326,27 +30571,38 @@ function applyEntityAnchors(root, anchors, open2, preview, isDocument) {
     offset += node2.data.length;
   }
   for (const a of [...anchors].sort((a2, b) => b.start - a2.start)) {
-    const entry = nodes.find((n) => a.start >= n.start && a.end <= n.end);
-    if (!entry || entry.node.parentElement?.closest("a,code,button,[data-vn-text-fx]"))
+    const overlapping = nodes.filter((n) => n.end > a.start && n.start < a.end && n.node.data.length > 0);
+    if (!overlapping.length)
       continue;
-    const begin = a.start - entry.start, end = a.end - entry.start;
-    if (begin < 0 || end > entry.node.length || end <= begin)
+    if (overlapping.some((n) => n.node.parentElement?.closest("a,code,button,[data-vn-text-fx]")))
       continue;
-    const tail = entry.node.splitText(end), label = entry.node.splitText(begin);
-    const button = doc2.createElement("button");
-    button.type = "button";
-    button.dataset.entityAnchor = a.entityId;
-    if (isDocument?.(a.entityId))
-      button.dataset.entityDoc = "true";
-    button.textContent = label.data;
-    button.setAttribute("aria-label", `About ${label.data}`);
-    button.setAttribute("aria-haspopup", "dialog");
-    button.title = preview(a.entityId);
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      open2(a.entityId, button);
-    });
-    label.replaceWith(button);
+    const fullLabel = overlapping.map((n) => {
+      const begin = Math.max(0, a.start - n.start), end = Math.min(n.node.length, a.end - n.start);
+      return n.node.data.slice(begin, end);
+    }).join("");
+    if (!fullLabel)
+      continue;
+    for (let idx = overlapping.length - 1;idx >= 0; idx--) {
+      const entry = overlapping[idx];
+      const begin = Math.max(0, a.start - entry.start), end = Math.min(entry.node.length, a.end - entry.start);
+      if (begin < 0 || end > entry.node.length || end <= begin)
+        continue;
+      const tail = entry.node.splitText(end), label = entry.node.splitText(begin);
+      const button = doc2.createElement("button");
+      button.type = "button";
+      button.dataset.entityAnchor = a.entityId;
+      if (isDocument?.(a.entityId) && idx === overlapping.length - 1)
+        button.dataset.entityDoc = "true";
+      button.textContent = label.data;
+      button.setAttribute("aria-label", `About ${fullLabel}`);
+      button.setAttribute("aria-haspopup", "dialog");
+      button.title = preview(a.entityId);
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        open2(a.entityId, button);
+      });
+      label.replaceWith(button);
+    }
   }
 }
 function protectedEntityRanges(root) {
@@ -30380,6 +30636,20 @@ var kinds = {
   phone: "Phone messages",
   terminal: "Terminal"
 };
+var TITLE_SMALL_WORDS = new Set(["a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"]);
+function formatDocumentDisplayTitle(rawName, kind) {
+  const clean = rawName.trim();
+  if (!clean)
+    return kinds[kind];
+  if (/[A-Z]/.test(clean))
+    return clean;
+  return clean.split(/\s+/).map((word, idx) => {
+    const lower = word.toLowerCase();
+    if (idx > 0 && TITLE_SMALL_WORDS.has(lower))
+      return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }).join(" ");
+}
 function populateDocumentArtStage(stage, documentRecord, options = {}) {
   stage.replaceChildren();
   stage.dataset.busy = options.busy ? "true" : "false";
@@ -30436,6 +30706,7 @@ function populateDocumentArtStage(stage, documentRecord, options = {}) {
   }
 }
 function createDocumentReader(documentRecord, back, close, options = {}) {
+  const displayTitle = formatDocumentDisplayTitle(documentRecord.name, documentRecord.kind);
   const panel = document.createElement("section");
   panel.dataset.vnDossierCard = "";
   panel.dataset.vnDocumentReader = "";
@@ -30443,7 +30714,7 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
   panel.dataset.documentKind = documentRecord.kind;
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-modal", "true");
-  panel.setAttribute("aria-label", `Read ${documentRecord.name}`);
+  panel.setAttribute("aria-label", `Read ${displayTitle}`);
   const header = document.createElement("header");
   const backButton = document.createElement("button");
   const title = document.createElement("h2");
@@ -30453,7 +30724,7 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
   backButton.title = "Back to item";
   backButton.setAttribute("aria-label", "Back to item");
   backButton.onclick = back;
-  title.textContent = documentRecord.name;
+  title.textContent = displayTitle;
   closeButton.textContent = "×";
   closeButton.title = "Close document";
   closeButton.setAttribute("aria-label", "Close document");
@@ -30474,6 +30745,7 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
   }
   const obs = documentRecord.observations ?? [];
   const hasVisualSummary = Boolean(documentRecord.visualDetails) || obs.some((o) => Boolean(o.summary || o.visualDetails?.length || o.condition || o.material));
+  const collectedObservationLines = [];
   if (hasVisualSummary) {
     const obsBox = document.createElement("div");
     obsBox.dataset.documentObservations = "";
@@ -30492,6 +30764,7 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
       if (!line || seenLines.has(line.toLowerCase()))
         continue;
       seenLines.add(line.toLowerCase());
+      collectedObservationLines.push(line);
       const p = document.createElement("p");
       p.textContent = line;
       const src = document.createElement("small");
@@ -30499,6 +30772,7 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
       obsBox.append(p, src);
     }
     if (!seenLines.size && documentRecord.visualDetails) {
+      collectedObservationLines.push(documentRecord.visualDetails);
       const p = document.createElement("p");
       p.textContent = documentRecord.visualDetails;
       obsBox.append(p);
@@ -30526,26 +30800,83 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
   } else {
     const emptyText = document.createElement("p");
     emptyText.dataset.documentEmptyText = "";
-    emptyText.textContent = "No verbatim text transcribed yet. Visual cues above reflect what has been seen so far.";
+    emptyText.textContent = hasVisualSummary ? "No verbatim text transcribed yet. Visual cues above reflect what has been seen so far." : "No verbatim text transcribed yet.";
     transcript.append(emptyText);
   }
   scrollWrap.append(transcript);
+  let currentNote = options.customNote?.trim() ?? "";
+  const customNoteWrap = document.createElement("div");
+  customNoteWrap.dataset.documentCustomNote = "";
+  customNoteWrap.hidden = !currentNote;
+  const renderCustomNote = () => {
+    customNoteWrap.replaceChildren();
+    customNoteWrap.hidden = !currentNote;
+    if (!currentNote)
+      return;
+    const h = document.createElement("h3");
+    h.textContent = "Your Transcript & Notes";
+    const p = document.createElement("p");
+    p.textContent = currentNote;
+    customNoteWrap.append(h, p);
+  };
+  renderCustomNote();
+  scrollWrap.append(customNoteWrap);
+  const noteEditor = document.createElement("div");
+  noteEditor.dataset.documentNoteBox = "";
+  noteEditor.hidden = true;
+  if (options.onSaveNote) {
+    const textarea = document.createElement("textarea");
+    textarea.maxLength = 4000;
+    textarea.placeholder = "Add missing transcript lines or investigation notes…";
+    textarea.value = currentNote;
+    const editorActions = document.createElement("div");
+    editorActions.dataset.documentNoteActions = "";
+    const saveNoteBtn = document.createElement("button");
+    saveNoteBtn.type = "button";
+    saveNoteBtn.dataset.documentSaveNote = "";
+    saveNoteBtn.textContent = "Save Note";
+    const cancelNoteBtn = document.createElement("button");
+    cancelNoteBtn.type = "button";
+    cancelNoteBtn.textContent = "Cancel";
+    saveNoteBtn.onclick = () => {
+      currentNote = textarea.value.trim();
+      renderCustomNote();
+      noteEditor.hidden = true;
+      options.onSaveNote?.(currentNote);
+      status.textContent = currentNote ? "Transcript note saved." : "Transcript note cleared.";
+    };
+    cancelNoteBtn.onclick = () => {
+      textarea.value = currentNote;
+      noteEditor.hidden = true;
+    };
+    editorActions.append(cancelNoteBtn, saveNoteBtn);
+    noteEditor.append(textarea, editorActions);
+    scrollWrap.append(noteEditor);
+  }
   const footer = document.createElement("footer");
   const copy = document.createElement("button");
   const status = document.createElement("span");
   status.setAttribute("role", "status");
   copy.type = "button";
-  copy.textContent = "Copy text";
-  copy.title = "Copy revealed text";
-  copy.setAttribute("aria-label", "Copy revealed text");
-  copy.disabled = documentRecord.sections.length === 0;
+  const copyTextPayload = documentRecord.sections.length > 0 ? documentRecord.sections.map((s) => s.text).join(`
+
+`) : [...collectedObservationLines, ...currentNote ? [currentNote] : []].join(`
+
+`);
+  copy.textContent = documentRecord.sections.length > 0 ? "Copy text" : "Copy observations";
+  copy.title = documentRecord.sections.length > 0 ? "Copy revealed text" : "Copy revealed observations";
+  copy.setAttribute("aria-label", copy.title);
+  copy.disabled = !copyTextPayload.trim();
   copy.onclick = async () => {
-    if (!panel.isConnected || !documentRecord.sections.length)
+    const payload = documentRecord.sections.length > 0 ? documentRecord.sections.map((s) => s.text).join(`
+
+`) : [...collectedObservationLines, ...currentNote ? [currentNote] : []].join(`
+
+`);
+    if (!panel.isConnected || !payload.trim())
       return;
     try {
-      await navigator.clipboard.writeText(documentRecord.sections.map((s) => s.text).join(`
-
-`));
+      await navigator.clipboard.writeText(payload);
       if (panel.isConnected)
         status.textContent = "Copied.";
     } catch {
@@ -30553,7 +30884,32 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
         status.textContent = "Copy unavailable. Select the text to copy it.";
     }
   };
-  footer.append(copy, status);
+  footer.append(copy);
+  if (options.onSaveNote) {
+    const editNoteBtn = document.createElement("button");
+    editNoteBtn.type = "button";
+    editNoteBtn.dataset.documentEditNote = "";
+    editNoteBtn.textContent = currentNote ? "✎ Edit note" : "✎ Transcribe / Add note";
+    editNoteBtn.onclick = () => {
+      noteEditor.hidden = !noteEditor.hidden;
+      if (!noteEditor.hidden) {
+        noteEditor.querySelector("textarea")?.focus();
+      }
+    };
+    footer.append(editNoteBtn);
+  }
+  if (options.onExamineCloser) {
+    const examineBtn = document.createElement("button");
+    examineBtn.type = "button";
+    examineBtn.dataset.documentExamineCloser = "";
+    examineBtn.textContent = "Examine closer";
+    examineBtn.title = "Insert a reply draft to inspect or read this document closely";
+    examineBtn.onclick = () => {
+      options.onExamineCloser?.();
+    };
+    footer.append(examineBtn);
+  }
+  footer.append(status);
   panel.append(header, meta3, scrollWrap, footer);
   return panel;
 }
@@ -30596,8 +30952,14 @@ var DOCUMENT_READER_CSS = `
 [data-vn-document-reader][data-document-kind="phone"] [data-document-body]{font-family:system-ui,-apple-system,sans-serif;background:color-mix(in srgb,#0b101b 75%,var(--vn-panel-solid,#171b26));border-radius:16px;padding:14px}
 [data-vn-document-reader][data-document-kind="phone"] [data-document-body] section{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 14%,rgba(255,255,255,.04));border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 26%,transparent);border-radius:14px 14px 14px 4px;padding:10px 12px;margin-top:10px}
 [data-vn-document-reader][data-document-kind="terminal"] [data-document-body]{font-family:ui-monospace,"Cascadia Mono","Fira Code",monospace;line-height:1.55;background:linear-gradient(180deg,rgba(8,20,16,.88),rgba(5,14,11,.94));color:#9ef5c2;border-color:rgba(82,214,145,.36);box-shadow:inset 0 0 24px rgba(16,185,129,.08)}
-[data-vn-document-reader] footer{flex:none;display:flex;align-items:center;gap:12px;padding-top:8px;border-top:1px solid var(--vn-panel-border,#666)}
-[data-vn-document-reader] footer button{margin:0;min-width:44px}[data-vn-document-reader] [role="status"]{font-size:.75em}
+[data-document-custom-note]{margin:14px 0 6px;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 10%,transparent);border-left:3px solid var(--vn-accent,#9ec6f0)}
+[data-document-custom-note] h3{margin:0 0 6px;font-size:.72em;letter-spacing:.07em;text-transform:uppercase;opacity:.78;font-family:inherit}
+[data-document-custom-note] p{margin:0;white-space:pre-wrap;font-size:.94em;line-height:1.55}
+[data-document-note-box]{margin:12px 0 4px;padding:10px;border-radius:8px;border:1px solid var(--vn-panel-border,#666);background:rgba(0,0,0,.22)}
+[data-document-note-box] textarea{box-sizing:border-box;width:100%;min-height:84px;margin:0 0 8px;padding:8px;border-radius:6px;border:1px solid var(--vn-panel-border,#666);background:rgba(0,0,0,.3);color:inherit;font:inherit;font-size:.9em}
+[data-document-note-actions]{display:flex;justify-content:flex-end;gap:8px}
+[data-vn-document-reader] footer{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:8px;border-top:1px solid var(--vn-panel-border,#666)}
+[data-vn-document-reader] footer button{margin:0;min-width:44px;min-height:44px}[data-vn-document-reader] [role="status"]{font-size:.75em}
 [data-document-body]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:2px}
 `;
 
@@ -30723,6 +31085,49 @@ class InteractionTray {
 }
 
 // src/frontend/stage/dossier-card.ts
+var VALID_DOC_KINDS = new Set([
+  "flyer",
+  "letter",
+  "note",
+  "journal",
+  "map",
+  "poster",
+  "receipt",
+  "notice",
+  "newspaper",
+  "pamphlet",
+  "phone",
+  "terminal"
+]);
+function normalizeDocKind(raw) {
+  return VALID_DOC_KINDS.has(raw) ? raw : "note";
+}
+function ledgerEntryToStoryDocument(entry) {
+  return {
+    id: entry.id,
+    name: entry.name,
+    kind: normalizeDocKind(entry.kind),
+    paragraphIndex: entry.observations?.[0]?.paragraphIndex ?? entry.sections?.[0]?.paragraphIndex ?? 0,
+    aliases: entry.aliases ?? [],
+    ...entry.visualDetails ? { visualDetails: entry.visualDetails } : {},
+    ...entry.observations ? {
+      observations: entry.observations.map((o) => ({
+        paragraphIndex: o.paragraphIndex,
+        ...o.summary ? { summary: o.summary } : {},
+        ...o.visualDetails ? { visualDetails: o.visualDetails } : {},
+        ...o.material ? { material: o.material } : {},
+        ...o.condition ? { condition: o.condition } : {},
+        evidence: o.evidence
+      }))
+    } : {},
+    sections: (entry.sections ?? []).map((s) => ({
+      paragraphIndex: s.paragraphIndex,
+      start: 0,
+      end: s.text.length,
+      text: s.text
+    }))
+  };
+}
 function entityInitials(name) {
   const parts = name.trim().split(/[\s·\-]+/).filter(Boolean);
   if (!parts.length)
@@ -30748,14 +31153,20 @@ class DossierCard {
   host = document.createElement("div");
   returnFocus = null;
   trayReturn = null;
+  trayRender = null;
   query = "";
   category = "all";
   scope = "all";
   selectedEntityId = null;
   hubView = "scene";
+  perspectiveFilter = "all";
+  linkMode = false;
+  linkSourceId = null;
   storyDna = { locations: {}, items: {}, revision: 0 };
   storyDnaRequester = null;
   storyDnaError = null;
+  locationArtLibrary = { version: 1, locations: [] };
+  locationArtRequester = null;
   sceneHubContext = null;
   activeDossierContext = null;
   awaitingDnaSync = false;
@@ -30768,11 +31179,49 @@ class DossierCard {
   setDocumentOptionsResolver(fn) {
     this.documentOptionsResolver = fn;
   }
+  setLocationArtLibrary(library) {
+    this.locationArtLibrary = library;
+    if (this.activeDossierContext?.dossier.entity.kind === "place" && this.isOpen()) {
+      const ctx = this.activeDossierContext;
+      this.open(ctx.dossier, ctx.prefs, ctx.chatId, ctx.trigger, ctx.actions, ctx.storyDocument, ctx.visual);
+    }
+  }
+  setLocationArtRequester(fn) {
+    this.locationArtRequester = fn;
+  }
+  getCombinedDocuments() {
+    const byKey = new Map;
+    for (const d of this.sceneHubContext?.sceneDocuments ?? []) {
+      const key = d.name.trim().toLowerCase() || d.id;
+      const ledgerMatch = this.storyDna.documents?.[d.id] ?? Object.values(this.storyDna.documents ?? {}).find((l) => l.name.trim().toLowerCase() === key);
+      byKey.set(key, {
+        doc: d,
+        customNote: ledgerMatch?.customNotes,
+        inCurrentTurn: true
+      });
+    }
+    for (const entry of Object.values(this.storyDna.documents ?? {})) {
+      const key = entry.name.trim().toLowerCase() || entry.id;
+      if (byKey.has(key))
+        continue;
+      byKey.set(key, {
+        doc: ledgerEntryToStoryDocument(entry),
+        customNote: entry.customNotes,
+        inCurrentTurn: false
+      });
+    }
+    return [...byKey.values()];
+  }
   openDocument(storyDocument, back, trigger) {
     if (trigger)
       this.returnFocus = trigger;
     this.activeDocumentRecord = storyDocument;
     const opts = this.documentOptionsResolver?.(storyDocument.id) ?? {};
+    const ledgerEntry = this.storyDna.documents?.[storyDocument.id] ?? Object.values(this.storyDna.documents ?? {}).find((l) => l.name.trim().toLowerCase() === storyDocument.name.trim().toLowerCase());
+    const mergedOpts = {
+      ...opts,
+      ...opts.customNote !== undefined ? {} : ledgerEntry?.customNotes ? { customNote: ledgerEntry.customNotes } : {}
+    };
     const reader = createDocumentReader(storyDocument, () => {
       if (this.host.hidden || reader.parentElement !== this.host)
         return;
@@ -30783,7 +31232,7 @@ class DossierCard {
         this.activeDocumentRecord = null;
         this.close();
       }
-    }, opts);
+    }, mergedOpts);
     if (this.host.dataset.vnWorkspaceTool)
       reader.removeAttribute("aria-modal");
     this.documentState(true);
@@ -30810,6 +31259,10 @@ class DossierCard {
       this.open(ctx.dossier, ctx.prefs, ctx.chatId, ctx.trigger, ctx.actions, ctx.storyDocument, ctx.visual);
       return;
     }
+    if (!this.activeDossierContext && !this.activeDocumentRecord && this.isOpen() && this.trayRender) {
+      this.trayRender();
+      return;
+    }
     const statusEl = this.host.querySelector("[data-story-dna-status]");
     if (statusEl) {
       statusEl.textContent = "Saved Story DNA synced.";
@@ -30831,7 +31284,7 @@ class DossierCard {
   setSceneHubContext(ctx) {
     this.sceneHubContext = ctx;
   }
-  constructor(mount, closeCallback, update, documentState = () => {}) {
+  constructor(mount, closeCallback = () => {}, update = () => false, documentState = () => {}) {
     this.closeCallback = closeCallback;
     this.update = update;
     this.documentState = documentState;
@@ -30894,7 +31347,8 @@ class DossierCard {
   open(dossier, prefs, chatId, trigger, actions, storyDocument, visual) {
     const kind = dossier.entity.kind;
     if (kind === "npc" && this.folioOpener) {
-      this.close();
+      if (!this.host.dataset.vnWorkspaceTool)
+        this.close();
       this.folioOpener(dossier.entity.name);
       return;
     }
@@ -31036,8 +31490,20 @@ class DossierCard {
       addLegacyBadge("\uD83D\uDCCC Pinned", "pinned");
     folioMeta.append(legacyBadges);
     panel.append(folioMeta);
-    if (kind === "place" || kind === "object") {
-      panel.append(this.buildStoryDnaStudio(kind, dossier));
+    if (storyDocument) {
+      const read = document.createElement("button");
+      read.type = "button";
+      read.textContent = storyDocument.sections.length ? "\uD83D\uDCC4 Read revealed text & view closeup →" : "\uD83D\uDCC4 Inspect document & view closeup →";
+      read.dataset.vnReadDocument = "";
+      read.onclick = () => {
+        if (this.host.hidden || panel.parentElement !== this.host)
+          return;
+        this.openDocument(storyDocument, () => {
+          this.open(dossier, prefs, chatId, trigger, actions, storyDocument, visual);
+          this.host.querySelector("[data-vn-read-document]")?.focus();
+        }, trigger);
+      };
+      panel.append(read);
     }
     const facts = dossier.facts.filter((f) => f.value.trim() && prefs.fieldGroups[referenceFieldInfo(f.field).section] !== false);
     const earlier = prefs.rememberReferences ? (dossier.earlier ?? []).filter((e) => prefs.fieldGroups[referenceFieldInfo(e.reference.field).section] !== false) : [];
@@ -31046,6 +31512,70 @@ class DossierCard {
     if (!overview.length && lasting.length)
       overview.push(lasting[0]);
     const maxFactChars = Math.max(80, Math.min(1200, prefs.maxFactChars ?? 320));
+    let quoteCalloutEl = null;
+    let obsGridEl = null;
+    const overviewPairs = new Set(overview.map((f) => `${f.field}::${f.value.trim()}`));
+    const current = new Map;
+    for (const fact of facts) {
+      if (referenceFieldInfo(fact.field).living && !overviewPairs.has(`${fact.field}::${fact.value.trim()}`)) {
+        current.set(fact.field, fact.value);
+      }
+    }
+    const observations = facts.filter((f) => referenceFieldInfo(f.field).living && dossier.state[f.field]?.trim() && dossier.state[f.field] !== f.value);
+    for (const [field, value] of Object.entries(dossier.state)) {
+      if (value.trim() && !overviewPairs.has(`${field}::${value.trim()}`) && prefs.fieldGroups.state !== false && prefs.fieldGroups[referenceFieldInfo(field).section] !== false) {
+        current.set(field, value);
+      }
+    }
+    const renderObsGrid = () => {
+      if (!obsGridEl)
+        return;
+      obsGridEl.replaceChildren();
+      const liveFacts = dossier.facts.filter((f) => f.value.trim() && prefs.fieldGroups[referenceFieldInfo(f.field).section] !== false);
+      const liveState = Object.entries(dossier.state).filter(([, v]) => v.trim()).map(([k, v]) => ({ field: k, value: v, source: { provider: "state" } }));
+      const seenObs = new Set;
+      const combined = [...liveFacts, ...liveState].filter((item) => {
+        const key = `${item.field}::${item.value.trim().toLowerCase()}`;
+        if (seenObs.has(key))
+          return false;
+        seenObs.add(key);
+        return true;
+      });
+      if (!combined.length) {
+        obsGridEl.hidden = true;
+        return;
+      }
+      obsGridEl.hidden = false;
+      for (const item of combined.slice(0, 8)) {
+        const cell = document.createElement("div");
+        cell.className = "observation-cell";
+        if (item.value.length > 55)
+          cell.classList.add("observation-cell-wide");
+        const label = document.createElement("span");
+        label.textContent = referenceFieldInfo(item.field).label;
+        const strong = document.createElement("strong");
+        strong.textContent = `${item.value} `;
+        const em = document.createElement("em");
+        const isTold = item.source?.provider === "state" || item.source?.provider === "user" || ["spoken", "rumor", "secret", "publicHistory", "statedGoals"].includes(item.field);
+        em.textContent = isTold ? "TOLD" : "SEEN";
+        strong.append(em);
+        cell.append(label, strong);
+        obsGridEl.append(cell);
+      }
+    };
+    const syncOverviewAndGrid = () => {
+      if (quoteCalloutEl) {
+        const firstLive = dossier.facts.find((f) => f.value.trim() && ["overview", "identity"].includes(referenceFieldInfo(f.field).section)) ?? dossier.facts.find((f) => f.value.trim());
+        if (firstLive?.value.trim()) {
+          quoteCalloutEl.textContent = `“${firstLive.value.replace(/^["“]|["”]$/g, "").trim()}”`;
+          quoteCalloutEl.hidden = false;
+        } else {
+          quoteCalloutEl.textContent = "";
+          quoteCalloutEl.hidden = true;
+        }
+      }
+      renderObsGrid();
+    };
     const appendFact = (list, field, value) => {
       const dt = document.createElement("dt");
       const dd = document.createElement("dd");
@@ -31083,24 +31613,24 @@ class DossierCard {
       editBtn.title = "Edit reference fact";
       editBtn.className = "fact-edit-btn";
       editBtn.textContent = "✏️";
-      editBtn.style.cssText = "width:26px;height:26px;min-width:26px;min-height:26px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:6px;cursor:pointer;font-size:12px;opacity:0.78;padding:0;";
+      editBtn.style.cssText = "width:44px;height:44px;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:8px;cursor:pointer;font-size:13px;opacity:0.84;padding:0;margin:0;";
       editBtn.onmouseenter = () => {
         editBtn.style.opacity = "1";
       };
       editBtn.onmouseleave = () => {
-        editBtn.style.opacity = "0.78";
+        editBtn.style.opacity = "0.84";
       };
       const delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.title = "Delete reference fact";
       delBtn.className = "fact-del-btn";
       delBtn.textContent = "\uD83D\uDDD1️";
-      delBtn.style.cssText = "width:26px;height:26px;min-width:26px;min-height:26px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:6px;cursor:pointer;font-size:12px;opacity:0.78;padding:0;";
+      delBtn.style.cssText = "width:44px;height:44px;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:8px;cursor:pointer;font-size:13px;opacity:0.84;padding:0;margin:0;";
       delBtn.onmouseenter = () => {
         delBtn.style.opacity = "1";
       };
       delBtn.onmouseleave = () => {
-        delBtn.style.opacity = "0.78";
+        delBtn.style.opacity = "0.84";
       };
       editBtn.onclick = () => {
         if (dd.querySelector(".fact-edit-input"))
@@ -31109,21 +31639,21 @@ class DossierCard {
         actionSpan.style.display = "none";
         const editWrap = document.createElement("div");
         editWrap.className = "fact-edit-input";
-        editWrap.style.cssText = "display:flex;gap:4px;margin-top:4px;align-items:center;";
+        editWrap.style.cssText = "display:flex;gap:6px;margin-top:6px;align-items:center;";
         const input3 = document.createElement("input");
         input3.type = "text";
         input3.value = activeVal;
-        input3.style.cssText = "flex:1;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.3);color:inherit;";
+        input3.style.cssText = "flex:1;min-height:44px;font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.3);color:inherit;";
         const saveBtn = document.createElement("button");
         saveBtn.type = "button";
         saveBtn.textContent = "✓";
         saveBtn.title = "Save";
-        saveBtn.style.cssText = "padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.15);border:none;color:inherit;";
+        saveBtn.style.cssText = "min-width:44px;min-height:44px;padding:4px 10px;font-size:13px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,0.15);border:none;color:inherit;margin:0;";
         const cancelBtn = document.createElement("button");
         cancelBtn.type = "button";
         cancelBtn.textContent = "✕";
         cancelBtn.title = "Cancel";
-        cancelBtn.style.cssText = "padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer;background:transparent;border:none;color:inherit;opacity:0.7;";
+        cancelBtn.style.cssText = "min-width:44px;min-height:44px;padding:4px 10px;font-size:13px;border-radius:6px;cursor:pointer;background:transparent;border:none;color:inherit;opacity:0.7;margin:0;";
         saveBtn.onclick = () => {
           const newVal = input3.value.trim();
           if (newVal) {
@@ -31134,6 +31664,7 @@ class DossierCard {
             if (dossier.state && field in dossier.state)
               dossier.state[field] = newVal;
             this.update(dossier.entity, { factEdits: { [field]: newVal } });
+            syncOverviewAndGrid();
           }
           renderText(activeVal);
           editWrap.remove();
@@ -31164,17 +31695,18 @@ class DossierCard {
         if (dossier.state && field in dossier.state)
           delete dossier.state[field];
         this.update(dossier.entity, { factEdits: { [field]: null } });
+        syncOverviewAndGrid();
       };
       actionSpan.append(editBtn, delBtn);
       dd.append(actionSpan);
       list.append(dt, dd);
     };
     if (overview.length && overview[0]?.value) {
-      const quoteCallout = document.createElement("blockquote");
-      quoteCallout.className = "folio-quote-callout";
+      quoteCalloutEl = document.createElement("blockquote");
+      quoteCalloutEl.className = "folio-quote-callout";
       const cleanVal = overview[0].value.replace(/^["“]|["”]$/g, "").trim();
-      quoteCallout.textContent = `“${cleanVal}”`;
-      panel.append(quoteCallout);
+      quoteCalloutEl.textContent = `“${cleanVal}”`;
+      panel.append(quoteCalloutEl);
       const section = document.createElement("section");
       const list = document.createElement("dl");
       section.dataset.referenceOverview = "";
@@ -31212,43 +31744,16 @@ class DossierCard {
       castSection.append(castHeading, castRow);
       panel.append(castSection);
     }
-    const overviewPairs = new Set(overview.map((f) => `${f.field}::${f.value.trim()}`));
-    const current = new Map;
-    for (const fact of facts) {
-      if (referenceFieldInfo(fact.field).living && !overviewPairs.has(`${fact.field}::${fact.value.trim()}`)) {
-        current.set(fact.field, fact.value);
-      }
-    }
-    const observations = facts.filter((f) => referenceFieldInfo(f.field).living && dossier.state[f.field]?.trim() && dossier.state[f.field] !== f.value);
-    for (const [field, value] of Object.entries(dossier.state)) {
-      if (value.trim() && !overviewPairs.has(`${field}::${value.trim()}`) && prefs.fieldGroups.state !== false && prefs.fieldGroups[referenceFieldInfo(field).section] !== false) {
-        current.set(field, value);
-      }
-    }
     const allObservations = [...facts, ...[...current.entries()].map(([k, v]) => ({ field: k, value: v, source: { provider: "state" } }))];
     if (allObservations.length) {
       const obsHead = document.createElement("div");
       obsHead.style.cssText = "margin:18px 0 6px;font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;opacity:0.85;display:flex;align-items:center;justify-content:space-between;";
       obsHead.innerHTML = '<span>Verified observations</span><span style="font-size:9px;opacity:0.65;">ESTABLISHED FACTS</span>';
       panel.append(obsHead);
-      const grid = document.createElement("div");
-      grid.className = "observations-grid";
-      for (const item of allObservations.slice(0, 8)) {
-        const cell = document.createElement("div");
-        cell.className = "observation-cell";
-        if (item.value.length > 55)
-          cell.classList.add("observation-cell-wide");
-        const label = document.createElement("span");
-        label.textContent = referenceFieldInfo(item.field).label;
-        const strong = document.createElement("strong");
-        strong.textContent = `${item.value} `;
-        const em = document.createElement("em");
-        em.textContent = item.source?.provider === "model" || "revealedAt" in item && Boolean(item.revealedAt) ? "SEEN" : "TOLD";
-        strong.append(em);
-        cell.append(label, strong);
-        grid.append(cell);
-      }
-      panel.append(grid);
+      obsGridEl = document.createElement("div");
+      obsGridEl.className = "observations-grid";
+      renderObsGrid();
+      panel.append(obsGridEl);
     }
     if (current.size) {
       const section = document.createElement("section");
@@ -31316,7 +31821,7 @@ class DossierCard {
     if (!facts.length && !current.size && !earlier.length) {
       const p = document.createElement("p");
       p.dataset.referenceEmpty = "";
-      p.textContent = "No additional information is available with these display settings.";
+      p.textContent = "No additional story details recorded yet.";
       panel.append(p);
     }
     if (facts.length) {
@@ -31333,21 +31838,6 @@ class DossierCard {
       sources.append(summary, list);
       panel.append(sources);
     }
-    if (storyDocument) {
-      const read = document.createElement("button");
-      read.type = "button";
-      read.textContent = storyDocument.sections.length ? "Read revealed text & view closeup" : "Inspect document & view closeup";
-      read.dataset.vnReadDocument = "";
-      read.onclick = () => {
-        if (this.host.hidden || panel.parentElement !== this.host)
-          return;
-        this.openDocument(storyDocument, () => {
-          this.open(dossier, prefs, chatId, trigger, actions, storyDocument, visual);
-          this.host.querySelector("[data-vn-read-document]")?.focus();
-        }, trigger);
-      };
-      panel.append(read);
-    }
     if (actions?.drafts.length) {
       panel.append(new InteractionTray(actions.drafts, actions.current, (draft, mode) => {
         if (!actions.apply(draft, mode))
@@ -31356,6 +31846,17 @@ class DossierCard {
         actions.focus();
         return true;
       }).host);
+    }
+    if (kind === "place" || kind === "object") {
+      const studioDrawer = document.createElement("details");
+      studioDrawer.className = "story-dna-drawer";
+      studioDrawer.dataset.storyDnaDrawer = kind;
+      if (this.storyDnaError)
+        studioDrawer.open = true;
+      const summary = document.createElement("summary");
+      summary.textContent = kind === "place" ? "\uD83C\uDFA8 Art & Scenery DNA Studio" : "\uD83C\uDFA8 Art & Item DNA Studio";
+      studioDrawer.append(summary, this.buildStoryDnaStudio(kind, dossier));
+      panel.append(studioDrawer);
     }
     const status = document.createElement("p");
     status.setAttribute("role", "status");
@@ -31384,11 +31885,11 @@ class DossierCard {
         currentPinned = next;
         pin.textContent = currentPinned ? "Unpin" : "Pin reference";
         pin.setAttribute("aria-pressed", String(currentPinned));
-        status.textContent = currentPinned ? "Reference pinned to top of scene references." : "Reference unpinned.";
+        status.textContent = currentPinned ? "Reference pinned to top of World Lens." : "Reference unpinned.";
         status.hidden = false;
       }
     };
-    suppress.textContent = "Hide this reference";
+    suppress.textContent = "Hide from World Lens";
     suppress.onclick = () => {
       commit({ suppressed: true }, true);
     };
@@ -31441,6 +31942,9 @@ class DossierCard {
       this.scope = "all";
       this.selectedEntityId = null;
       this.hubView = "scene";
+      this.perspectiveFilter = "all";
+      this.linkMode = false;
+      this.linkSourceId = null;
     }
     this.returnFocus = trigger;
     this.trayReturn = () => this.openTray(entries, trigger, open2, note, visualResolver);
@@ -31480,11 +31984,11 @@ class DossierCard {
     const pageTitle = document.createElement("h1");
     pageTitle.className = "page-title";
     pageTitle.style.cssText = "margin:0;font-size:20px;font-family:Georgia,serif;letter-spacing:-0.02em;line-height:1.15;";
-    pageTitle.textContent = "Look closer.";
+    pageTitle.textContent = "World Lens";
     const pageSub = document.createElement("div");
     pageSub.className = "page-sub";
     pageSub.style.cssText = "font-size:11px;opacity:0.75;";
-    pageSub.textContent = "Locations, scene items & cast lore.";
+    pageSub.textContent = "Places, items, documents & story threads.";
     titleBlock.append(pageTitle, pageSub);
     panel.append(titleBlock);
     const tabs = document.createElement("div");
@@ -31506,7 +32010,7 @@ class DossierCard {
     const category = document.createElement("select");
     category.setAttribute("aria-label", "Reference category");
     category.style.display = "none";
-    for (const [value, label] of [["all", "All"], ["place", "Places"], ["object", "Items"]]) {
+    for (const [value, label] of [["all", "All"], ["place", "Places"], ["object", "Items"], ["document", "\uD83D\uDCC4 Documents"]]) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = label;
@@ -31562,17 +32066,20 @@ class DossierCard {
     }
     const addRefPanel = document.createElement("div");
     addRefPanel.className = "add-ref-panel";
-    addRefPanel.style.display = "none";
     addRefPanel.style.cssText = "display:none;margin:8px 0 12px;padding:12px;border-radius:var(--vn-shell-radius,10px);background:var(--vn-shell-field,rgba(0,0,0,0.35));border:1px solid var(--vn-shell-border-strong,var(--vn-shell-border,rgba(56,189,248,0.35)));";
-    addRefPanel.innerHTML = '<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--vn-shell-accent,#38bdf8);">＋ Add Story Reference / Artifact</div>' + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' + '<input data-add-ref-name type="text" placeholder="Name (e.g. Carved Yew Staff, Flat 3)" style="padding:6px 8px;font-size:11px;border-radius:var(--vn-shell-radius,6px);border:1px solid var(--vn-shell-border,rgba(255,255,255,0.15));background:var(--vn-shell-panel,rgba(0,0,0,0.25));color:inherit;" />' + '<select data-add-ref-kind style="padding:6px 8px;font-size:11px;border-radius:var(--vn-shell-radius,6px);border:1px solid var(--vn-shell-border,rgba(255,255,255,0.15));background:var(--vn-shell-panel,rgba(0,0,0,0.25));color:inherit;">' + '<option value="object">\uD83D\uDC8E Item / Unique Artifact</option>' + '<option value="place">\uD83D\uDCCD Location / Place</option>' + "</select></div>" + '<textarea data-add-ref-desc placeholder="Physical description, materials, visual traits (e.g. carved yew staff encrusted in diamonds wrapped in vines)..." style="width:100%;height:55px;box-sizing:border-box;padding:6px 8px;font-size:11px;border-radius:var(--vn-shell-radius,6px);border:1px solid var(--vn-shell-border,rgba(255,255,255,0.15));background:var(--vn-shell-panel,rgba(0,0,0,0.25));color:inherit;margin-bottom:8px;"></textarea>' + '<div style="display:flex;justify-content:flex-end;gap:8px;">' + '<button type="button" data-add-ref-cancel style="padding:4px 10px;font-size:11px;border-radius:var(--vn-shell-radius,6px);background:transparent;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.2));color:inherit;cursor:pointer;">Cancel</button>' + '<button type="button" data-add-ref-save style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:var(--vn-shell-radius,6px);background:var(--vn-shell-accent,#38bdf8);border:none;color:var(--vn-shell-accent-contrast,#041624);cursor:pointer;">Save Reference</button>' + "</div>";
+    addRefPanel.style.display = "none";
+    addRefPanel.innerHTML = '<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--vn-shell-accent,#38bdf8);">＋ Add Story Reference / Artifact</div>' + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' + '<input data-add-ref-name type="text" placeholder="Name (e.g. Carved Yew Staff, Flat 3)" style="min-height:44px;padding:6px 8px;font-size:12px;border-radius:var(--vn-shell-radius,6px);border:1px solid var(--vn-shell-border,rgba(255,255,255,0.15));background:var(--vn-shell-panel,rgba(0,0,0,0.25));color:inherit;" />' + '<select data-add-ref-kind style="min-height:44px;padding:6px 8px;font-size:12px;border-radius:var(--vn-shell-radius,6px);border:1px solid var(--vn-shell-border,rgba(255,255,255,0.15));background:var(--vn-shell-panel,rgba(0,0,0,0.25));color:inherit;">' + '<option value="object">\uD83D\uDC8E Item / Unique Artifact</option>' + '<option value="place">\uD83D\uDCCD Location / Place</option>' + "</select></div>" + '<textarea data-add-ref-desc placeholder="Physical description, materials, visual traits (e.g. carved yew staff encrusted in diamonds wrapped in vines)..." style="width:100%;height:60px;box-sizing:border-box;padding:6px 8px;font-size:12px;border-radius:var(--vn-shell-radius,6px);border:1px solid var(--vn-shell-border,rgba(255,255,255,0.15));background:var(--vn-shell-panel,rgba(0,0,0,0.25));color:inherit;margin-bottom:8px;"></textarea>' + '<p data-add-ref-error hidden role="alert" style="margin:0 0 8px;font-size:11px;color:#fca5a5;"></p>' + '<div style="display:flex;justify-content:flex-end;gap:8px;">' + '<button type="button" data-add-ref-cancel style="min-height:44px;padding:6px 12px;font-size:12px;border-radius:var(--vn-shell-radius,6px);background:transparent;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.2));color:inherit;cursor:pointer;">Cancel</button>' + '<button type="button" data-add-ref-save style="min-height:44px;padding:6px 14px;font-size:12px;font-weight:700;border-radius:var(--vn-shell-radius,6px);background:var(--vn-shell-accent,#38bdf8);border:none;color:var(--vn-shell-accent-contrast,#041624);cursor:pointer;">Save Reference</button>' + "</div>";
     panel.append(addRefPanel);
+    const addErrEl = addRefPanel.querySelector("[data-add-ref-error]");
     addRefBtn.onclick = () => {
+      addErrEl.hidden = true;
       addRefPanel.style.display = addRefPanel.style.display === "none" ? "block" : "none";
       if (addRefPanel.style.display === "block") {
         addRefPanel.querySelector("[data-add-ref-name]")?.focus();
       }
     };
     addRefPanel.querySelector("[data-add-ref-cancel]").addEventListener("click", () => {
+      addErrEl.hidden = true;
       addRefPanel.style.display = "none";
     });
     addRefPanel.querySelector("[data-add-ref-save]").addEventListener("click", () => {
@@ -31582,64 +32089,72 @@ class DossierCard {
       const name = nameInput.value.trim();
       const kind = kindSelect.value;
       const desc = descInput.value.trim();
-      if (!name || !desc)
+      if (!name || !desc) {
+        addErrEl.textContent = !name ? "Enter a name for the location or item." : "Enter a brief visual or story description before saving.";
+        addErrEl.hidden = false;
         return;
+      }
+      addErrEl.hidden = true;
+      const slug = kind === "place" ? createLocationId(name) : createItemId(name);
+      const canonicalId = kind === "place" ? `dna:loc:${slug}` : `dna:item:${slug}`;
+      const nowTs = Date.now();
       const newEntity = {
-        id: "custom:" + Date.now() + ":" + name.toLowerCase().replace(/[^a-z0-9]/g, ""),
+        id: canonicalId,
         name,
         kind,
-        aliases: [],
+        aliases: deriveShortAliases(name),
         firstParagraph: 0,
         facts: [{
-          id: "f_custom_" + Date.now(),
-          entityId: name,
+          id: `f_custom_${nowTs}`,
+          entityId: canonicalId,
           field: "description",
           value: desc,
           visibility: "observed",
-          source: { provider: "user", recordId: "manual", observedAt: Date.now() },
+          source: { provider: "user", recordId: "manual", observedAt: nowTs },
           revealedAt: { key: { chatId: "manual" }, paragraphIndex: 0 }
         }]
       };
+      const existingIdx = entries.findIndex((e) => e.entity.id === canonicalId || e.entity.kind === kind && e.entity.name.toLowerCase() === name.toLowerCase());
+      if (existingIdx >= 0)
+        entries.splice(existingIdx, 1);
       entries.unshift({
         entity: newEntity,
         current: true,
         pinned: true,
-        label: name + ": " + desc,
-        overview: desc,
-        earlier: false
+        label: desc
       });
       if (this.storyDnaRequester) {
         if (kind === "place") {
           this.storyDnaRequester({
             action: "save_location",
             location: {
-              id: createLocationId(name),
+              id: slug,
               name,
               aliases: deriveShortAliases(name),
               environmentDescription: desc.slice(0, 2000),
               persistentElements: [],
               connectedLocations: [],
               autoDiscovered: false,
-              lastUpdated: Date.now()
+              lastUpdated: nowTs
             }
           });
         } else {
           this.storyDnaRequester({
             action: "save_item",
             item: {
-              id: createItemId(name),
+              id: slug,
               name,
               aliases: deriveShortAliases(name),
               description: desc.slice(0, 2000),
               distinctiveFeatures: [],
               colors: [],
               autoDiscovered: false,
-              lastUpdated: Date.now()
+              lastUpdated: nowTs
             }
           });
         }
       }
-      this.selectedEntityId = newEntity.id;
+      this.selectedEntityId = canonicalId;
       addRefPanel.style.display = "none";
       nameInput.value = "";
       descInput.value = "";
@@ -31657,9 +32172,11 @@ class DossierCard {
     atlasTabBtn.type = "button";
     atlasTabBtn.className = "chip";
     atlasTabBtn.dataset.worldHubTab = "atlas";
-    atlasTabBtn.textContent = "\uD83D\uDDFA️ Connected Atlas";
+    atlasTabBtn.textContent = "\uD83D\uDDFA️ Story Atlas & Threads";
     sceneTabBtn.onclick = () => {
       this.hubView = "scene";
+      this.linkMode = false;
+      this.linkSourceId = null;
       render2();
     };
     atlasTabBtn.onclick = () => {
@@ -31677,14 +32194,11 @@ class DossierCard {
     const sectionHead = document.createElement("div");
     sectionHead.style.cssText = "font-size:10.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;opacity:0.8;margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center;";
     const sectionHeadLabel = document.createElement("span");
-    sectionHeadLabel.textContent = "Known in this scene";
+    sectionHeadLabel.textContent = "World Directory";
     const countBadge = document.createElement("span");
     countBadge.style.cssText = "font-size:9px;opacity:0.65;font-weight:600;";
     sectionHead.append(sectionHeadLabel, countBadge);
     panel.append(sectionHead);
-    const worldStrip = document.createElement("div");
-    worldStrip.className = "world-strip";
-    panel.append(worldStrip);
     const count = document.createElement("p");
     count.dataset.referenceCount = "";
     count.setAttribute("role", "status");
@@ -31692,8 +32206,10 @@ class DossierCard {
     const list = document.createElement("div");
     list.dataset.referenceList = "";
     panel.append(count, list);
+    const hiddenDrawerHost = document.createElement("div");
+    panel.append(hiddenDrawerHost);
     const render2 = () => {
-      for (const button of tabs.querySelectorAll("button")) {
+      for (const button of tabs.querySelectorAll("button[data-reference-category]")) {
         const isActive = button.dataset.referenceCategory === category.value;
         button.setAttribute("aria-pressed", String(isActive));
         if (isActive)
@@ -31705,7 +32221,7 @@ class DossierCard {
       this.category = category.value;
       this.scope = scope.value;
       list.replaceChildren();
-      worldStrip.replaceChildren();
+      hiddenDrawerHost.replaceChildren();
       sceneTabBtn.setAttribute("aria-pressed", String(this.hubView === "scene"));
       atlasTabBtn.setAttribute("aria-pressed", String(this.hubView === "atlas"));
       if (this.hubView === "scene")
@@ -31717,13 +32233,24 @@ class DossierCard {
       else
         atlasTabBtn.classList.remove("active");
       worldSheet.replaceChildren();
-      const filtered = entries.filter(({ entity }) => entity.kind !== "npc" && (this.scope === "all" || !entity.id.startsWith("earlier:")) && (this.category === "all" || entity.kind === this.category) && (!this.query.trim() || [entity.name, ...entity.aliases].some((name) => name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase()))));
-      count.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? "" : "s"}` : "No locations or items match. Try another filter.";
-      countBadge.textContent = `${filtered.length} FOUND`;
-      if (!filtered.some((e) => e.entity.id === this.selectedEntityId)) {
-        this.selectedEntityId = filtered[0]?.entity.id ?? null;
+      const allCombinedDocs = this.getCombinedDocuments();
+      const qLower = this.query.trim().toLocaleLowerCase();
+      const filteredDocs = allCombinedDocs.filter(({ doc: doc2 }) => !qLower || [doc2.name, ...doc2.aliases ?? [], doc2.kind].some((n) => n.toLocaleLowerCase().includes(qLower)));
+      const isDocumentMode = this.category === "document";
+      const filtered = entries.filter(({ entity }) => entity.kind !== "npc" && (this.scope === "all" || !entity.id.startsWith("earlier:")) && (this.category === "all" || !isDocumentMode && entity.kind === this.category) && (!qLower || [entity.name, ...entity.aliases].some((name) => name.toLocaleLowerCase().includes(qLower)))).sort((a, b) => Number(b.current) - Number(a.current) || Number(b.pinned) - Number(a.pinned) || a.entity.name.localeCompare(b.entity.name));
+      if (isDocumentMode) {
+        sectionHeadLabel.textContent = "Revealed Documents";
+        count.textContent = filteredDocs.length ? `${filteredDocs.length} document${filteredDocs.length === 1 ? "" : "s"}` : "No revealed documents match.";
+        countBadge.textContent = `${filteredDocs.length} DOCUMENTS`;
+      } else {
+        sectionHeadLabel.textContent = "Known in Story";
+        count.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? "" : "s"}` : "No locations or items match. Try another filter.";
+        countBadge.textContent = `${filtered.length} FOUND`;
+        if (!filtered.some((e) => e.entity.id === this.selectedEntityId)) {
+          this.selectedEntityId = filtered[0]?.entity.id ?? null;
+        }
       }
-      const activeEntry = filtered.find((e) => e.entity.id === this.selectedEntityId) ?? filtered[0];
+      const activeEntry = !isDocumentMode ? filtered.find((e) => e.entity.id === this.selectedEntityId) ?? filtered[0] : undefined;
       const castByKey = new Map;
       for (const c of this.sceneHubContext?.presentCast ?? []) {
         castByKey.set(c.name.trim().toLowerCase(), c);
@@ -31898,26 +32425,47 @@ class DossierCard {
         const atlasSection = document.createElement("div");
         atlasSection.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:6px;";
         const atlasBar = document.createElement("div");
-        atlasBar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;opacity:0.88;";
+        atlasBar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;opacity:0.9;";
         const legend = document.createElement("span");
-        legend.textContent = "★ Active · \uD83D\uDCCD Visited · Dashed = path";
+        legend.textContent = this.linkMode ? this.linkSourceId ? "\uD83D\uDD17 Tap second place to toggle route…" : "\uD83D\uDD17 Tap first place to link…" : "★ Current · \uD83D\uDCCD Visited · ○ Mentioned";
         let atlasZoom = Number(worldSheet.dataset.atlasZoom || "1");
         if (!Number.isFinite(atlasZoom) || atlasZoom < 0.7 || atlasZoom > 1.8)
           atlasZoom = 1;
         const zoomControls = document.createElement("div");
-        zoomControls.style.cssText = "display:flex;align-items:center;gap:4px;";
+        zoomControls.style.cssText = "display:flex;align-items:center;gap:4px;flex-wrap:wrap;";
         const atlasViewport = document.createElement("div");
-        atlasViewport.style.cssText = "overflow:auto;max-height:240px;border-radius:10px;border:1px solid var(--vn-panel-border,rgba(255,255,255,.16));background:rgba(12,24,20,0.55);";
+        atlasViewport.className = "world-atlas-viewport";
+        atlasViewport.style.cssText = "overflow:auto;max-height:260px;border-radius:10px;border:1px solid var(--vn-panel-border,rgba(255,255,255,.16));background:rgba(12,24,20,0.55);";
+        const atlasSizer = document.createElement("div");
+        atlasSizer.style.cssText = "position:relative;";
         const atlasWrap = document.createElement("div");
         atlasWrap.className = "world-atlas-view";
         atlasWrap.dataset.worldAtlasView = "";
+        atlasWrap.style.width = "330px";
+        atlasWrap.style.height = "215px";
+        atlasWrap.style.transformOrigin = "top left";
         const applyAtlasZoom = (next) => {
           atlasZoom = Math.max(0.75, Math.min(1.75, Number(next.toFixed(2))));
           worldSheet.dataset.atlasZoom = String(atlasZoom);
+          atlasSizer.style.width = `${Math.round(330 * atlasZoom)}px`;
+          atlasSizer.style.height = `${Math.round(215 * atlasZoom)}px`;
           atlasWrap.style.transform = `scale(${atlasZoom})`;
-          atlasWrap.style.transformOrigin = "top left";
-          atlasWrap.style.width = `${Math.round(100 / Math.min(1, atlasZoom) * atlasZoom)}%`;
         };
+        if (this.storyDnaRequester) {
+          const linkBtn = document.createElement("button");
+          linkBtn.type = "button";
+          linkBtn.dataset.atlasLinkToggle = "";
+          linkBtn.className = `chip ${this.linkMode ? "active" : ""}`;
+          linkBtn.textContent = this.linkMode ? "Done Linking" : "\uD83D\uDD17 Link Places";
+          linkBtn.setAttribute("aria-pressed", String(this.linkMode));
+          linkBtn.style.cssText = "min-height:44px;padding:6px 10px;margin:0;font-size:11px;";
+          linkBtn.onclick = () => {
+            this.linkMode = !this.linkMode;
+            this.linkSourceId = null;
+            render2();
+          };
+          zoomControls.append(linkBtn);
+        }
         for (const [label, aria, delta] of [["−", "Zoom out atlas", -0.25], ["1:1", "Reset atlas zoom", 0], ["+", "Zoom in atlas", 0.25]]) {
           const zBtn = document.createElement("button");
           zBtn.type = "button";
@@ -31935,35 +32483,45 @@ class DossierCard {
             continue;
           const vis = visualResolver?.(e.entity);
           const dna = findMatchingLocation(this.storyDna.locations, e.entity.name);
+          const isAct = Boolean(vis?.isActiveLocation);
+          const hasDetails = Boolean(dna?.environmentDescription || dna?.persistentElements?.length || dna?.connectedLocations?.length || e.current);
           placeMap.set(createLocationId(e.entity.name), {
             id: createLocationId(e.entity.name),
+            ...dna ? { dnaId: dna.id } : {},
             name: e.entity.name,
             entryId: e.entity.id,
-            isActive: Boolean(vis?.isActiveLocation),
+            isActive: isAct,
+            state: isAct ? "active" : hasDetails ? "visited" : "mentioned",
             connections: [...new Set([...dna?.connectedLocations ?? [], ...vis?.connectedLocations ?? []])]
           });
         }
         for (const loc of Object.values(this.storyDna.locations)) {
           const key = createLocationId(loc.name);
           if (!placeMap.has(key)) {
+            const isAct = Boolean(this.sceneHubContext?.activeLocationName && createLocationId(this.sceneHubContext.activeLocationName) === key);
+            const isMentionOnly = loc.autoDiscovered && !loc.environmentDescription && !loc.persistentElements?.length && !loc.connectedLocations?.length;
             placeMap.set(key, {
               id: key,
+              dnaId: loc.id,
               name: loc.name,
               entryId: `dna:loc:${loc.id}`,
-              isActive: Boolean(this.sceneHubContext?.activeLocationName && createLocationId(this.sceneHubContext.activeLocationName) === key),
+              isActive: isAct,
+              state: isAct ? "active" : isMentionOnly ? "mentioned" : "visited",
               connections: loc.connectedLocations ?? []
             });
           }
         }
-        const nodes = [...placeMap.values()].slice(0, 10);
+        const nodes = [...placeMap.values()].filter((n) => !qLower || n.name.toLocaleLowerCase().includes(qLower));
         const coords = new Map;
         nodes.forEach((node2, idx) => {
           if (nodes.length === 1) {
             coords.set(node2.id, { x: 165, y: 105 });
           } else {
-            const angle = idx / nodes.length * Math.PI * 2 - Math.PI / 2;
-            const rx = 108;
-            const ry = 68;
+            const ring = Math.floor(idx / 10);
+            const ringCount = ring === 0 ? Math.min(nodes.length, 10) : Math.max(1, nodes.length - 10);
+            const angle = idx % 10 / ringCount * Math.PI * 2 - Math.PI / 2;
+            const rx = Math.max(48, 108 - ring * 34);
+            const ry = Math.max(32, 68 - ring * 22);
             coords.set(node2.id, {
               x: Math.round(165 + Math.cos(angle) * rx),
               y: Math.round(105 + Math.sin(angle) * ry)
@@ -31985,14 +32543,7 @@ class DossierCard {
             if (drawnEdges.has(edgeKey))
               continue;
             drawnEdges.add(edgeKey);
-            edgePaths.push(`<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="rgba(168,211,200,0.45)" stroke-width="1.8" stroke-dasharray="4 3"/>`);
-          }
-        }
-        if (nodes.length > 0 && edgePaths.length === 0) {
-          for (let i = 1;i < nodes.length; i++) {
-            const prev = coords.get(nodes[i - 1].id);
-            const curr = coords.get(nodes[i].id);
-            edgePaths.push(`<line x1="${prev.x}" y1="${prev.y}" x2="${curr.x}" y2="${curr.y}" stroke="rgba(168,211,200,0.22)" stroke-width="1.3" stroke-dasharray="3 5"/>`);
+            edgePaths.push(`<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="rgba(168,211,200,0.52)" stroke-width="1.8" stroke-dasharray="4 3"/>`);
           }
         }
         atlasWrap.innerHTML = `<svg class="world-map-svg" viewBox="0 0 330 210" aria-hidden="true">${edgePaths.join("")}</svg>`;
@@ -32000,13 +32551,48 @@ class DossierCard {
           const pt = coords.get(node2.id);
           const nodeBtn = document.createElement("button");
           nodeBtn.type = "button";
-          nodeBtn.className = `map-node-pill ${this.selectedEntityId === node2.entryId ? "active" : ""} ${node2.isActive ? "active-location" : ""}`;
+          nodeBtn.className = `map-node-pill ${this.selectedEntityId === node2.entryId || this.linkMode && this.linkSourceId === (node2.dnaId ?? node2.id) ? "active" : ""} ${node2.isActive ? "active-location" : ""}`;
           nodeBtn.style.left = `${Math.max(4, Math.min(68, Math.round(pt.x / 330 * 100 - 11)))}%`;
           nodeBtn.style.top = `${Math.max(4, Math.min(72, Math.round(pt.y / 210 * 100 - 10)))}%`;
           nodeBtn.style.maxWidth = "120px";
-          const badge = node2.isActive ? `★ ACTIVE · \uD83D\uDC65 ${presentCast.length}` : "Visited";
-          nodeBtn.innerHTML = html`<span class="index-dot"></span><b style="white-space:normal;line-height:1.2;word-break:break-word">${node2.isActive ? "★" : "\uD83D\uDCCD"} ${node2.name}</b><small>${badge}</small>`.value;
+          const icon = node2.state === "active" ? "★" : node2.state === "visited" ? "\uD83D\uDCCD" : "○";
+          const badge = node2.state === "active" ? `★ ACTIVE · \uD83D\uDC65 ${presentCast.length}` : node2.state === "visited" ? "Visited" : "Mentioned";
+          nodeBtn.innerHTML = html`<span class="index-dot"></span><b style="white-space:normal;line-height:1.2;word-break:break-word">${icon} ${node2.name}</b><small>${badge}</small>`.value;
           nodeBtn.onclick = () => {
+            if (this.linkMode && this.storyDnaRequester) {
+              const targetKey = node2.dnaId ?? node2.id;
+              if (!this.linkSourceId) {
+                this.linkSourceId = targetKey;
+                render2();
+                return;
+              }
+              if (this.linkSourceId !== targetKey) {
+                const srcNode = nodes.find((n) => (n.dnaId ?? n.id) === this.linkSourceId);
+                if (srcNode && !srcNode.dnaId) {
+                  this.storyDnaRequester({
+                    action: "save_location",
+                    location: { id: srcNode.id, name: srcNode.name, aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: Date.now() }
+                  });
+                }
+                if (!node2.dnaId) {
+                  this.storyDnaRequester({
+                    action: "save_location",
+                    location: { id: node2.id, name: node2.name, aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: Date.now() }
+                  });
+                }
+                const alreadyConnected = srcNode?.connections.some((c) => createLocationId(c) === node2.id) ?? false;
+                this.storyDnaRequester({
+                  action: "toggle_route",
+                  fromLocationId: this.linkSourceId,
+                  toLocationId: targetKey,
+                  connected: !alreadyConnected
+                });
+              }
+              this.linkSourceId = null;
+              this.linkMode = false;
+              render2();
+              return;
+            }
             if (node2.entryId) {
               this.selectedEntityId = node2.entryId;
               render2();
@@ -32021,76 +32607,251 @@ class DossierCard {
           emptyAtlas.textContent = "Visit or add locations to map the story atlas.";
           atlasWrap.append(emptyAtlas);
         }
-        atlasViewport.append(atlasWrap);
+        atlasSizer.append(atlasWrap);
+        atlasViewport.append(atlasSizer);
         atlasSection.append(atlasBar, atlasViewport);
-        const selectedAtlasNode = nodes.find((n) => n.entryId === this.selectedEntityId) ?? nodes.find((n) => n.isActive) ?? nodes[0];
-        if (selectedAtlasNode) {
-          const matchedEntry = entries.find((e) => e.entity.id === selectedAtlasNode.entryId || e.entity.kind === "place" && createLocationId(e.entity.name) === selectedAtlasNode.id);
-          const quickCard = document.createElement("div");
-          quickCard.className = "world-lens";
-          quickCard.dataset.atlasQuickCard = "";
-          quickCard.style.marginTop = "2px";
-          const qTitle = document.createElement("h3");
-          qTitle.textContent = `${selectedAtlasNode.isActive ? "★ " : "\uD83D\uDCCD "}${selectedAtlasNode.name}`;
-          const qMeta = document.createElement("p");
-          const connText = selectedAtlasNode.connections.length ? `Connected: ${selectedAtlasNode.connections.join(", ")}` : selectedAtlasNode.isActive ? "Current active location" : "Visited location";
-          qMeta.textContent = connText;
-          quickCard.append(qTitle, qMeta);
-          if (matchedEntry) {
-            const qBtn = document.createElement("button");
-            qBtn.type = "button";
-            qBtn.className = "world-lens-cta";
-            qBtn.textContent = "Inspect location →";
-            qBtn.onclick = () => open2(matchedEntry.entity.id, trigger);
-            quickCard.append(qBtn);
-          }
-          atlasSection.append(quickCard);
+        if (nodes.length >= 2 && edgePaths.length === 0) {
+          const noRouteMsg = document.createElement("p");
+          noRouteMsg.dataset.atlasEmptyRoutes = "";
+          noRouteMsg.className = "world-scene-empty";
+          noRouteMsg.textContent = "No routes mapped yet — tap Link Places to connect locations.";
+          atlasSection.append(noRouteMsg);
         }
         worldSheet.append(atlasSection);
       }
-      if ((this.storyDna.chapterCodex?.length ?? 0) > 0 || (this.storyDna.thoughtCabinet?.length ?? 0) > 0) {
-        const codexCard = document.createElement("div");
-        codexCard.style.cssText = "display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.2);";
-        codexCard.dataset.worldCodexSection = "";
-        if (this.storyDna.chapterCodex?.length) {
-          const chHdr = document.createElement("div");
-          chHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#a7f3d0;";
-          chHdr.textContent = `\uD83D\uDCD6 Chapter Codex (${this.storyDna.chapterCodex.length})`;
-          const chList = document.createElement("div");
-          chList.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;";
-          for (const ch of this.storyDna.chapterCodex.slice(-6).reverse()) {
-            const pill = document.createElement("span");
-            pill.style.cssText = "font-size:11px;padding:4px 8px;border-radius:7px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.28);color:#e2e8f0;";
-            pill.title = ch.summary;
-            pill.textContent = ch.title;
-            chList.append(pill);
-          }
-          codexCard.append(chHdr, chList);
+      const threads = this.storyDna.thoughtCabinet ?? [];
+      const beliefNpcs = Object.entries(this.storyDna.npcBeliefs ?? {}).filter(([, b]) => b.length > 0);
+      const codex = this.storyDna.chapterCodex ?? [];
+      const threadsCard = document.createElement("div");
+      threadsCard.className = "world-threads-card";
+      threadsCard.dataset.worldThreadsSection = "";
+      const thHead = document.createElement("div");
+      thHead.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;";
+      const thHdr = document.createElement("span");
+      thHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#fde68a;";
+      thHdr.textContent = `\uD83E\uDDF5 Story Threads (${threads.length})`;
+      thHead.append(thHdr);
+      const newThreadForm = document.createElement("div");
+      newThreadForm.hidden = true;
+      newThreadForm.style.cssText = "display:grid;gap:6px;padding:8px;border-radius:8px;background:rgba(0,0,0,0.22);border:1px solid rgba(255,255,255,0.12);margin-top:4px;";
+      if (this.storyDnaRequester) {
+        const addThreadBtn = document.createElement("button");
+        addThreadBtn.type = "button";
+        addThreadBtn.dataset.addThreadBtn = "";
+        addThreadBtn.className = "chip";
+        addThreadBtn.textContent = "+ New Thread";
+        addThreadBtn.style.cssText = "min-height:44px;padding:4px 10px;font-size:11px;margin:0;";
+        addThreadBtn.onclick = () => {
+          newThreadForm.hidden = !newThreadForm.hidden;
+        };
+        thHead.append(addThreadBtn);
+        const tTitle = document.createElement("input");
+        tTitle.type = "text";
+        tTitle.placeholder = "Thread title (e.g. Find Room 47, Keep promise to Naomi)…";
+        tTitle.dataset.newThreadTitle = "";
+        tTitle.style.cssText = "min-height:44px;padding:6px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.3);color:inherit;font-size:12px;";
+        const tCat = document.createElement("select");
+        tCat.dataset.newThreadCategory = "";
+        tCat.style.cssText = "min-height:44px;padding:6px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.3);color:inherit;font-size:12px;";
+        for (const cat of ["quest", "goal", "bond", "promise", "mystery", "secret", "foreshadowing", "fact"]) {
+          const opt = document.createElement("option");
+          opt.value = cat;
+          opt.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+          tCat.append(opt);
         }
-        if (this.storyDna.thoughtCabinet?.length) {
-          const tcHdr = document.createElement("div");
-          tcHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#fde68a;margin-top:2px;";
-          tcHdr.textContent = `\uD83E\uDDE0 Thought Cabinet (${this.storyDna.thoughtCabinet.length})`;
-          const tcList = document.createElement("div");
-          tcList.style.cssText = "display:flex;flex-direction:column;gap:4px;";
-          for (const tc of this.storyDna.thoughtCabinet.slice(-4).reverse()) {
+        const tDesc = document.createElement("textarea");
+        tDesc.placeholder = "Notes or current stakes…";
+        tDesc.dataset.newThreadDesc = "";
+        tDesc.style.cssText = "min-height:54px;padding:6px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.3);color:inherit;font-size:12px;margin:0;";
+        const tSave = document.createElement("button");
+        tSave.type = "button";
+        tSave.dataset.saveThreadBtn = "";
+        tSave.className = "world-lens-cta";
+        tSave.textContent = "Save Thread";
+        tSave.onclick = () => {
+          const titleVal = tTitle.value.trim();
+          if (!titleVal)
+            return;
+          this.storyDnaRequester?.({
+            action: "save_thread",
+            thread: {
+              id: `thread-${Date.now().toString(36)}`,
+              title: titleVal,
+              category: tCat.value,
+              description: tDesc.value.trim(),
+              status: "active",
+              updatedAt: Date.now()
+            }
+          });
+          tTitle.value = "";
+          tDesc.value = "";
+          newThreadForm.hidden = true;
+        };
+        newThreadForm.append(tTitle, tCat, tDesc, tSave);
+      }
+      threadsCard.append(thHead, newThreadForm);
+      if (threads.length > 0) {
+        const thList = document.createElement("div");
+        thList.style.cssText = "display:flex;flex-direction:column;gap:6px;margin-top:6px;";
+        const normalizeStatus = (s) => s === "germinating" ? "active" : s === "internalized" ? "developing" : s;
+        const nextStatusOf = (s) => s === "active" ? "developing" : s === "developing" ? "resolved" : "active";
+        for (const tc of [...threads].reverse()) {
+          const row = document.createElement("div");
+          row.dataset.threadRow = tc.id;
+          row.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:11.5px;line-height:1.4;padding:7px 9px;border-radius:8px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);color:#fef3c7;";
+          const bodyDiv = document.createElement("div");
+          bodyDiv.style.cssText = "flex:1;min-width:0;";
+          const b = document.createElement("strong");
+          b.textContent = `[${tc.category}] ${tc.title}`;
+          const p = document.createElement("div");
+          p.style.cssText = "opacity:0.88;margin-top:2px;";
+          p.textContent = tc.description;
+          bodyDiv.append(b);
+          if (tc.description)
+            bodyDiv.append(p);
+          const actionsCol = document.createElement("div");
+          actionsCol.style.cssText = "display:flex;gap:4px;align-items:center;flex:none;";
+          const curStatus = normalizeStatus(tc.status);
+          const statusBtn = document.createElement("button");
+          statusBtn.type = "button";
+          statusBtn.dataset.threadStatusBtn = tc.id;
+          statusBtn.textContent = curStatus.charAt(0).toUpperCase() + curStatus.slice(1);
+          statusBtn.title = "Tap to cycle thread status";
+          statusBtn.style.cssText = "min-height:44px;min-width:44px;padding:4px 8px;margin:0;font-size:10.5px;border-radius:6px;";
+          statusBtn.disabled = !this.storyDnaRequester;
+          statusBtn.onclick = () => {
+            this.storyDnaRequester?.({
+              action: "save_thread",
+              thread: { ...tc, status: nextStatusOf(curStatus), updatedAt: Date.now() }
+            });
+          };
+          actionsCol.append(statusBtn);
+          if (this.storyDnaRequester) {
+            const rmBtn = document.createElement("button");
+            rmBtn.type = "button";
+            rmBtn.dataset.threadDeleteBtn = tc.id;
+            rmBtn.textContent = "×";
+            rmBtn.setAttribute("aria-label", `Delete thread ${tc.title}`);
+            rmBtn.style.cssText = "min-width:44px;min-height:44px;padding:4px 8px;margin:0;font-size:14px;border-radius:6px;";
+            rmBtn.onclick = () => this.storyDnaRequester?.({ action: "delete_thread", threadId: tc.id });
+            actionsCol.append(rmBtn);
+          }
+          row.append(bodyDiv, actionsCol);
+          thList.append(row);
+        }
+        threadsCard.append(thList);
+      } else {
+        const emptyTh = document.createElement("p");
+        emptyTh.className = "world-scene-empty";
+        emptyTh.textContent = "No active threads yet. Add goals, bonds, mysteries, or promises to keep track across turns.";
+        threadsCard.append(emptyTh);
+      }
+      if (this.hubView === "atlas" || threads.length > 0) {
+        worldSheet.append(threadsCard);
+      }
+      if (beliefNpcs.length > 0 && (this.hubView === "atlas" || this.sceneHubContext?.presentCast.length)) {
+        const perspCard = document.createElement("div");
+        perspCard.className = "world-threads-card";
+        perspCard.dataset.worldPerspectivesSection = "";
+        const pHdr = document.createElement("div");
+        pHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#93c5fd;margin-bottom:6px;";
+        pHdr.textContent = `\uD83D\uDC41️ Perspectives · Who Believes What`;
+        const pFilterRow = document.createElement("div");
+        pFilterRow.className = "chip-row";
+        for (const npc of ["all", ...beliefNpcs.map(([n]) => n)]) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `chip ${this.perspectiveFilter === npc ? "active" : ""}`;
+          btn.dataset.perspectiveFilter = npc;
+          btn.textContent = npc === "all" ? "All Cast" : npc;
+          btn.onclick = () => {
+            this.perspectiveFilter = npc;
+            render2();
+          };
+          pFilterRow.append(btn);
+        }
+        const bList = document.createElement("div");
+        bList.style.cssText = "display:flex;flex-direction:column;gap:5px;";
+        for (const [npc, items] of beliefNpcs) {
+          if (this.perspectiveFilter !== "all" && this.perspectiveFilter !== npc)
+            continue;
+          for (const item of items) {
             const row = document.createElement("div");
-            row.style.cssText = "font-size:11px;line-height:1.35;padding:5px 8px;border-radius:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);color:#fef3c7;";
-            const b = document.createElement("strong");
-            b.textContent = `[${tc.category}] ${tc.title}: `;
+            row.style.cssText = "font-size:11.5px;padding:6px 8px;border-radius:6px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.22);color:#e0f2fe;";
+            const strong = document.createElement("strong");
+            strong.textContent = `${npc} · ${item.topic}: `;
             const span = document.createElement("span");
-            span.textContent = tc.description.slice(0, 120);
-            row.append(b, span);
-            tcList.append(row);
+            span.textContent = item.belief;
+            row.append(strong, span);
+            bList.append(row);
           }
-          codexCard.append(tcHdr, tcList);
         }
+        perspCard.append(pHdr, pFilterRow, bList);
+        worldSheet.append(perspCard);
+      }
+      if (codex.length > 0) {
+        const codexCard = document.createElement("div");
+        codexCard.className = "world-threads-card";
+        codexCard.dataset.worldCodexSection = "";
+        const chHdr = document.createElement("div");
+        chHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#a7f3d0;margin-bottom:6px;";
+        chHdr.textContent = `\uD83D\uDCD6 Chapter Codex (${codex.length})`;
+        const chList = document.createElement("div");
+        chList.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+        for (const ch of codex.slice(-6).reverse()) {
+          const item = document.createElement("div");
+          item.style.cssText = "padding:8px 10px;border-radius:8px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.26);color:#e2e8f0;font-size:11.5px;";
+          const top = document.createElement("div");
+          top.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;";
+          const tSpan = document.createElement("span");
+          tSpan.textContent = `${ch.title} · \uD83D\uDCCD ${ch.where || ch.location}`;
+          top.append(tSpan);
+          if (ch.messageId && this.sceneHubContext?.onJumpToMessage) {
+            const jumpBtn = document.createElement("button");
+            jumpBtn.type = "button";
+            jumpBtn.dataset.codexJump = ch.messageId;
+            jumpBtn.textContent = "Jump ↗";
+            jumpBtn.style.cssText = "min-height:36px;padding:4px 8px;margin:0;font-size:10.5px;";
+            jumpBtn.onclick = () => this.sceneHubContext?.onJumpToMessage?.(ch.messageId);
+            top.append(jumpBtn);
+          }
+          const sum = document.createElement("p");
+          sum.style.cssText = "margin:4px 0 0;opacity:0.88;line-height:1.4;";
+          sum.textContent = ch.summary;
+          item.append(top, sum);
+          if (ch.who?.length) {
+            const whoLine = document.createElement("small");
+            whoLine.style.cssText = "display:block;margin-top:3px;opacity:0.75;";
+            whoLine.textContent = `Cast: ${ch.who.join(", ")}`;
+            item.append(whoLine);
+          }
+          chList.append(item);
+        }
+        codexCard.append(chHdr, chList);
         worldSheet.append(codexCard);
       }
       const lensCard = document.createElement("div");
       lensCard.className = "world-lens";
-      if (activeEntry) {
+      if (isDocumentMode && filteredDocs.length > 0) {
+        const selectedDoc = filteredDocs.find((d) => d.doc.id === this.selectedEntityId)?.doc ?? filteredDocs[0].doc;
+        this.selectedEntityId = selectedDoc.id;
+        const lensTitle = document.createElement("h3");
+        lensTitle.textContent = formatDocumentDisplayTitle(selectedDoc.name, selectedDoc.kind);
+        const lensDesc = document.createElement("p");
+        lensDesc.textContent = selectedDoc.sections[0]?.text?.slice(0, 140) || selectedDoc.visualDetails || selectedDoc.observations?.[0]?.summary || `${selectedDoc.kind.toUpperCase()} revealed in the story.`;
+        const readBtn = document.createElement("button");
+        readBtn.type = "button";
+        readBtn.className = "world-lens-cta";
+        readBtn.dataset.worldLensReadDoc = selectedDoc.id;
+        readBtn.textContent = "\uD83D\uDCC4 Read / Inspect Document →";
+        readBtn.onclick = () => {
+          this.openDocument(selectedDoc, () => this.openTray(entries, trigger, open2, note, visualResolver), trigger);
+        };
+        lensCard.append(lensTitle, lensDesc, readBtn);
+      } else if (activeEntry) {
         const vis = visualResolver?.(activeEntry.entity);
+        const entryNames = new Set([activeEntry.entity.name, ...activeEntry.entity.aliases].map((s) => s.trim().toLowerCase()));
+        const matchedDoc = activeEntry.entity.kind === "object" ? allCombinedDocs.find(({ doc: doc2 }) => entryNames.has(doc2.name.trim().toLowerCase()) || (doc2.aliases ?? []).some((a) => entryNames.has(a.trim().toLowerCase())))?.doc : undefined;
         const lensTitle = document.createElement("h3");
         lensTitle.textContent = activeEntry.entity.name;
         const lensDesc = document.createElement("p");
@@ -32098,13 +32859,14 @@ class DossierCard {
         const ctaBtn = document.createElement("button");
         ctaBtn.type = "button";
         ctaBtn.className = "world-lens-cta";
-        ctaBtn.textContent = activeEntry.entity.kind === "object" ? "See known documents →" : "Inspect reference →";
+        ctaBtn.textContent = matchedDoc ? "\uD83D\uDCC4 Read / Inspect Document →" : activeEntry.entity.kind === "place" ? "Inspect location →" : "Inspect item →";
         ctaBtn.onclick = () => {
           open2(activeEntry.entity.id, trigger);
         };
         const hideBtn = document.createElement("button");
         hideBtn.type = "button";
-        hideBtn.style.cssText = "display:inline-block;margin-top:6px!important;margin-left:6px!important;min-height:0!important;min-width:0!important;padding:4px 10px!important;font-size:10.5px!important;font-weight:600!important;border-radius:6px!important;background:rgba(255,255,255,0.08)!important;color:var(--vn-muted-text,#d1dfd5)!important;border:1px solid rgba(255,255,255,0.18)!important;cursor:pointer;";
+        hideBtn.dataset.worldLensHide = "";
+        hideBtn.style.cssText = "display:inline-block;margin-top:6px!important;margin-left:6px!important;min-height:44px!important;min-width:44px!important;padding:6px 12px!important;font-size:11px!important;font-weight:600!important;border-radius:8px!important;background:rgba(255,255,255,0.08)!important;color:var(--vn-muted-text,#d1dfd5)!important;border:1px solid rgba(255,255,255,0.18)!important;cursor:pointer;";
         hideBtn.textContent = "✕ Hide from Lens";
         hideBtn.title = "Hide this reference from World Lens";
         hideBtn.onclick = () => {
@@ -32116,9 +32878,23 @@ class DossierCard {
             render2();
           }
         };
-        lensCard.append(lensTitle, lensDesc, ctaBtn, hideBtn);
+        lensCard.append(lensTitle, lensDesc, ctaBtn);
+        if (activeEntry.entity.kind === "place" && !vis?.isActiveLocation && this.sceneHubContext?.actionsEnabled && this.sceneHubContext.onDraftAction) {
+          const goBtn = document.createElement("button");
+          goBtn.type = "button";
+          goBtn.className = "world-lens-cta";
+          goBtn.style.marginLeft = "6px";
+          goBtn.dataset.worldLensGoTo = activeEntry.entity.name;
+          goBtn.textContent = `Head to ${activeEntry.entity.name}`;
+          goBtn.onclick = () => {
+            this.sceneHubContext?.onDraftAction?.(`I head to ${activeEntry.entity.name}.`);
+            this.close();
+          };
+          lensCard.append(goBtn);
+        }
+        lensCard.append(hideBtn);
       } else {
-        lensCard.innerHTML = "<h3>No matching references</h3><p>Try another category or clear the search.</p>";
+        lensCard.innerHTML = isDocumentMode ? "<h3>No revealed documents yet</h3><p>Letters, notes, flyers, receipts, and screens spotted in narration will collect here across turns.</p>" : "<h3>No matching references</h3><p>Try another category or clear the search.</p>";
         const resetBtn = document.createElement("button");
         resetBtn.type = "button";
         resetBtn.className = "world-lens-cta";
@@ -32134,7 +32910,7 @@ class DossierCard {
         };
         lensCard.append(resetBtn);
         const missingLoc = this.sceneHubContext?.activeLocationName;
-        if (missingLoc && missingLoc !== "Current Story Scene" && !findMatchingLocation(this.storyDna.locations, missingLoc) && this.storyDnaRequester) {
+        if (!isDocumentMode && missingLoc && missingLoc !== "Current Story Scene" && !findMatchingLocation(this.storyDna.locations, missingLoc) && this.storyDnaRequester) {
           const pinFallbackBtn = document.createElement("button");
           pinFallbackBtn.type = "button";
           pinFallbackBtn.className = "world-lens-cta";
@@ -32165,71 +32941,137 @@ class DossierCard {
         }
       }
       lensSlot.replaceChildren(lensCard);
-      for (const { entity, pinned } of filtered) {
-        const vis = visualResolver?.(entity);
-        const stripBtn = document.createElement("button");
-        stripBtn.type = "button";
-        stripBtn.setAttribute("aria-label", entity.name);
-        stripBtn.setAttribute("aria-pressed", String(this.selectedEntityId === entity.id));
-        stripBtn.className = this.selectedEntityId === entity.id ? "active" : "";
-        if (vis?.imageUrl) {
-          const img = document.createElement("img");
-          img.src = vis.imageUrl;
-          img.alt = "";
-          stripBtn.append(img);
-        } else {
-          const initials = document.createElement("span");
-          initials.className = "thumb-initials";
-          initials.textContent = entity.kind === "npc" ? entityInitials(entity.name) : entity.kind === "place" ? "\uD83D\uDCCD" : "✦";
-          stripBtn.append(initials);
+      if (isDocumentMode) {
+        for (const { doc: doc2, customNote, inCurrentTurn } of filteredDocs) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.dataset.referenceCurrent = String(inCurrentTurn);
+          button.dataset.referenceKindItem = "document";
+          button.dataset.documentRowId = doc2.id;
+          const displayTitle = formatDocumentDisplayTitle(doc2.name, doc2.kind);
+          button.setAttribute("aria-label", displayTitle);
+          const thumb = document.createElement("span");
+          thumb.dataset.referenceThumb = "object";
+          thumb.textContent = "\uD83D\uDCC4";
+          const body2 = document.createElement("span");
+          body2.dataset.referenceRowBody = "";
+          const nameSpan = document.createElement("span");
+          nameSpan.dataset.referenceRowTitle = "";
+          nameSpan.textContent = displayTitle;
+          const detail = document.createElement("small");
+          detail.textContent = `${doc2.kind.toUpperCase()} · ${doc2.sections.length ? `${doc2.sections.length} passage${doc2.sections.length === 1 ? "" : "s"}` : doc2.observations?.length ? "Visual details observed" : "Spotted"}${customNote ? " · ✎ Note" : ""}`;
+          body2.append(nameSpan, detail);
+          button.append(thumb, body2);
+          button.onclick = () => {
+            this.selectedEntityId = doc2.id;
+            this.openDocument(doc2, () => this.openTray(entries, trigger, open2, note, visualResolver), trigger);
+          };
+          list.append(button);
         }
-        const info = document.createElement("span");
-        info.innerHTML = html`<b>${entity.name}</b><small>${pinned ? "\uD83D\uDCCC " : ""}${entity.kind === "npc" ? "Character" : entity.kind === "place" ? "Location" : "Item"}</small>`.value;
-        stripBtn.append(info);
-        stripBtn.onclick = () => {
-          this.selectedEntityId = entity.id;
-          render2();
-        };
-        worldStrip.append(stripBtn);
+      } else {
+        for (const { entity, pinned, label, current: isCurrent } of filtered) {
+          const vis = visualResolver?.(entity);
+          const button = document.createElement("button");
+          button.type = "button";
+          button.dataset.referenceCurrent = String(isCurrent);
+          button.dataset.referenceKindItem = entity.kind;
+          button.setAttribute("aria-label", entity.name);
+          button.setAttribute("aria-description", `${pinned ? "Pinned. " : ""}${label}`);
+          const thumb = document.createElement("span");
+          thumb.dataset.referenceThumb = entity.kind;
+          if (vis?.imageUrl) {
+            const img = document.createElement("img");
+            img.src = vis.imageUrl;
+            img.alt = "";
+            img.loading = "lazy";
+            thumb.append(img);
+          } else {
+            thumb.textContent = entity.kind === "npc" ? entityInitials(entity.name) : entity.kind === "place" ? "\uD83D\uDCCD" : "✦";
+          }
+          const body2 = document.createElement("span");
+          body2.dataset.referenceRowBody = "";
+          const nameSpan = document.createElement("span");
+          nameSpan.dataset.referenceRowTitle = "";
+          nameSpan.textContent = entity.name;
+          const detail = document.createElement("small");
+          detail.textContent = `${pinned ? "\uD83D\uDCCC Pinned · " : ""}${entity.kind === "npc" ? "Character" : entity.kind === "place" ? "Location" : "Item"} · ${label}`;
+          body2.append(nameSpan, detail);
+          if (vis?.summarySnippet) {
+            const snippet = document.createElement("small");
+            snippet.dataset.referenceSnippet = "";
+            snippet.textContent = vis.summarySnippet.length > 90 ? `${vis.summarySnippet.slice(0, 90).trimEnd()}…` : vis.summarySnippet;
+            body2.append(snippet);
+          }
+          button.append(thumb, body2);
+          button.onclick = () => open2(entity.id, trigger);
+          list.append(button);
+        }
       }
-      for (const { entity, pinned, label, current: isCurrent } of filtered) {
-        const vis = visualResolver?.(entity);
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset.referenceCurrent = String(isCurrent);
-        button.dataset.referenceKindItem = entity.kind;
-        button.setAttribute("aria-label", entity.name);
-        button.setAttribute("aria-description", `${pinned ? "Pinned. " : ""}${label}`);
-        const thumb = document.createElement("span");
-        thumb.dataset.referenceThumb = entity.kind;
-        if (vis?.imageUrl) {
-          const img = document.createElement("img");
-          img.src = vis.imageUrl;
-          img.alt = "";
-          img.loading = "lazy";
-          thumb.append(img);
-        } else {
-          thumb.textContent = entity.kind === "npc" ? entityInitials(entity.name) : entity.kind === "place" ? "\uD83D\uDCCD" : "✦";
+      const suppressedList = (this.sceneHubContext?.hiddenOverrides ?? []).filter((o) => o.kind !== "npc");
+      const deletedLocs = Object.values(this.storyDna.deletedLocations ?? {});
+      const deletedItems = Object.values(this.storyDna.deletedItems ?? {});
+      const hiddenTotal = suppressedList.length + deletedLocs.length + deletedItems.length;
+      if (hiddenTotal > 0) {
+        const drawer = document.createElement("details");
+        drawer.dataset.hiddenDeletedDrawer = "";
+        drawer.style.cssText = "margin-top:14px;border-top:1px solid var(--vn-panel-border,#666);padding-top:6px;";
+        const summary = document.createElement("summary");
+        summary.textContent = `Hidden / Deleted (${hiddenTotal})`;
+        drawer.append(summary);
+        const rowWrap = document.createElement("div");
+        rowWrap.style.cssText = "display:grid;gap:6px;padding:6px 0 12px;";
+        for (const item of suppressedList) {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.04);font-size:12px;";
+          const lbl = document.createElement("span");
+          lbl.textContent = `${item.kind === "place" ? "\uD83D\uDCCD" : "✦"} ${item.name} (hidden)`;
+          const unhide = document.createElement("button");
+          unhide.type = "button";
+          unhide.dataset.unhideOverride = `${item.kind}:${item.name}`;
+          unhide.textContent = "Unhide";
+          unhide.style.cssText = "min-height:44px;margin:0;padding:6px 12px;font-size:11px;";
+          unhide.onclick = () => {
+            this.sceneHubContext?.onUnhideOverride?.(item.kind, item.name);
+            render2();
+          };
+          row.append(lbl, unhide);
+          rowWrap.append(row);
         }
-        const body2 = document.createElement("span");
-        body2.dataset.referenceRowBody = "";
-        const nameSpan = document.createElement("span");
-        nameSpan.dataset.referenceRowTitle = "";
-        nameSpan.textContent = entity.name;
-        const detail = document.createElement("small");
-        detail.textContent = `${pinned ? "\uD83D\uDCCC Pinned · " : ""}${entity.kind === "npc" ? "Character" : entity.kind === "place" ? "Location" : "Item"} · ${label}`;
-        body2.append(nameSpan, detail);
-        if (vis?.summarySnippet) {
-          const snippet = document.createElement("small");
-          snippet.dataset.referenceSnippet = "";
-          snippet.textContent = vis.summarySnippet.length > 90 ? `${vis.summarySnippet.slice(0, 90).trimEnd()}…` : vis.summarySnippet;
-          body2.append(snippet);
+        for (const loc of deletedLocs) {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.04);font-size:12px;";
+          const lbl = document.createElement("span");
+          lbl.textContent = `\uD83D\uDCCD ${loc.name} (deleted DNA)`;
+          const restore = document.createElement("button");
+          restore.type = "button";
+          restore.dataset.restoreLocationId = loc.id;
+          restore.textContent = "Restore";
+          restore.disabled = !this.storyDnaRequester;
+          restore.style.cssText = "min-height:44px;margin:0;padding:6px 12px;font-size:11px;";
+          restore.onclick = () => this.storyDnaRequester?.({ action: "restore_location", locationId: loc.id });
+          row.append(lbl, restore);
+          rowWrap.append(row);
         }
-        button.append(thumb, body2);
-        button.onclick = () => open2(entity.id, trigger);
-        list.append(button);
+        for (const it of deletedItems) {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.04);font-size:12px;";
+          const lbl = document.createElement("span");
+          lbl.textContent = `✦ ${it.name} (deleted DNA)`;
+          const restore = document.createElement("button");
+          restore.type = "button";
+          restore.dataset.restoreItemId = it.id;
+          restore.textContent = "Restore";
+          restore.disabled = !this.storyDnaRequester;
+          restore.style.cssText = "min-height:44px;margin:0;padding:6px 12px;font-size:11px;";
+          restore.onclick = () => this.storyDnaRequester?.({ action: "restore_item", itemId: it.id });
+          row.append(lbl, restore);
+          rowWrap.append(row);
+        }
+        drawer.append(rowWrap);
+        hiddenDrawerHost.append(drawer);
       }
     };
+    this.trayRender = render2;
     search.oninput = render2;
     category.onchange = render2;
     scope.onchange = render2;
@@ -32324,6 +33166,7 @@ class DossierCard {
     delBtn.type = "button";
     delBtn.dataset.storyDnaDelete = "";
     delBtn.textContent = "Delete DNA";
+    delBtn.disabled = kind === "place" ? !existingLoc : !existingItem;
     footer.append(saveBtn, delBtn);
     if (kind === "place") {
       const aliasesIn = addField("aliases", "Short Aliases (comma-separated)", (existingLoc?.aliases ?? dossier.entity.aliases ?? []).join(", "));
@@ -32377,10 +33220,109 @@ class DossierCard {
       delBtn.onclick = () => {
         if (existingLoc) {
           this.storyDnaRequester?.({ action: "delete_location", locationId: existingLoc.id });
-          status.textContent = "Deleted Location DNA.";
-          status.hidden = false;
+          if (this.trayReturn)
+            this.trayReturn();
+          else
+            this.close();
         }
       };
+      const otherLocs = Object.values(this.storyDna.locations).filter((l) => l.id !== existingLoc?.id);
+      if (existingLoc && otherLocs.length > 0 && this.storyDnaRequester) {
+        const mergeRow = document.createElement("div");
+        mergeRow.dataset.storyDnaMerge = "place";
+        mergeRow.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:8px;border-top:1px dashed var(--vn-shell-border,rgba(255,255,255,.16));";
+        const mergeSel = document.createElement("select");
+        mergeSel.dataset.dnaMergeSelect = "";
+        mergeSel.setAttribute("aria-label", "Merge into location");
+        mergeSel.style.cssText = "flex:1;min-width:140px;min-height:44px;padding:6px 8px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:var(--vn-shell-panel,rgba(0,0,0,.3));color:inherit;font-size:12px;";
+        for (const loc of otherLocs) {
+          const opt = document.createElement("option");
+          opt.value = loc.id;
+          opt.textContent = loc.name;
+          mergeSel.append(opt);
+        }
+        const mergeBtn = document.createElement("button");
+        mergeBtn.type = "button";
+        mergeBtn.dataset.dnaMergeBtn = "";
+        mergeBtn.textContent = "Merge into target";
+        mergeBtn.style.cssText = "min-height:44px;margin:0;padding:6px 12px;font-size:12px;";
+        mergeBtn.onclick = () => {
+          const targetId = mergeSel.value;
+          if (!targetId)
+            return;
+          this.storyDnaRequester?.({ action: "merge_location", sourceId: existingLoc.id, targetId });
+          if (this.trayReturn)
+            this.trayReturn();
+        };
+        mergeRow.append(mergeSel, mergeBtn);
+        form.append(mergeRow);
+      }
+      if (this.locationArtRequester || this.locationArtLibrary.locations.length > 0) {
+        const entityKey = (existingLoc?.name ?? dossier.entity.name).trim().toLowerCase();
+        const fallbackKey = dossier.entity.name.trim().toLowerCase();
+        const artRecord = this.locationArtLibrary.locations.find((r) => r.entityId === entityKey || r.entityId === fallbackKey);
+        const artBox = document.createElement("div");
+        artBox.dataset.locationArtEmbedded = "";
+        artBox.style.cssText = "display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px dashed var(--vn-shell-border,rgba(255,255,255,.16));";
+        const artHead = document.createElement("div");
+        artHead.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;";
+        const artTitle = document.createElement("strong");
+        artTitle.style.cssText = "font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;";
+        artTitle.textContent = `\uD83D\uDDBC️ Saved Location Views (${artRecord?.variants.length ?? 0})`;
+        artHead.append(artTitle);
+        if (this.locationArtRequester) {
+          const refreshArtBtn = document.createElement("button");
+          refreshArtBtn.type = "button";
+          refreshArtBtn.dataset.locationArtRefresh = "";
+          refreshArtBtn.textContent = "↻ Refresh Saved Views";
+          refreshArtBtn.style.cssText = "min-height:44px;margin:0;padding:6px 10px;font-size:11px;";
+          refreshArtBtn.onclick = () => this.locationArtRequester?.({ action: "list" });
+          artHead.append(refreshArtBtn);
+        }
+        artBox.append(artHead);
+        if (artRecord?.variants.length) {
+          const grid = document.createElement("div");
+          grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;";
+          for (const variant of artRecord.variants) {
+            const cardEl = document.createElement("div");
+            cardEl.dataset.locationArtVariant = variant.id;
+            const isPreferred = artRecord.preferredVariantId === variant.id;
+            cardEl.style.cssText = `border-radius:8px;overflow:hidden;border:1px solid ${isPreferred ? "var(--vn-shell-accent,#a8d3c8)" : "rgba(255,255,255,.16)"};background:rgba(0,0,0,.25);display:flex;flex-direction:column;gap:4px;padding:6px;`;
+            const img = document.createElement("img");
+            img.src = `/api/v1/images/${encodeURIComponent(variant.imageId)}`;
+            img.alt = `${artRecord.name} variant`;
+            img.style.cssText = "width:100%;height:78px;object-fit:cover;border-radius:6px;display:block;";
+            cardEl.append(img);
+            if (this.locationArtRequester) {
+              const btnRow = document.createElement("div");
+              btnRow.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;";
+              const prefBtn = document.createElement("button");
+              prefBtn.type = "button";
+              prefBtn.dataset.locationArtPrefer = variant.id;
+              prefBtn.textContent = isPreferred ? "★ Preferred" : "Use as Preferred";
+              prefBtn.disabled = isPreferred;
+              prefBtn.style.cssText = "flex:1;min-height:44px;margin:0;padding:4px 6px;font-size:10.5px;";
+              prefBtn.onclick = () => this.locationArtRequester?.({ action: "select", locationId: artRecord.entityId, variantId: variant.id });
+              const rmBtn = document.createElement("button");
+              rmBtn.type = "button";
+              rmBtn.dataset.locationArtForget = variant.id;
+              rmBtn.textContent = "Remove";
+              rmBtn.style.cssText = "min-height:44px;margin:0;padding:4px 8px;font-size:10.5px;";
+              rmBtn.onclick = () => this.locationArtRequester?.({ action: "forget", locationId: artRecord.entityId, variantId: variant.id });
+              btnRow.append(prefBtn, rmBtn);
+              cardEl.append(btnRow);
+            }
+            grid.append(cardEl);
+          }
+          artBox.append(grid);
+        } else {
+          const emptyArt = document.createElement("small");
+          emptyArt.style.opacity = "0.75";
+          emptyArt.textContent = "No saved environment variants cached for this location yet.";
+          artBox.append(emptyArt);
+        }
+        form.append(artBox);
+      }
     } else {
       const aliasesIn = addField("aliases", "Short Aliases (comma-separated)", (existingItem?.aliases ?? dossier.entity.aliases ?? []).join(", "));
       const typeIn = addField("itemType", "Item Type / Category", existingItem?.itemType ?? "");
@@ -32433,16 +33375,51 @@ class DossierCard {
       delBtn.onclick = () => {
         if (existingItem) {
           this.storyDnaRequester?.({ action: "delete_item", itemId: existingItem.id });
-          status.textContent = "Deleted Item DNA.";
-          status.hidden = false;
+          if (this.trayReturn)
+            this.trayReturn();
+          else
+            this.close();
         }
       };
+      const otherItems = Object.values(this.storyDna.items).filter((it) => it.id !== existingItem?.id);
+      if (existingItem && otherItems.length > 0 && this.storyDnaRequester) {
+        const mergeRow = document.createElement("div");
+        mergeRow.dataset.storyDnaMerge = "object";
+        mergeRow.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:8px;border-top:1px dashed var(--vn-shell-border,rgba(255,255,255,.16));";
+        const mergeSel = document.createElement("select");
+        mergeSel.dataset.dnaMergeSelect = "";
+        mergeSel.setAttribute("aria-label", "Merge into item");
+        mergeSel.style.cssText = "flex:1;min-width:140px;min-height:44px;padding:6px 8px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:var(--vn-shell-panel,rgba(0,0,0,.3));color:inherit;font-size:12px;";
+        for (const it of otherItems) {
+          const opt = document.createElement("option");
+          opt.value = it.id;
+          opt.textContent = it.name;
+          mergeSel.append(opt);
+        }
+        const mergeBtn = document.createElement("button");
+        mergeBtn.type = "button";
+        mergeBtn.dataset.dnaMergeBtn = "";
+        mergeBtn.textContent = "Merge into target";
+        mergeBtn.style.cssText = "min-height:44px;margin:0;padding:6px 12px;font-size:12px;";
+        mergeBtn.onclick = () => {
+          const targetId = mergeSel.value;
+          if (!targetId)
+            return;
+          this.storyDnaRequester?.({ action: "merge_item", sourceId: existingItem.id, targetId });
+          if (this.trayReturn)
+            this.trayReturn();
+        };
+        mergeRow.append(mergeSel, mergeBtn);
+        form.append(mergeRow);
+      }
     }
     wrap.append(form, preview, footer);
     return wrap;
   }
   close() {
     this.activeDossierContext = null;
+    this.activeDocumentRecord = null;
+    this.trayRender = null;
     this.awaitingDnaSync = false;
     this.documentState(false);
     if (this.host.hidden)
@@ -32512,9 +33489,9 @@ var DOSSIER_CSS = `
 
 /* World Lens Scene Map & Chips */
 .chip-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0 8px}
-.chip{height:34px;min-height:34px;white-space:nowrap;padding:0 12px;border:1px solid var(--vn-shell-border,var(--vn-panel-border,rgba(255,255,255,.2)));border-radius:min(var(--vn-shell-radius,20px),20px);font-size:11.5px;font-weight:600;cursor:pointer;background:var(--vn-shell-button,var(--vn-button-bg,rgba(255,255,255,.06)));color:var(--vn-shell-text,inherit);transition:all .15s ease}
+.chip{min-height:44px;min-width:44px;white-space:nowrap;padding:0 12px;border:1px solid var(--vn-shell-border,var(--vn-panel-border,rgba(255,255,255,.2)));border-radius:min(var(--vn-shell-radius,20px),20px);font-size:11.5px;font-weight:600;cursor:pointer;background:var(--vn-shell-button,var(--vn-button-bg,rgba(255,255,255,.06)));color:var(--vn-shell-text,inherit);transition:all .15s ease}
 .chip[aria-pressed="true"],.chip.active{border-color:var(--vn-shell-accent,var(--vn-accent,#a8d3c8));background:var(--vn-shell-accent,var(--vn-accent,#a8d3c8));color:var(--vn-shell-accent-contrast,#091418)!important;font-weight:750;box-shadow:0 2px 10px color-mix(in srgb,var(--vn-shell-accent,var(--vn-accent,#a8d3c8)) 28%,transparent)}
-.world-sheet-map{margin-top:8px;height:calc(min(45vh,310px));min-height:240px;border-radius:var(--vn-shell-radius,12px);position:relative;overflow:hidden;border:1px solid var(--vn-shell-border,var(--vn-panel-border,rgba(255,255,255,.18)));background:var(--vn-shell-field,rgba(16,28,25,.96))}
+.world-sheet-map{margin-top:8px;height:auto;min-height:0;border-radius:var(--vn-shell-radius,12px);position:relative;overflow:visible;border:1px solid var(--vn-shell-border,var(--vn-panel-border,rgba(255,255,255,.18)));background:var(--vn-shell-field,rgba(16,28,25,.96))}
 .world-map-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .world-map-svg path{fill:none;stroke:var(--vn-shell-accent,var(--vn-accent,#80b5a3));stroke-width:1.2;stroke-dasharray:3 5;opacity:.5}
 .map-node-pill{position:absolute;min-width:82px;max-width:114px;padding:5px 8px;text-align:left;border-radius:min(var(--vn-shell-radius,8px),10px);border:1px solid var(--vn-shell-border,rgba(255,255,255,.25));background:var(--vn-shell-panel,rgba(22,40,34,.95));color:var(--vn-shell-text,inherit);cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);transition:transform .18s cubic-bezier(.16,1,.3,1),background .15s ease;z-index:2}
@@ -32526,17 +33503,10 @@ var DOSSIER_CSS = `
 .world-lens{position:relative;margin:10px 0 6px;width:100%;box-sizing:border-box;padding:12px 14px;border-radius:var(--vn-shell-radius,12px);background:var(--vn-shell-panel,var(--vn-panel-solid,rgba(14,25,21,.94)));backdrop-filter:blur(8px);border:1px solid var(--vn-shell-border,var(--vn-panel-border,rgba(130,175,155,.35)));box-shadow:var(--vn-shell-shadow,0 6px 18px rgba(0,0,0,.35));z-index:3}
 .world-lens h3{font-size:13px;margin:0 0 2px;font-weight:700;color:var(--vn-shell-text,var(--vn-text,#f2f7ed));font-family:var(--vn-shell-display-font,inherit)}
 .world-lens p{margin:0;font-size:11px;line-height:1.48;color:var(--vn-shell-muted,#d1dfd5)}
-
-
-.world-lens-cta{display:inline-block;margin-top:8px!important;min-height:0!important;min-width:0!important;padding:6px 12px!important;font-size:11px!important;font-weight:750!important;border-radius:min(var(--vn-shell-radius,6px),8px)!important;background:var(--vn-shell-accent,var(--vn-accent,#a8d3c8))!important;color:var(--vn-shell-accent-contrast,#0f1e1a)!important;border:none!important;cursor:pointer}
-.world-strip{display:flex;gap:8px;margin:6px 0 10px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}
-.world-strip button{display:flex!important;align-items:center;text-align:left;gap:8px;flex-shrink:0;padding:6px 10px 6px 6px!important;min-height:48px!important;border-radius:min(var(--vn-shell-radius,10px),12px)!important;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2))!important;background:var(--vn-shell-field,rgba(255,255,255,.04))!important;cursor:pointer}
-.world-strip button:hover{background:var(--vn-shell-button,rgba(255,255,255,.08))!important}
-.world-strip button.active{border-color:var(--vn-shell-accent,var(--vn-accent,#a8d3c8))!important;background:color-mix(in srgb,var(--vn-shell-accent,var(--vn-accent,#a8d3c8)) 16%,var(--vn-shell-field,transparent))!important}
-.world-strip img,.world-strip .thumb-initials{width:36px;height:36px;border-radius:6px;object-fit:cover;flex:none;display:grid;place-items:center;font-weight:700;font-size:11px;background:var(--vn-shell-button,rgba(0,0,0,.3));color:var(--vn-shell-accent,var(--vn-accent,#a8d3c8))}
-.world-strip b{display:block;font-size:11px;font-weight:650}
-.world-strip small{display:block;font-size:9px;color:var(--vn-shell-muted,inherit);margin-top:1px}
-.input-wrap{display:flex;gap:8px;align-items:center;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));border-radius:var(--vn-shell-radius,10px);background:var(--vn-shell-field,rgba(0,0,0,.15));width:100%;padding:0 10px;height:42px;box-sizing:border-box}
+.world-lens-cta{display:inline-flex;align-items:center;justify-content:center;margin-top:8px!important;min-height:44px!important;min-width:44px!important;padding:8px 14px!important;font-size:11.5px!important;font-weight:750!important;border-radius:min(var(--vn-shell-radius,8px),10px)!important;background:var(--vn-shell-accent,var(--vn-accent,#a8d3c8))!important;color:var(--vn-shell-accent-contrast,#0f1e1a)!important;border:none!important;cursor:pointer}
+.world-threads-card{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.22)}
+.story-dna-drawer{margin:12px 0;border-top:1px solid var(--vn-panel-border,#666)}
+.input-wrap{display:flex;gap:8px;align-items:center;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));border-radius:var(--vn-shell-radius,10px);background:var(--vn-shell-field,rgba(0,0,0,.15));width:100%;padding:0 10px;height:44px;box-sizing:border-box}
 .input-wrap input{width:100%;min-width:0;background:none;border:none;outline:none;font:inherit;color:var(--vn-shell-text,inherit);padding:0}
 
 /* Cast chips and Details */
@@ -32570,9 +33540,9 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 [data-reference-filters] input{font-size:16px}
 [data-reference-filters] select{box-sizing:border-box;min-width:0;width:auto;max-width:150px;min-height:44px;font:inherit;font-size:16px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;padding:6px 8px}
 [data-reference-history-note]{font-size:.75em;line-height:1.4;color:var(--vn-muted-text)}
-[data-vn-reference-sheet]{display:flex;flex-direction:column;overflow:hidden}
+[data-vn-reference-sheet]{display:flex;flex-direction:column;overflow:auto}
 [data-vn-reference-sheet] header,[data-reference-filters],[data-reference-count]{flex:none}
-[data-reference-list]{min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;gap:6px;padding:2px 2px 6px;max-height:220px}
+[data-reference-list]{min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;gap:6px;padding:2px 2px 6px}
 [data-reference-count]{font-size:.8em;opacity:.75;margin:8px 0}
 [data-reference-list] button{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:center;text-align:left;margin:0;min-width:0;overflow-wrap:anywhere;gap:10px;padding:8px 10px;border-radius:10px}
 [data-reference-thumb]{width:40px;height:40px;border-radius:8px;overflow:hidden;display:grid;place-items:center;font-weight:700;font-size:.85em;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,rgba(255,255,255,.05));border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 35%,transparent);flex:none}
@@ -32598,7 +33568,7 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .present-cast-pill,.present-item-pill{min-height:44px;min-width:44px;padding:8px 12px!important;margin:0!important;font-size:12px!important;border-radius:999px!important;background:color-mix(in srgb,var(--vn-shell-accent,#a8d3c8) 14%,var(--vn-shell-button,transparent))!important;border:1px solid var(--vn-shell-border-strong,var(--vn-shell-border))!important;color:var(--vn-shell-text,inherit)!important}
 .present-item-pill.active,.present-cast-pill.active{background:var(--vn-shell-accent,#a8d3c8)!important;color:var(--vn-shell-accent-contrast,#091418)!important;border-color:var(--vn-shell-accent,#a8d3c8)!important;font-weight:750!important}
 .world-scene-empty{font-size:11px;color:var(--vn-shell-muted,inherit)}
-.world-atlas-view{position:relative;height:215px;width:100%}
+.world-atlas-view{position:relative;height:215px;width:330px}
 .story-dna-studio{margin:12px 0;padding:12px;border-radius:var(--vn-shell-radius,12px);background:var(--vn-shell-field,rgba(18,32,38,.7));border:1px solid var(--vn-shell-border,rgba(130,185,165,.32));display:flex;flex-direction:column;gap:10px}
 .story-dna-studio-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .story-dna-studio-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--vn-shell-accent,#d6ecad)}
@@ -32624,7 +33594,11 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .vn-inline-tooltip-title small{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--vn-shell-muted,inherit)}
 .vn-inline-tooltip-close{min-width:44px;min-height:44px;border-radius:50%;border:1px solid var(--vn-shell-border,rgba(255,255,255,.18));background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1}
 .vn-inline-tooltip-body{margin:0;font-size:11.5px;line-height:1.45;opacity:.92;white-space:pre-line}
-.vn-inline-tooltip-cta{width:100%;padding:7px 10px;border-radius:min(var(--vn-shell-radius,8px),10px);border:none;background:var(--vn-shell-accent,#a8d3c8);color:var(--vn-shell-accent-contrast,#0e1e1a);font-weight:750;font-size:11.5px;cursor:pointer;text-align:center}
+.vn-inline-tooltip-actions{display:flex;flex-wrap:wrap;gap:6px}
+.vn-inline-tooltip-micro{flex:1 1 auto;min-height:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
+.vn-inline-tooltip-cta{width:100%;min-height:44px;padding:8px 12px;border-radius:min(var(--vn-shell-radius,8px),10px);border:none;background:var(--vn-shell-accent,#a8d3c8);color:var(--vn-shell-accent-contrast,#0e1e1a);font-weight:750;font-size:12px;cursor:pointer;text-align:center}
+[data-vn-track-selection]{position:fixed;z-index:262;display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 10px;border-radius:12px;background:var(--vn-shell-panel,rgba(12,22,28,.96));border:1px solid var(--vn-shell-border-strong,rgba(168,211,200,.45));box-shadow:0 12px 32px rgba(0,0,0,.58);color:var(--vn-shell-text,#eef4f1);font-size:11.5px}
+[data-vn-track-selection] button{min-height:36px;padding:4px 9px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
 ` + DOCUMENT_READER_CSS;
 var DOCKED_DOSSIER_CSS = `
 [data-vn-dossier][data-vn-workspace-tool="story"]{position:relative;inset:auto;display:flex;align-items:stretch;padding:0;background:transparent;height:100%;z-index:auto}
@@ -32632,6 +33606,7 @@ var DOCKED_DOSSIER_CSS = `
 [data-vn-workspace-tool="story"] [data-vn-dossier-card] > .dossier-topbar-header{display:none!important}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header{position:static;top:auto;padding:0 0 14px;background:transparent;display:flex;align-items:center;justify-content:space-between}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header button[aria-label^="Close"]{display:none}
+[data-vn-workspace-tool="story"] [data-vn-document-reader]>header button[aria-label="Back to item"]{display:none}
 [data-reference-categories]{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
 [data-reference-categories] button{flex:1;min-width:60px;margin:0;font-size:11.5px;padding:6px 10px}
 [data-reference-categories] [aria-pressed="true"]{border-color:var(--vn-shell-accent,var(--vn-accent))!important;background:var(--vn-shell-accent,var(--vn-accent))!important;color:var(--vn-shell-accent-contrast,#091418)!important;font-weight:750!important}
@@ -32654,10 +33629,15 @@ class StageDossiers {
   history;
   storyDna = { locations: {}, items: {}, revision: 0 };
   storyDnaRequester;
+  locationArtLibrary = { version: 1, locations: [] };
+  locationArtRequester;
   characterDnaLibrary = {};
   characterDnaSaver;
   tooltipPopover = null;
   tooltipDismissCleanup = null;
+  tooltipHolding = false;
+  trackPill = null;
+  trackCleanup = null;
   documentAssets = {};
   documentArtBusy = new Set;
   documentArtErrors = new Map;
@@ -32667,8 +33647,68 @@ class StageDossiers {
     return;
   };
   priorLinks = () => ({ used: 0, priorIds: new Set });
+  salientByParagraph = new Map;
+  rebuildSalientIndex() {
+    this.salientByParagraph.clear();
+    if (!this.presentation)
+      return;
+    const mark = (pIdx, entityId) => {
+      if (pIdx < 0)
+        return;
+      let set2 = this.salientByParagraph.get(pIdx);
+      if (!set2) {
+        set2 = new Set;
+        this.salientByParagraph.set(pIdx, set2);
+      }
+      set2.add(entityId);
+    };
+    const entities = this.presentation.version === 2 ? this.presentation.entities : this.presentation.snapshots[this.presentation.snapshots.length - 1]?.entities ?? [];
+    for (const e of entities) {
+      for (const f of e.facts) {
+        if (f.visibility === "observed" && f.revealedAt && f.revealedAt.paragraphIndex > e.firstParagraph) {
+          mark(f.revealedAt.paragraphIndex, e.id);
+        }
+      }
+      if (e.kind === "object") {
+        const doc2 = this.matchStoryDocument(e, this.presentation.documents ?? []);
+        if (doc2) {
+          for (const sec of doc2.sections) {
+            if (sec.paragraphIndex > e.firstParagraph)
+              mark(sec.paragraphIndex, e.id);
+          }
+          for (const obs of doc2.observations ?? []) {
+            if (obs.paragraphIndex > e.firstParagraph)
+              mark(obs.paragraphIndex, e.id);
+          }
+        }
+      }
+    }
+  }
   resetLinkBudget() {
-    this.priorLinks = this.presentation ? createReferenceLinkBudget(this.presentation, this.paragraphs, this.prefs) : () => ({ used: 0, priorIds: new Set });
+    this.rebuildSalientIndex();
+    const normalizedParagraphs = this.paragraphs.map((p) => stripTextEffectTags(p));
+    this.priorLinks = this.presentation ? createReferenceLinkBudget(this.presentation, normalizedParagraphs, this.prefs, this.salientByParagraph) : () => ({ used: 0, priorIds: new Set });
+  }
+  visibleCombinedDocuments() {
+    const docs = [...visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, this.index))];
+    const seen = new Set(docs.map((d) => d.name.trim().toLowerCase()));
+    for (const entry of Object.values(this.storyDna.documents ?? {})) {
+      const key = entry.name.trim().toLowerCase();
+      if (seen.has(key))
+        continue;
+      seen.add(key);
+      docs.push({
+        id: entry.id,
+        name: entry.name,
+        kind: entry.kind || "note",
+        paragraphIndex: entry.observations?.[0]?.paragraphIndex ?? entry.sections?.[0]?.paragraphIndex ?? 0,
+        aliases: entry.aliases ?? [],
+        ...entry.visualDetails ? { visualDetails: entry.visualDetails } : {},
+        ...entry.observations ? { observations: entry.observations } : {},
+        sections: (entry.sections ?? []).map((s) => ({ paragraphIndex: s.paragraphIndex, start: 0, end: s.text.length, text: s.text }))
+      });
+    }
+    return docs;
   }
   workspace;
   workspaceMounted = false;
@@ -32697,6 +33737,31 @@ class StageDossiers {
       asset: this.documentAssets[docId] ?? null,
       busy: this.documentArtBusy.has(docId),
       ...this.documentArtErrors.get(docId) ? { error: this.documentArtErrors.get(docId) } : {},
+      ...this.storyDna.documents?.[docId]?.customNotes ? { customNote: this.storyDna.documents[docId].customNotes } : {},
+      ...this.storyDnaRequester ? {
+        onSaveNote: (note) => {
+          const doc2 = this.visibleCombinedDocuments().find((d) => d.id === docId);
+          this.storyDnaRequester?.({
+            action: "save_document_note",
+            documentId: docId,
+            name: doc2?.name ?? docId,
+            ...doc2?.kind ? { kind: doc2.kind } : {},
+            note
+          });
+        }
+      } : {},
+      ...this.prefs.actionsEnabled && this.draftTools ? {
+        onExamineCloser: () => {
+          const doc2 = this.visibleCombinedDocuments().find((d) => d.id === docId);
+          const docName = doc2?.name ?? "the document";
+          const merged = mergeInteractionDraft(this.draftTools.current(), `I carefully inspect and read ${docName} in full.`, "insert");
+          if (merged !== null && this.draftTools.apply(merged)) {
+            this.card.close();
+            this.workspace?.close();
+            this.draftTools.focus();
+          }
+        }
+      } : {},
       ...this.documentArtRequester ? {
         onGenerate: (regenerate) => {
           this.documentArtBusy.add(docId);
@@ -32713,22 +33778,26 @@ class StageDossiers {
     this.tray.dataset.vnReferences = "";
     this.tray.dataset.vnControl = "references";
     this.tray.innerHTML = '<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';
-    this.tray.title = "Scene references";
-    this.tray.setAttribute("aria-label", "Scene references");
+    this.tray.title = "World Lens";
+    this.tray.setAttribute("aria-label", "World Lens");
     this.tray.hidden = true;
     this.tray.onclick = (event) => {
       event.stopPropagation();
       this.dismissTooltipPopover();
+      this.dismissTrackPill();
       if (this.workspace)
         this.workspace.open("story", this.tray);
       else
         this.openReferences();
     };
     controls.append(this.tray);
+    this.bindHighlightTracker();
   }
   setStoryDna(storyDna) {
     this.storyDna = storyDna;
     this.card.setStoryDna(storyDna);
+    if (this.card.isOpen())
+      this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
   }
   setStoryDnaRequester(fn) {
     this.storyDnaRequester = fn;
@@ -32736,6 +33805,14 @@ class StageDossiers {
   }
   setStoryDnaError(error61) {
     this.card.setStoryDnaError(error61);
+  }
+  setLocationArtLibrary(library) {
+    this.locationArtLibrary = library;
+    this.card.setLocationArtLibrary(library);
+  }
+  setLocationArtRequester(fn) {
+    this.locationArtRequester = fn;
+    this.card.setLocationArtRequester(fn);
   }
   setDocumentArtRequester(fn) {
     this.documentArtRequester = fn;
@@ -32871,6 +33948,8 @@ class StageDossiers {
       };
     });
     const activeItems = eligible.filter((e) => e.kind === "object").map((e) => ({ id: e.id, name: e.name, imageUrl: this.resolveVisualContext(e).imageUrl }));
+    const activeChatId = snapshot?.at.key.chatId ?? "";
+    const hiddenOverrides = this.prefs.overrides.filter((o) => o.suppressed && (!activeChatId || o.chatId === activeChatId || o.chatId === "local")).map((o) => ({ kind: o.kind, name: o.name }));
     return {
       ...activePlace ? { activeLocationId: activePlace.id } : {},
       ...activeLocationName ? { activeLocationName } : {},
@@ -32878,6 +33957,23 @@ class StageDossiers {
       ...locationDna ? { locationDna } : {},
       presentCast,
       activeItems,
+      sceneDocuments: visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, this.index)),
+      hiddenOverrides,
+      onUnhideOverride: (kind, name) => {
+        this.updateOverride({ id: `unhide:${kind}:${name}`, kind, name, aliases: [], firstParagraph: 0, facts: [] }, { suppressed: false });
+        this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+      },
+      actionsEnabled: Boolean(this.prefs.enabled && this.prefs.actionsEnabled && this.draftTools),
+      ...this.draftTools ? {
+        onDraftAction: (draftText) => {
+          const merged = mergeInteractionDraft(this.draftTools.current(), draftText, "insert");
+          if (merged !== null && this.draftTools.apply(merged)) {
+            this.card.close();
+            this.workspace?.close();
+            this.draftTools.focus();
+          }
+        }
+      } : {},
       ...this.characterDnaSaver ? { onSelectWardrobe: (charIdOrName, key, outfit) => {
         const target2 = this.characterDnaLibrary[charIdOrName] ?? findCharacterDNA(this.characterDnaLibrary, charIdOrName);
         if (!target2)
@@ -32892,9 +33988,12 @@ class StageDossiers {
   }
   mergedTrayEntries(snapshot) {
     const base = snapshot ? referenceEntriesWithHistory(snapshot, this.prefs, this.history) : [];
+    const chatId = snapshot?.at.key.chatId ?? "";
     const merged = [...base];
     for (const loc of Object.values(this.storyDna.locations)) {
       if (base.some((e) => e.entity.kind === "place" && Boolean(findMatchingLocation({ [loc.id]: loc }, e.entity.name))))
+        continue;
+      if (chatId && entityOverride(this.prefs, chatId, { kind: "place", name: loc.name })?.suppressed)
         continue;
       const desc = formatLocationDNAToPromptClause(loc) || loc.notes || "Saved location profile.";
       merged.push({
@@ -32908,6 +34007,8 @@ class StageDossiers {
     }
     for (const item of Object.values(this.storyDna.items)) {
       if (base.some((e) => e.entity.kind === "object" && Boolean(findMatchingItem({ [item.id]: item }, e.entity.name))))
+        continue;
+      if (chatId && entityOverride(this.prefs, chatId, { kind: "object", name: item.name })?.suppressed)
         continue;
       const desc = formatItemDNAToPromptClause(item) || item.description || "Saved item profile.";
       merged.push({
@@ -32925,6 +34026,7 @@ class StageDossiers {
     const snapshot = this.snapshot();
     this.hold();
     this.dismissTooltipPopover();
+    this.dismissTrackPill();
     this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
     this.card.openTray(this.mergedTrayEntries(snapshot), this.tray, (id6, trigger) => this.open(id6, trigger), !this.prefs.enabled ? "Story references are disabled. You can enable them in Reading settings." : this.limitationNote() ?? (!snapshot && !Object.keys(this.storyDna.locations).length && !Object.keys(this.storyDna.items).length ? "No established references are available at this reading position." : this.prefs.rememberReferences && this.history?.truncated ? "Showing a limited recent selection of earlier descriptions." : undefined), (entity) => this.resolveVisualContext(entity));
   }
@@ -32945,16 +34047,47 @@ class StageDossiers {
     this.documentArtBusy.clear();
     this.documentArtErrors.clear();
   }
-  openTrayFromStage() {
+  scenePostcardSummary() {
     const snapshot = this.snapshot();
-    if (this.tray.hidden && !Object.keys(this.storyDna.locations).length && !Object.keys(this.storyDna.items).length)
-      return false;
-    const entries = this.mergedTrayEntries(snapshot);
-    if (!entries.length)
+    const hub = this.buildSceneHubContext(snapshot);
+    const docs = visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, this.index));
+    return {
+      locationName: hub.activeLocationName,
+      locationImageUrl: hub.locationImageUrl,
+      lighting: hub.locationDna?.lighting,
+      presentCast: hub.presentCast.filter((c) => c.present !== false).map((c) => ({ id: c.id, name: c.name })),
+      documents: docs.map((d) => ({ id: d.id, name: d.name, kind: d.kind }))
+    };
+  }
+  openDocumentById(docId, trigger) {
+    const docs = this.visibleCombinedDocuments();
+    const target2 = docs.find((d) => d.id === docId);
+    if (!target2)
       return false;
     this.hold();
     this.dossierOpen?.(true);
     this.dismissTooltipPopover();
+    this.dismissTrackPill();
+    this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+    if (this.workspace && this.workspace.destination !== "story") {
+      this.workspace.open("story", trigger);
+      this.card.clearBack();
+    }
+    this.card.openDocument(target2, () => this.openReferences(), trigger);
+    return true;
+  }
+  openTrayFromStage() {
+    const snapshot = this.snapshot();
+    const entries = this.mergedTrayEntries(snapshot);
+    const hasDocs = this.visibleCombinedDocuments().length > 0;
+    if (this.tray.hidden && !entries.length && !hasDocs)
+      return false;
+    if (!entries.length && !hasDocs)
+      return false;
+    this.hold();
+    this.dossierOpen?.(true);
+    this.dismissTooltipPopover();
+    this.dismissTrackPill();
     this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
     if (this.workspace) {
       this.workspace.open("story", this.root.querySelector('[data-vn-control="lens"]') ?? this.tray);
@@ -32979,6 +34112,7 @@ class StageDossiers {
   }
   setContext(value, paragraphs, history) {
     this.dismissTooltipPopover();
+    this.dismissTrackPill();
     this.card.close();
     this.card.resetForContext();
     this.index = -1;
@@ -33016,6 +34150,7 @@ class StageDossiers {
       return;
     this.history = next;
     this.dismissTooltipPopover();
+    this.dismissTrackPill();
     this.card.close();
     this.dossierOpen?.(false);
     if (this.ready)
@@ -33028,6 +34163,7 @@ class StageDossiers {
     this.prefs = next;
     this.resetLinkBudget();
     this.dismissTooltipPopover();
+    this.dismissTrackPill();
     this.card.close();
     this.dossierOpen?.(false);
     if (this.ready)
@@ -33040,6 +34176,7 @@ class StageDossiers {
   cursor(index) {
     if (index !== this.index) {
       this.dismissTooltipPopover();
+      this.dismissTrackPill();
       this.card.close();
       this.dossierOpen?.(false);
       this.npcActionToolsHandler?.(null);
@@ -33060,6 +34197,131 @@ class StageDossiers {
       this.tooltipPopover.remove();
       this.tooltipPopover = null;
     }
+    if (this.tooltipHolding) {
+      this.tooltipHolding = false;
+      if (!this.card.isOpen())
+        this.release();
+    }
+  }
+  dismissTrackPill() {
+    if (this.trackPill) {
+      this.trackPill.remove();
+      this.trackPill = null;
+    }
+  }
+  bindHighlightTracker() {
+    const onPointerOrKeyUp = () => {
+      if (typeof window === "undefined" || typeof window.getSelection !== "function")
+        return;
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed)
+        return;
+      const phrase = sel.toString().replace(/\s+/g, " ").trim();
+      if (phrase.length < 2 || phrase.length > 80)
+        return;
+      const anchorNode = sel.anchorNode;
+      const contains = typeof this.text.contains === "function" ? this.text.contains(anchorNode) : false;
+      if (!contains)
+        return;
+      let rect = null;
+      try {
+        rect = sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
+      } catch {
+        rect = null;
+      }
+      this.showTrackSelectionPill(phrase, rect);
+    };
+    const onDocClick = (e) => {
+      const target2 = e.target;
+      if (this.trackPill && (!target2 || typeof this.trackPill.contains !== "function" || !this.trackPill.contains(target2)))
+        this.dismissTrackPill();
+    };
+    this.text.addEventListener?.("pointerup", onPointerOrKeyUp);
+    this.text.addEventListener?.("mouseup", onPointerOrKeyUp);
+    this.text.addEventListener?.("keyup", onPointerOrKeyUp);
+    const doc2 = this.root.ownerDocument;
+    doc2?.addEventListener?.("pointerdown", onDocClick);
+    this.trackCleanup = () => {
+      doc2?.removeEventListener?.("pointerdown", onDocClick);
+    };
+  }
+  showTrackSelectionPill(phrase, rect) {
+    const clean = phrase.replace(/\s+/g, " ").trim();
+    if (clean.length < 2 || clean.length > 80 || !this.storyDnaRequester && !this.folioOpener)
+      return;
+    this.dismissTrackPill();
+    const bar = document.createElement("div");
+    bar.dataset.vnTrackSelection = "";
+    bar.setAttribute("role", "toolbar");
+    bar.setAttribute("aria-label", `Track "${clean}" in World Lens`);
+    bar.addEventListener("click", (e) => e.stopPropagation());
+    const lbl = document.createElement("span");
+    lbl.textContent = `＋ Track “${clean.length > 24 ? `${clean.slice(0, 22)}…` : clean}”:`;
+    bar.append(lbl);
+    const btns = [
+      ["\uD83D\uDCC4 Doc", "document"],
+      ["\uD83D\uDCCD Place", "place"],
+      ["\uD83D\uDC8E Item", "object"],
+      ["\uD83D\uDC64 NPC", "npc"]
+    ];
+    for (const [label, kind] of btns) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.trackKind = kind;
+      b.textContent = label;
+      b.onclick = () => {
+        this.trackSelectedPhrase(clean, kind);
+        this.dismissTrackPill();
+      };
+      bar.append(b);
+    }
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "×";
+    closeBtn.setAttribute("aria-label", "Dismiss selection tracker");
+    closeBtn.onclick = () => this.dismissTrackPill();
+    bar.append(closeBtn);
+    const stageRect = typeof this.root.getBoundingClientRect === "function" ? this.root.getBoundingClientRect() : null;
+    const top = rect && rect.top > 54 ? rect.top - 48 : (stageRect?.top ?? 0) + 54;
+    const left = rect ? Math.max(12, rect.left) : (stageRect?.left ?? 0) + 16;
+    bar.style.top = `${top}px`;
+    bar.style.left = `${left}px`;
+    this.root.append(bar);
+    this.trackPill = bar;
+  }
+  trackSelectedPhrase(phrase, kind, excerptOverride) {
+    const clean = phrase.replace(/\s+/g, " ").trim();
+    if (clean.length < 2)
+      return;
+    const excerpt = (excerptOverride ?? stripTextEffectTags(this.paragraphs[this.index] ?? this.text.textContent ?? clean)).trim().slice(0, 600) || clean;
+    if (this.storyDnaRequester) {
+      this.storyDnaRequester({ action: "add_custom_lexicon", term: clean, kind });
+      if (kind === "place") {
+        this.storyDnaRequester({
+          action: "save_location",
+          location: { id: createLocationId(clean), name: clean, aliases: deriveShortAliases(clean), environmentDescription: excerpt, persistentElements: [], connectedLocations: [], autoDiscovered: false, lastUpdated: Date.now() }
+        });
+      } else if (kind === "object") {
+        this.storyDnaRequester({
+          action: "save_item",
+          item: { id: createItemId(clean), name: clean, aliases: deriveShortAliases(clean), description: excerpt, distinctiveFeatures: [], colors: [], autoDiscovered: false, lastUpdated: Date.now() }
+        });
+      } else if (kind === "document") {
+        this.storyDnaRequester({
+          action: "save_document_note",
+          documentId: `doc-manual-${createItemId(clean)}`,
+          name: clean,
+          kind: "note",
+          note: excerpt
+        });
+      }
+    }
+    if (kind === "npc" && this.folioOpener) {
+      this.folioOpener(clean);
+      this.workspace?.open("character");
+    }
+    if (this.ready && this.index >= 0)
+      this.refresh(this.index);
   }
   showTooltipPopover(id6, trigger) {
     const snapshot = this.snapshot();
@@ -33072,6 +34334,8 @@ class StageDossiers {
       return;
     }
     this.dismissTooltipPopover();
+    this.tooltipHolding = true;
+    this.hold();
     const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id6);
     const rawSelected = current ? selectReaderDossier(id6, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id6, snapshot, this.prefs, this.history);
     if (!rawSelected) {
@@ -33127,6 +34391,34 @@ class StageDossiers {
     const factLines = selected.facts.slice(0, 2).map((f) => f.value);
     body2.textContent = (matchedDoc ? [docObsSummary, docQuote, ...factLines] : [dnaSummary, ...factLines]).filter(Boolean).slice(0, 2).join(`
 `) || (visual.summarySnippet ?? "Established story reference.");
+    const microRow = document.createElement("div");
+    microRow.className = "vn-inline-tooltip-actions";
+    if (this.prefs.actionsEnabled && this.draftTools) {
+      const microOptions = [];
+      if (matchedDoc) {
+        microOptions.push({ label: "\uD83D\uDCD6 Read closely", text: `I read ${entity.name} closely.` });
+      } else if (entity.kind === "place" && !visual.isActiveLocation) {
+        microOptions.push({ label: `\uD83D\uDEB6 Head to ${entity.name}`, text: `I head to ${entity.name}.` });
+      } else if (entity.kind === "object") {
+        microOptions.push({ label: "\uD83D\uDD0D Inspect", text: `I examine ${entity.name} carefully.` });
+      } else if (entity.kind === "npc" && visual.isPresent) {
+        microOptions.push({ label: `\uD83D\uDCAC Talk to ${entity.name}`, text: `I speak with ${entity.name}.` });
+      }
+      for (const opt of microOptions.slice(0, 2)) {
+        const mb = document.createElement("button");
+        mb.type = "button";
+        mb.className = "vn-inline-tooltip-micro";
+        mb.dataset.tooltipMicroDraft = "";
+        mb.textContent = opt.label;
+        mb.onclick = () => {
+          const merged = mergeInteractionDraft(this.draftTools.current(), opt.text, "insert");
+          this.dismissTooltipPopover();
+          if (merged !== null && this.draftTools.apply(merged))
+            this.draftTools.focus();
+        };
+        microRow.append(mb);
+      }
+    }
     const cta = document.createElement("button");
     cta.type = "button";
     cta.className = "vn-inline-tooltip-cta";
@@ -33150,7 +34442,10 @@ class StageDossiers {
       } else
         this.open(id6, trigger);
     };
-    pop.append(head, body2, cta);
+    if (microRow.childElementCount > 0)
+      pop.append(head, body2, microRow, cta);
+    else
+      pop.append(head, body2, cta);
     this.root.append(pop);
     const rect = typeof trigger.getBoundingClientRect === "function" ? trigger.getBoundingClientRect() : null;
     const stageRect = typeof this.root.getBoundingClientRect === "function" ? this.root.getBoundingClientRect() : null;
@@ -33198,7 +34493,8 @@ class StageDossiers {
     const { used, priorIds } = this.priorLinks(index);
     const visibleDocs = visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, index));
     const docEntityIds = new Set(eligible.filter((e) => e.kind === "object" && Boolean(this.matchStoryDocument(e, visibleDocs))).map((e) => e.id));
-    const anchors = linkEntityMentions(this.text.textContent ?? "", snapshot.entities, this.prefs, snapshot.at.key.chatId, Math.min(this.prefs.maxLinksPerParagraph, 24 - used), protectedEntityRanges(this.text), this.prefs.linking === "important" ? priorIds : new Set);
+    const salient = this.salientByParagraph.get(index) ?? new Set;
+    const anchors = linkEntityMentions(this.text.textContent ?? "", snapshot.entities, this.prefs, snapshot.at.key.chatId, Math.min(this.prefs.maxLinksPerParagraph, 24 - used), protectedEntityRanges(this.text), this.prefs.linking === "important" ? priorIds : new Set, salient);
     applyEntityAnchors(this.text, anchors, (id6, trigger) => this.showTooltipPopover(id6, trigger), (id6) => {
       const raw = selectReaderDossier(id6, snapshot, "brief", this.prefs.fieldGroups);
       const edited = raw ? applyOverrideFactEdits(raw, entityOverride(this.prefs, snapshot.at.key.chatId, raw.entity)) : undefined;
@@ -33281,6 +34577,7 @@ class StageDossiers {
   }
   open(id6, trigger) {
     this.dismissTooltipPopover();
+    this.dismissTrackPill();
     const snapshot = this.snapshot();
     if (id6.startsWith("dna:loc:") || id6.startsWith("dna:item:")) {
       const isLoc = id6.startsWith("dna:loc:");
@@ -33305,6 +34602,7 @@ class StageDossiers {
         const itemDocument = !isLoc ? this.matchStoryDocument(entity, visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, this.index))) : undefined;
         this.hold();
         this.dossierOpen?.(true);
+        this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
         if (this.workspace && this.workspace.destination !== "story") {
           this.workspace.open("story", trigger);
           this.card.clearBack();
@@ -33348,6 +34646,7 @@ class StageDossiers {
       }
     } : undefined;
     const storyDocument = current && dossier.entity.kind === "object" ? this.matchStoryDocument(dossier.entity, visibleStoryDocuments(this.presentation?.documents ?? [], this.index)) : undefined;
+    this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
     if (this.workspace && this.workspace.destination !== "story") {
       this.workspace.open("story", trigger);
       this.card.clearBack();
@@ -33356,9 +34655,7 @@ class StageDossiers {
   }
   updateOverride(entity, patch) {
     const snapshot = this.snapshot();
-    if (!snapshot)
-      return false;
-    const chatId = snapshot.at.key.chatId;
+    const chatId = snapshot?.at.key.chatId ?? "local";
     const existing = entityOverride(this.prefs, chatId, entity);
     if (!existing && this.prefs.overrides.length >= 64)
       return false;
@@ -33368,11 +34665,14 @@ class StageDossiers {
     this.prefs = { ...this.prefs, overrides: [override, ...this.prefs.overrides.filter((o) => !(o.chatId === chatId && o.kind === entity.kind && o.name === entity.name))].slice(0, 64) };
     this.resetLinkBudget();
     this.save(this.prefs);
-    this.refresh(this.index);
+    if (this.ready && this.index >= 0)
+      this.refresh(this.index);
     return true;
   }
   destroy() {
     this.dismissTooltipPopover();
+    this.dismissTrackPill();
+    this.trackCleanup?.();
     this.card.destroy();
     this.tray.remove();
   }
@@ -33941,11 +35241,14 @@ function capitalizeWord(value) {
   const trimmed = value.trim();
   return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : "";
 }
-function renderWorldAtmosphereStrip(strip, snapshot) {
+function renderWorldAtmosphereStrip(strip, snapshot, options) {
   if (!strip)
     return;
   if (!snapshot) {
     strip.hidden = true;
+    strip.removeAttribute("role");
+    strip.removeAttribute("tabindex");
+    strip.removeAttribute("aria-expanded");
     strip.replaceChildren();
     return;
   }
@@ -33953,12 +35256,19 @@ function renderWorldAtmosphereStrip(strip, snapshot) {
   const dateText = snapshot.date?.trim() || (snapshot.season ? capitalizeWord(snapshot.season) : "");
   const tempText = snapshot.temperature?.trim() || "";
   const weatherText = snapshot.weather?.trim() ? capitalizeWord(snapshot.weather) : "";
-  if (!timeText && !dateText && !tempText && !weatherText) {
+  if (!timeText && !dateText && !tempText && !weatherText && !(options?.documentCount && options.documentCount > 0)) {
     strip.hidden = true;
+    strip.removeAttribute("role");
+    strip.removeAttribute("tabindex");
+    strip.removeAttribute("aria-expanded");
     strip.replaceChildren();
     return;
   }
   strip.replaceChildren();
+  strip.setAttribute("role", "button");
+  strip.tabIndex = 0;
+  strip.setAttribute("aria-expanded", String(Boolean(options?.expanded)));
+  strip.setAttribute("aria-haspopup", "dialog");
   const glyphWrap = document.createElement("span");
   glyphWrap.className = "vn-world-glyph";
   glyphWrap.setAttribute("aria-hidden", "true");
@@ -33990,10 +35300,107 @@ function renderWorldAtmosphereStrip(strip, snapshot) {
     span.textContent = tok.text;
     strip.append(span);
   });
+  if (options?.documentCount && options.documentCount > 0) {
+    const docBadge = document.createElement("span");
+    docBadge.className = "vn-world-doc-badge";
+    docBadge.dataset.vnWorldDocCount = String(options.documentCount);
+    docBadge.textContent = `\uD83D\uDCC4 ${options.documentCount}`;
+    strip.append(docBadge);
+  }
+  const chevron = document.createElement("span");
+  chevron.className = "vn-world-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.textContent = "▾";
+  strip.append(chevron);
   if (snapshot.source) {
     strip.dataset.worldSource = snapshot.source;
   }
   strip.hidden = false;
+}
+function createScenePostcardPopover(model, handlers) {
+  const card = document.createElement("section");
+  card.dataset.vnScenePostcard = "";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-label", model.locationName ? `${model.locationName} scene summary` : "Scene summary");
+  card.addEventListener("click", (e) => e.stopPropagation());
+  const header = document.createElement("header");
+  const thumb = document.createElement("div");
+  thumb.className = "vn-postcard-thumb";
+  if (model.locationImageUrl) {
+    const img = document.createElement("img");
+    img.src = model.locationImageUrl;
+    img.alt = "";
+    thumb.append(img);
+  } else {
+    thumb.textContent = "\uD83D\uDCCD";
+  }
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "vn-postcard-title";
+  const titleStrong = document.createElement("strong");
+  titleStrong.textContent = model.locationName || "Current Scene";
+  const sub = document.createElement("small");
+  const atmoParts = [
+    model.atmosphere?.time || model.atmosphere?.timeOfDay,
+    model.atmosphere?.date || model.atmosphere?.season,
+    model.atmosphere?.temperature,
+    model.atmosphere?.weather ? model.atmosphere.indoor ? `${model.atmosphere.weather} outside` : model.atmosphere.weather : undefined,
+    model.lighting
+  ].filter((x) => Boolean(x && x.trim()));
+  sub.textContent = atmoParts.join(" · ") || "Active reading moment";
+  titleWrap.append(titleStrong, sub);
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "vn-postcard-close";
+  closeBtn.textContent = "×";
+  closeBtn.setAttribute("aria-label", "Close scene postcard");
+  closeBtn.onclick = () => handlers.onClose();
+  header.append(thumb, titleWrap, closeBtn);
+  card.append(header);
+  if (model.presentCast?.length) {
+    const castRow = document.createElement("div");
+    castRow.className = "vn-postcard-pills";
+    for (const c of model.presentCast.slice(0, 6)) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "vn-postcard-pill";
+      btn.dataset.postcardCast = c.name;
+      btn.textContent = `\uD83D\uDC64 ${c.name}`;
+      btn.onclick = () => {
+        handlers.onClose();
+        handlers.onOpenCharacter?.(c.name);
+      };
+      castRow.append(btn);
+    }
+    card.append(castRow);
+  }
+  if (model.documents?.length) {
+    const docRow = document.createElement("div");
+    docRow.className = "vn-postcard-pills";
+    for (const d of model.documents.slice(0, 4)) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "vn-postcard-pill";
+      btn.dataset.postcardDoc = d.id;
+      btn.textContent = `\uD83D\uDCC4 ${d.name}`;
+      btn.onclick = () => {
+        handlers.onClose();
+        handlers.onOpenDocument?.(d.id);
+      };
+      docRow.append(btn);
+    }
+    card.append(docRow);
+  }
+  const cta = document.createElement("button");
+  cta.type = "button";
+  cta.className = "vn-postcard-cta";
+  cta.dataset.postcardOpenLens = "";
+  cta.textContent = "Open in World Lens →";
+  cta.onclick = () => {
+    handlers.onClose();
+    handlers.onOpenLens();
+  };
+  card.append(cta);
+  return card;
 }
 
 // src/shared/game-moves.ts
@@ -43512,6 +44919,8 @@ class VnStage {
   speakerPeekEl = null;
   bondBannerEl = null;
   bondBannerTimer = null;
+  scenePostcardEl = null;
+  scenePostcardCleanup = null;
   predecodedUrls = new Set;
   statusStack;
   emptyState;
@@ -43797,6 +45206,12 @@ class VnStage {
   setStoryDnaError(error61) {
     this.dossiers.setStoryDnaError(error61);
   }
+  setLocationArtLibrary(library) {
+    this.dossiers.setLocationArtLibrary(library);
+  }
+  setLocationArtRequester(fn) {
+    this.dossiers.setLocationArtRequester(fn);
+  }
   setCharacterDnaLibrary(library) {
     const prev = this.bondSnapshots;
     const hadBaseline = prev.size > 0;
@@ -43866,10 +45281,71 @@ class VnStage {
       this.bondBannerTimer = null;
     }
   }
+  dismissScenePostcard() {
+    this.scenePostcardCleanup?.();
+    this.scenePostcardCleanup = null;
+    this.scenePostcardEl?.remove();
+    this.scenePostcardEl = null;
+    this.workspace?.worldStrip?.setAttribute("aria-expanded", "false");
+  }
+  toggleScenePostcard() {
+    if (this.scenePostcardEl) {
+      this.dismissScenePostcard();
+      return;
+    }
+    const atmo = this.state.worldAtmosphere?.length ? atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex) : null;
+    const summary = this.dossiers.scenePostcardSummary();
+    if (!atmo && !summary.locationName && !summary.documents.length && !summary.presentCast.length)
+      return;
+    const pop = createScenePostcardPopover({
+      locationName: summary.locationName ?? this.turnLocation ?? undefined,
+      locationImageUrl: summary.locationImageUrl ?? this.state.displayedImage?.url,
+      lighting: summary.lighting,
+      atmosphere: atmo,
+      presentCast: summary.presentCast,
+      documents: summary.documents
+    }, {
+      onClose: () => this.dismissScenePostcard(),
+      onOpenLens: () => {
+        if (!this.dossiers.openTrayFromStage()) {
+          this.workspace.open("story", this.workspace.worldStrip);
+        }
+      },
+      onOpenCharacter: (charName) => {
+        if (this.folioOpenCallback) {
+          this.folioOpenCallback(charName);
+        } else {
+          this.workspace.open("character", this.workspace.worldStrip);
+        }
+      },
+      onOpenDocument: (docId) => {
+        if (!this.dossiers.openDocumentById(docId, this.workspace.worldStrip)) {
+          this.dossiers.openTrayFromStage();
+        }
+      }
+    });
+    const hostEl = this.root;
+    hostEl.append(pop);
+    this.scenePostcardEl = pop;
+    this.workspace.worldStrip.setAttribute("aria-expanded", "true");
+    const doc2 = this.root.ownerDocument;
+    const onOutside = () => this.dismissScenePostcard();
+    const onEsc = (e) => {
+      if (e.key === "Escape")
+        this.dismissScenePostcard();
+    };
+    doc2?.addEventListener?.("click", onOutside);
+    doc2?.addEventListener?.("keydown", onEsc);
+    this.scenePostcardCleanup = () => {
+      doc2?.removeEventListener?.("click", onOutside);
+      doc2?.removeEventListener?.("keydown", onEsc);
+    };
+  }
   dismissTransientOverlays() {
     this.dismissChapterCard();
     this.closeSpeakerPeek();
     this.dismissBondBanner();
+    this.dismissScenePostcard();
   }
   showBondResonanceBanner(info) {
     if (this.destroyed || this.readerPreferences?.confidantCutInsEnabled === false)
@@ -45320,6 +46796,17 @@ class VnStage {
       event.stopPropagation();
       this.openBacklog();
     });
+    this.workspace.worldStrip.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.toggleScenePostcard();
+    });
+    this.workspace.worldStrip.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ")
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.toggleScenePostcard();
+    });
     const lensBtn = this.themeRoot.querySelector("[data-vn-control='lens']");
     lensBtn?.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -45746,7 +47233,10 @@ class VnStage {
   }
   renderSceneHud() {
     const atmo = this.narrative.hidden || !this.state.worldAtmosphere?.length ? null : atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex);
-    renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo);
+    renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo, {
+      documentCount: this.dossiers.scenePostcardSummary().documents.length,
+      expanded: Boolean(this.scenePostcardEl)
+    });
     if (!this.sceneHud)
       return;
     const entries = this.dossiers.sceneHudEntries();
@@ -66026,6 +67516,12 @@ function setupVisualNovelFrontend(baseContext) {
     stage.workspace.open("character");
   });
   stage.setStoryDnaRequester((body2) => sendStoryDna(body2));
+  stage.setLocationArtRequester((action2) => {
+    const owner = chatId();
+    if (!owner)
+      return;
+    ctx.sendToBackend({ type: "vn_location_art", version: 1, chatId: owner, requestId: createUiId(), ...action2 });
+  });
   stage.setCharacterDnaSaver((dna) => sendDna({ action: "save", dna, revision: dnaRevision }));
   stage.setDocumentArtRequester?.((documentId, throughParagraphIndex, forceRegenerate) => {
     if (!turn)
@@ -66652,6 +68148,8 @@ function setupVisualNovelFrontend(baseContext) {
     }
     if (type === "vn_location_art" && message.type === "vn_location_art") {
       settingsPanel?.setLocationArt(message.chatId, message.requestId, message.library);
+      if (message.chatId === chatId())
+        stage.setLocationArtLibrary(message.library);
       return;
     }
     if (type === "vn_location_art_notice" && message.type === "vn_location_art_notice") {

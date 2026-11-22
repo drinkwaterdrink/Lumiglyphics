@@ -4,12 +4,12 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
    ========================================================================= */
 
 .world-sheet-map {
-  margin-top: 16px;
-  height: calc(min(48vh, 380px));
-  min-height: 280px;
+  margin-top: 12px;
+  height: auto;
+  min-height: 0;
   border-radius: 6px 6px 22px 22px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   background: var(--vn-shell-field, #0f1e2e);
   border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
 }

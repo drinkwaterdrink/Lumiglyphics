@@ -52,9 +52,10 @@ export type ItemDNA = z.infer<typeof ItemDNASchema>;
 export const ThoughtCabinetEntrySchema = z.object({
   id: z.string().trim().min(1).max(256),
   title: z.string().trim().min(1).max(160),
-  category: z.enum(['mystery', 'clue', 'promise', 'foreshadowing', 'secret']).default('mystery'),
+  category: z.enum(['goal', 'bond', 'quest', 'mystery', 'secret', 'foreshadowing', 'promise', 'conspiracy', 'fact', 'clue']).catch('quest').default('quest'),
   description: z.string().trim().max(1500),
-  status: z.enum(['germinating', 'internalized', 'resolved']).default('germinating'),
+  status: z.enum(['active', 'developing', 'resolved', 'germinating', 'internalized']).catch('active').default('active'),
+  linkedEntities: z.array(z.string().trim().max(160)).max(12).optional(),
   seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
   updatedAt: z.number().int().nonnegative().default(() => Date.now()),
 }).strict();
@@ -123,7 +124,7 @@ export const StoryDNASetSchema = z.object({
   documents: z.record(z.string(), StoryDocumentLedgerEntrySchema).optional(),
   customLexicon: z.array(z.object({
     term: z.string().trim().min(2).max(160),
-    kind: z.enum(['document', 'place', 'item', 'npc']),
+    kind: z.enum(['document', 'place', 'object', 'item', 'npc']),
   }).strict()).max(64).optional(),
   thoughtCabinet: z.array(ThoughtCabinetEntrySchema).max(40).optional(),
   chapterCodex: z.array(ChapterCodexEntrySchema).max(40).optional(),
@@ -299,6 +300,31 @@ export function matchesBoundaryCandidate(queryLower: string, candidateRaw: strin
   return false;
 }
 
+function splitCompositeLocationParts(raw: string): string[] {
+  return raw
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .split(/\s*(?:—|–|\s-\s|:\s+)\s*/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isCompositeLocationConflict(query: string, locName: string): boolean {
+  const queryParts = splitCompositeLocationParts(query);
+  const locParts = splitCompositeLocationParts(locName);
+  if (queryParts.length <= 1 && locParts.length <= 1) return false;
+  if (queryParts.length > 1 && locParts.length > 1) {
+    // Two distinct sub-rooms under the same parent ("Marten House - Hall" vs "Marten House - Lobby") must never merge via parent prefix.
+    return queryParts.join(' :: ') !== locParts.join(' :: ');
+  }
+  if (queryParts.length === 1 && locParts.length > 1) {
+    // Querying bare parent ("Marten House") must not match child corridor ("Marten House - Fourth Floor Corridor") via its auto-split parent prefix;
+    // still allows matching a distinct leaf name like "Fourth Floor Corridor".
+    return locParts[0] === queryParts[0];
+  }
+  // Querying child corridor ("Marten House - Fourth Floor Corridor") must not fuzzy-match parent building ("Marten House").
+  return queryParts[0] === locParts[0];
+}
+
 export function findMatchingLocation(
   locations: Record<string, LocationDNA>,
   name: string
@@ -308,13 +334,23 @@ export function findMatchingLocation(
   if (locations[query]) return locations[query];
   const directId = createLocationId(query);
   if (locations[directId]) return locations[directId];
-  const exact = Object.values(locations).find((loc) => {
-    if (loc.name.trim().toLowerCase() === query) return true;
-    if (createLocationId(loc.name) === directId) return true;
-    return loc.aliases.some((a) => a.trim().toLowerCase() === query || createLocationId(a) === directId);
+  const exactName = Object.values(locations).find(
+    (loc) => loc.name.trim().toLowerCase() === query || createLocationId(loc.name) === directId
+  );
+  if (exactName) return exactName;
+  const exactAlias = Object.values(locations).find((loc) => {
+    const locParts = splitCompositeLocationParts(loc.name);
+    return loc.aliases.some((a) => {
+      const aLower = a.trim().toLowerCase();
+      if (aLower !== query && createLocationId(a) !== directId) return false;
+      // Ignore auto-derived parent building prefix when composite collision applies
+      if (loc.autoDiscovered && locParts.length > 1 && aLower === locParts[0]) return false;
+      return !isCompositeLocationConflict(query, loc.name) || aLower === locParts.at(-1);
+    });
   });
-  if (exact) return exact;
+  if (exactAlias) return exactAlias;
   return Object.values(locations).find((loc) => {
+    if (isCompositeLocationConflict(query, loc.name)) return false;
     const candidates = [loc.name, ...deriveShortAliases(loc.name, loc.aliases)];
     return candidates.some((candidate) => matchesBoundaryCandidate(query, candidate));
   });
@@ -473,6 +509,86 @@ export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
     itemId: z.string().optional(),
     itemName: z.string(),
     messageId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('restore_location'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    locationId: z.string().min(1).max(256),
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('restore_item'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    itemId: z.string().min(1).max(256),
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('merge_location'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    sourceId: z.string().min(1).max(256),
+    targetId: z.string().min(1).max(256),
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('merge_item'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    sourceId: z.string().min(1).max(256),
+    targetId: z.string().min(1).max(256),
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('toggle_route'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    fromLocationId: z.string().min(1).max(256),
+    toLocationId: z.string().min(1).max(256),
+    connected: z.boolean(),
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('save_thread'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    thread: ThoughtCabinetEntrySchema,
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('delete_thread'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    threadId: z.string().min(1).max(256),
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('save_document_note'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    documentId: z.string().min(1).max(256),
+    name: z.string().trim().min(1).max(256),
+    kind: z.string().trim().min(1).max(60).optional(),
+    note: z.string().max(4000),
+    revision: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('add_custom_lexicon'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    term: z.string().trim().min(2).max(120),
+    kind: z.enum(['place', 'object', 'item', 'document', 'npc']),
+    revision: z.number().int().optional(),
   }),
 ]);
 

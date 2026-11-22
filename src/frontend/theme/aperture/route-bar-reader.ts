@@ -189,14 +189,133 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   gap: 6px !important;
   flex-wrap: nowrap !important;
   overflow: hidden !important;
-  padding: 2px 10px 2px 42px !important;
+  padding: 4px 10px 4px 42px !important;
+  min-height: 28px !important;
   margin: 0 !important;
   font-size: 11px !important;
   line-height: 1.3 !important;
   letter-spacing: 0.02em !important;
-  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 88%, transparent) !important;
+  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 90%, transparent) !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  border-radius: 999px !important;
+  transition: background 0.15s ease !important;
+}
+[data-vn-world-strip]:hover,
+[data-vn-world-strip][aria-expanded="true"] {
+  background: color-mix(in srgb, var(--aperture-accent, #a8d3c8) 12%, rgba(6, 15, 22, 0.48)) !important;
+}
+[data-vn-world-strip] .vn-world-doc-badge {
+  margin-left: 4px !important;
+  padding: 1px 6px !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  background: color-mix(in srgb, var(--aperture-accent, #a8d3c8) 22%, rgba(0, 0, 0, 0.45)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #a8d3c8) 45%, transparent) !important;
+  color: var(--aperture-text, #f4f7f5) !important;
+  flex: none !important;
+}
+[data-vn-world-strip] .vn-world-chevron {
+  margin-left: 2px !important;
+  opacity: 0.65 !important;
+  font-size: 10px !important;
+  flex: none !important;
+}
+[data-vn-scene-postcard] {
+  position: fixed !important;
+  top: calc(74px + env(safe-area-inset-top, 0px)) !important;
+  left: 14px !important;
+  right: 14px !important;
+  max-width: 380px !important;
+  z-index: 255 !important;
+  padding: 12px 14px !important;
+  border-radius: 14px !important;
+  background: var(--vn-shell-panel, rgba(12, 22, 28, 0.94)) !important;
+  border: 1px solid var(--vn-shell-border-strong, rgba(168, 211, 200, 0.35)) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.62) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  color: var(--vn-shell-text, #f1f5f9) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  pointer-events: auto !important;
+}
+[data-vn-scene-postcard] header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-thumb {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  flex: none !important;
+  display: grid !important;
+  place-items: center !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  font-size: 18px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-thumb img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+[data-vn-scene-postcard] .vn-postcard-title {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+[data-vn-scene-postcard] .vn-postcard-title strong {
+  display: block !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+}
+[data-vn-scene-postcard] .vn-postcard-title small {
+  display: block !important;
+  font-size: 11px !important;
+  opacity: 0.78 !important;
+}
+[data-vn-scene-postcard] .vn-postcard-close {
+  min-width: 44px !important;
+  min-height: 44px !important;
+  border-radius: 50% !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  background: transparent !important;
+  color: inherit !important;
+  cursor: pointer !important;
+  font-size: 16px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-pills {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+[data-vn-scene-postcard] .vn-postcard-pill {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: inherit !important;
+}
+[data-vn-scene-postcard] button.vn-postcard-pill {
+  min-height: 36px !important;
+  cursor: pointer !important;
+}
+[data-vn-scene-postcard] .vn-postcard-cta {
+  width: 100% !important;
+  min-height: 44px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: var(--vn-shell-accent, #a8d3c8) !important;
+  color: var(--vn-shell-accent-contrast, #0b1922) !important;
+  font-weight: 750 !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
 }
 [data-vn-world-strip] .vn-world-glyph {
   display: inline-flex !important;
@@ -260,9 +379,10 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   color: var(--vn-quote-color, var(--aperture-accent, #d68c73)) !important;
 }
 
-/* World Lens: hide duplicate vertical list to fix icon ghosting */
+/* World Lens: show unified vertical directory list cleanly */
 [data-vn-reference-sheet] [data-reference-list] {
-  display: none !important;
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 /* Character Folio: transparent overview container */

@@ -40,7 +40,7 @@ const COMMON_MUNDANE_MODIFIERS = new Set([
   'warm', 'cool', 'dark', 'heavy', 'lightweight', 'ordinary', 'standard', 'plastic', 'ceramic',
 ]);
 
-const SIGNIFICANCE_HINT_RE = /\b(heirloom|artifact|relic|enchanted|cursed|rune|runic|sigil|cipher|letter|journal|grimoire|talisman|amulet|medallion|locket|codex|scroll|crest|signet|royal|ancient|sacred|blessed|forbidden|brass|iron|silver|gold|bloody|blood[- ]?stained|burner|poisoned|folded|stamped|wax[- ]?sealed|tarnished|engraved|key|token|slip|ledger|form|pass|permit|badge|dossier|notice|flier|flyer|poster|map|ticket|receipt|diary|blueprint|cracked)\b/i;
+const SIGNIFICANCE_HINT_RE = /\b(heirloom|artifact|relic|enchanted|cursed|rune|runic|sigil|cipher|letter|journal|grimoire|talisman|amulet|medallion|locket|codex|scroll|crest|signet|royal|ancient|sacred|blessed|forbidden|silver|gold|bloody|blood[- ]?stained|burner|poisoned|folded|stamped|wax[- ]?sealed|tarnished|engraved|key|token|slip|ledger|form|pass|permit|badge|dossier|notice|flier|flyer|poster|map|ticket|receipt|diary|blueprint|cracked)\b/i;
 
 export function isSignificantStoryItem(name: string, contextText?: string): boolean {
   const trimmed = name.trim();
