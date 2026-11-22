@@ -251,7 +251,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   bottom: calc(104px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 146px);
   min-height: 48px;
-  max-height: calc(100% - 148px) !important;
+  max-height: calc(100% - 168px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
   padding: 8px 14px 9px !important;
   display: flex !important;
   flex-direction: column !important;

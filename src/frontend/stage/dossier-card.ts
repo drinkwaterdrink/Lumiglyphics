@@ -1073,6 +1073,7 @@ export class DossierCard {
     panel.append(header);
 
     const titleBlock = document.createElement('div');
+    titleBlock.className = 'dossier-page-title-block';
     titleBlock.style.cssText = 'margin:2px 0 6px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;';
     const pageTitle = document.createElement('h1');
     pageTitle.className = 'page-title';
@@ -1121,8 +1122,12 @@ export class DossierCard {
       button.className = 'chip';
       button.textContent = label!;
       button.dataset.referenceCategory = value!;
+      button.setAttribute('aria-pressed', value === this.category ? 'true' : 'false');
       button.onclick = () => {
         category.value = value!;
+        for (const child of tabs.querySelectorAll<HTMLButtonElement>('[data-reference-category]')) {
+          child.setAttribute('aria-pressed', child.dataset.referenceCategory === value ? 'true' : 'false');
+        }
         render();
       };
       tabs.append(button);
@@ -1965,7 +1970,7 @@ export class DossierCard {
             jumpBtn.type = 'button';
             jumpBtn.dataset.codexJump = ch.messageId;
             jumpBtn.textContent = 'Jump ↗';
-            jumpBtn.style.cssText = 'min-height:36px;padding:4px 8px;margin:0;font-size:10.5px;';
+            jumpBtn.style.cssText = 'min-height:44px;min-width:44px;padding:6px 10px;margin:0;font-size:11px;';
             jumpBtn.onclick = () => this.sceneHubContext?.onJumpToMessage?.(ch.messageId!);
             top.append(jumpBtn);
           }
@@ -2424,12 +2429,21 @@ export class DossierCard {
         status.textContent = 'Saving Scenery DNA...';
         status.hidden = false;
       };
+      let locDeleteArmed = false;
+      let locDeleteTimer: ReturnType<typeof setTimeout> | null = null;
       delBtn.onclick = () => {
-        if (existingLoc) {
-          this.storyDnaRequester?.({ action: 'delete_location', locationId: existingLoc.id, revision: this.storyDna.revision });
-          if (this.trayReturn) this.trayReturn();
-          else this.close();
+        if (!existingLoc) return;
+        if (!locDeleteArmed) {
+          locDeleteArmed = true;
+          delBtn.textContent = 'Tap again to confirm delete';
+          if (locDeleteTimer) clearTimeout(locDeleteTimer);
+          locDeleteTimer = setTimeout(() => { locDeleteArmed = false; delBtn.textContent = 'Delete Place'; }, 4000);
+          return;
         }
+        if (locDeleteTimer) clearTimeout(locDeleteTimer);
+        this.storyDnaRequester?.({ action: 'delete_location', locationId: existingLoc.id, revision: this.storyDna.revision });
+        if (this.trayReturn) this.trayReturn();
+        else this.close();
       };
 
       const otherLocs = Object.values(this.storyDna.locations).filter((l) => l.id !== existingLoc?.id);
@@ -2614,12 +2628,21 @@ export class DossierCard {
         status.textContent = 'Saving Item DNA...';
         status.hidden = false;
       };
+      let itemDeleteArmed = false;
+      let itemDeleteTimer: ReturnType<typeof setTimeout> | null = null;
       delBtn.onclick = () => {
-        if (existingItem) {
-          this.storyDnaRequester?.({ action: 'delete_item', itemId: existingItem.id, revision: this.storyDna.revision });
-          if (this.trayReturn) this.trayReturn();
-          else this.close();
+        if (!existingItem) return;
+        if (!itemDeleteArmed) {
+          itemDeleteArmed = true;
+          delBtn.textContent = 'Tap again to confirm delete';
+          if (itemDeleteTimer) clearTimeout(itemDeleteTimer);
+          itemDeleteTimer = setTimeout(() => { itemDeleteArmed = false; delBtn.textContent = 'Delete Item'; }, 4000);
+          return;
         }
+        if (itemDeleteTimer) clearTimeout(itemDeleteTimer);
+        this.storyDnaRequester?.({ action: 'delete_item', itemId: existingItem.id, revision: this.storyDna.revision });
+        if (this.trayReturn) this.trayReturn();
+        else this.close();
       };
 
       const otherItems = Object.values(this.storyDna.items).filter((it) => it.id !== existingItem?.id);
@@ -2838,13 +2861,14 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .vn-inline-tooltip-micro{flex:1 1 auto;min-height:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
 .vn-inline-tooltip-cta{width:100%;min-height:44px;padding:8px 12px;border-radius:min(var(--vn-shell-radius,8px),10px);border:none;background:var(--vn-shell-accent,#a8d3c8);color:var(--vn-shell-accent-contrast,#0e1e1a);font-weight:750;font-size:12px;cursor:pointer;text-align:center}
 [data-vn-track-selection]{position:fixed;z-index:262;display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 10px;border-radius:12px;background:var(--vn-shell-panel,rgba(12,22,28,.96));border:1px solid var(--vn-shell-border-strong,rgba(168,211,200,.45));box-shadow:0 12px 32px rgba(0,0,0,.58);color:var(--vn-shell-text,#eef4f1);font-size:11.5px}
-[data-vn-track-selection] button{min-height:36px;padding:4px 9px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
+[data-vn-track-selection] button{min-height:44px;min-width:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
 ` + DOCUMENT_READER_CSS;
 
 export const DOCKED_DOSSIER_CSS = `
 [data-vn-dossier][data-vn-workspace-tool="story"]{position:relative;inset:auto;display:flex;align-items:stretch;padding:0;background:transparent;height:100%;z-index:auto}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]{width:100%;max-height:100%;height:100%;border:0;border-radius:0;box-shadow:none;padding:18px;font-size:14px;line-height:1.7}
-[data-vn-workspace-tool="story"] [data-vn-dossier-card] > .dossier-topbar-header{display:none!important}
+[data-vn-workspace-tool="story"] [data-vn-dossier-card] > .dossier-topbar-header,
+[data-vn-workspace-tool="story"] [data-vn-dossier-card] > .dossier-page-title-block{display:none!important}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header{position:static;top:auto;padding:0 0 14px;background:transparent;display:flex;align-items:center;justify-content:space-between}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header button[aria-label^="Close"]{display:none}
 [data-vn-workspace-tool="story"] [data-vn-document-reader]>header button[aria-label="Back to item"]{display:none}

@@ -11,6 +11,7 @@ import {
   type SkillCheckOutcome,
 } from "../../shared/rpg-state.js";
 import type { VnChoice } from "../store/vn-store.js";
+import { trapFocusWithin } from "../image-review/focus-trap.js";
 
 export const RPG_HUD_CSS = `
 [data-vn-choice-check] {
@@ -58,8 +59,8 @@ export const RPG_HUD_CSS = `
     left: 12px;
     right: auto;
     max-width: calc(100% - 24px);
-    min-height: 36px;
-    padding: 4px 12px;
+    min-height: 44px;
+    padding: 6px 14px;
     font-size: 0.72rem;
     justify-content: flex-start;
   }
@@ -513,10 +514,34 @@ export class RpgStageController {
     this.barEl.hidden = false;
   }
 
+  private readonly handleDrawerKeyDown = (event: KeyboardEvent): void => {
+    if (!this.drawerEl || this.drawerEl.hidden) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      this.toggleDrawer(false);
+      return;
+    }
+    if (event.key === "Tab") {
+      trapFocusWithin(this.drawerEl, event, (document as unknown as { activeElement?: Element | null }).activeElement ?? null);
+    }
+  };
+
   private toggleDrawer(open: boolean): void {
     if (!this.drawerEl) return;
     this.drawerEl.hidden = !open;
-    if (open) this.renderDrawer();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("keydown", this.handleDrawerKeyDown, true);
+    }
+    if (open) {
+      this.renderDrawer();
+      if (typeof window !== "undefined") {
+        window.addEventListener("keydown", this.handleDrawerKeyDown, true);
+      }
+      this.drawerEl.querySelector<HTMLElement>("[data-rpg-close]")?.focus?.();
+    } else {
+      this.barEl?.focus?.();
+    }
   }
 
   private renderDrawer(): void {

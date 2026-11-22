@@ -23199,7 +23199,7 @@ class RelationshipTracker {
         const read = document.createElement("button");
         read.type = "button";
         read.textContent = "Read passage";
-        read.style.cssText = "margin-top:4px;min-height:28px;padding:2px 8px;font-size:11px;border-radius:4px";
+        read.style.cssText = "margin-top:4px;min-height:44px;min-width:44px;padding:6px 12px;font-size:11px;border-radius:6px";
         read.onclick = () => this.seek(observation.key, observation.paragraphIndex);
         row.append(read);
       }
@@ -23233,7 +23233,7 @@ class RelationshipTracker {
       prev.type = next.type = "button";
       prev.textContent = "Previous";
       next.textContent = "Next";
-      prev.style.cssText = next.style.cssText = "min-height:28px;padding:2px 8px;font-size:11px;border-radius:4px";
+      prev.style.cssText = next.style.cssText = "min-height:44px;min-width:44px;padding:6px 12px;font-size:11px;border-radius:6px";
       prev.disabled = index === 0;
       next.disabled = (index + 1) * size >= total;
       label.textContent = `Page ${index + 1} of ${Math.max(1, Math.ceil(total / size))}`;
@@ -25678,6 +25678,12 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   border: 1px solid var(--aperture-bottom-bar-border, rgba(160, 205, 185, 0.24));
 }
 
+.route-bar > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .route-bar .route-name {
   font-size: 10px;
   letter-spacing: 0.115em;
@@ -25754,6 +25760,19 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   font-size: 11px;
   font-weight: 740;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
+@media (max-width: 390px) {
+  .route-bar {
+    left: 8px;
+    right: 8px;
+    gap: 8px;
+    padding: 5px 6px 5px 10px;
+  }
+  .route-bar .route-actions .menu-key {
+    min-width: 44px;
+    padding: 0 10px;
+  }
 }
 
 /* Reserve scrolling room above the persistent route bar */
@@ -25954,7 +25973,7 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   color: inherit !important;
 }
 [data-vn-scene-postcard] button.vn-postcard-pill {
-  min-height: 36px !important;
+  min-height: 44px !important;
   cursor: pointer !important;
 }
 [data-vn-scene-postcard] .vn-postcard-cta {
@@ -26999,7 +27018,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   bottom: calc(104px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 146px);
   min-height: 48px;
-  max-height: calc(100% - 148px) !important;
+  max-height: calc(100% - 168px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
   padding: 8px 14px 9px !important;
   display: flex !important;
   flex-direction: column !important;
@@ -32053,7 +32072,7 @@ var DOCUMENT_READER_CSS = `
 [data-document-art-actions]{display:flex;justify-content:flex-end;padding:6px 8px;border-top:1px solid color-mix(in srgb,var(--vn-panel-border,#666) 40%,transparent);background:rgba(0,0,0,.18)}
 [data-document-art-empty]{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px}
 [data-document-art-empty] p{margin:0;font-size:.82em;opacity:.85;flex:1 1 180px;line-height:1.45}
-[data-document-art-gen]{margin:0;min-height:36px;padding:6px 12px;border-radius:999px;font-size:.8em;font-weight:600;cursor:pointer;border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 48%,transparent);background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);color:inherit}
+[data-document-art-gen]{margin:0;min-height:44px;min-width:44px;padding:8px 14px;border-radius:999px;font-size:.8em;font-weight:600;cursor:pointer;border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 48%,transparent);background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);color:inherit}
 [data-document-art-gen]:disabled{opacity:.58;cursor:wait}
 [data-document-art-error]{margin:0;padding:6px 12px 10px;font-size:.78em;color:#fca5a5}
 [data-document-observations]{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 8%,transparent);border:1px dashed color-mix(in srgb,var(--vn-accent,#9ec6f0) 32%,transparent)}
@@ -33113,6 +33132,7 @@ class DossierCard {
     header.append(backBtn, title, close);
     panel.append(header);
     const titleBlock = document.createElement("div");
+    titleBlock.className = "dossier-page-title-block";
     titleBlock.style.cssText = "margin:2px 0 6px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;";
     const pageTitle = document.createElement("h1");
     pageTitle.className = "page-title";
@@ -33153,8 +33173,12 @@ class DossierCard {
       button.className = "chip";
       button.textContent = label;
       button.dataset.referenceCategory = value;
+      button.setAttribute("aria-pressed", value === this.category ? "true" : "false");
       button.onclick = () => {
         category.value = value;
+        for (const child of tabs.querySelectorAll("[data-reference-category]")) {
+          child.setAttribute("aria-pressed", child.dataset.referenceCategory === value ? "true" : "false");
+        }
         render2();
       };
       tabs.append(button);
@@ -33944,7 +33968,7 @@ class DossierCard {
             jumpBtn.type = "button";
             jumpBtn.dataset.codexJump = ch.messageId;
             jumpBtn.textContent = "Jump ↗";
-            jumpBtn.style.cssText = "min-height:36px;padding:4px 8px;margin:0;font-size:10.5px;";
+            jumpBtn.style.cssText = "min-height:44px;min-width:44px;padding:6px 10px;margin:0;font-size:11px;";
             jumpBtn.onclick = () => this.sceneHubContext?.onJumpToMessage?.(ch.messageId);
             top.append(jumpBtn);
           }
@@ -34361,14 +34385,29 @@ class DossierCard {
         status.textContent = "Saving Scenery DNA...";
         status.hidden = false;
       };
+      let locDeleteArmed = false;
+      let locDeleteTimer = null;
       delBtn.onclick = () => {
-        if (existingLoc) {
-          this.storyDnaRequester?.({ action: "delete_location", locationId: existingLoc.id, revision: this.storyDna.revision });
-          if (this.trayReturn)
-            this.trayReturn();
-          else
-            this.close();
+        if (!existingLoc)
+          return;
+        if (!locDeleteArmed) {
+          locDeleteArmed = true;
+          delBtn.textContent = "Tap again to confirm delete";
+          if (locDeleteTimer)
+            clearTimeout(locDeleteTimer);
+          locDeleteTimer = setTimeout(() => {
+            locDeleteArmed = false;
+            delBtn.textContent = "Delete Place";
+          }, 4000);
+          return;
         }
+        if (locDeleteTimer)
+          clearTimeout(locDeleteTimer);
+        this.storyDnaRequester?.({ action: "delete_location", locationId: existingLoc.id, revision: this.storyDna.revision });
+        if (this.trayReturn)
+          this.trayReturn();
+        else
+          this.close();
       };
       const otherLocs = Object.values(this.storyDna.locations).filter((l) => l.id !== existingLoc?.id);
       if (existingLoc && otherLocs.length > 0 && this.storyDnaRequester) {
@@ -34548,14 +34587,29 @@ class DossierCard {
         status.textContent = "Saving Item DNA...";
         status.hidden = false;
       };
+      let itemDeleteArmed = false;
+      let itemDeleteTimer = null;
       delBtn.onclick = () => {
-        if (existingItem) {
-          this.storyDnaRequester?.({ action: "delete_item", itemId: existingItem.id, revision: this.storyDna.revision });
-          if (this.trayReturn)
-            this.trayReturn();
-          else
-            this.close();
+        if (!existingItem)
+          return;
+        if (!itemDeleteArmed) {
+          itemDeleteArmed = true;
+          delBtn.textContent = "Tap again to confirm delete";
+          if (itemDeleteTimer)
+            clearTimeout(itemDeleteTimer);
+          itemDeleteTimer = setTimeout(() => {
+            itemDeleteArmed = false;
+            delBtn.textContent = "Delete Item";
+          }, 4000);
+          return;
         }
+        if (itemDeleteTimer)
+          clearTimeout(itemDeleteTimer);
+        this.storyDnaRequester?.({ action: "delete_item", itemId: existingItem.id, revision: this.storyDna.revision });
+        if (this.trayReturn)
+          this.trayReturn();
+        else
+          this.close();
       };
       const otherItems = Object.values(this.storyDna.items).filter((it) => it.id !== existingItem?.id);
       if (existingItem && otherItems.length > 0 && this.storyDnaRequester) {
@@ -34774,12 +34828,13 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .vn-inline-tooltip-micro{flex:1 1 auto;min-height:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
 .vn-inline-tooltip-cta{width:100%;min-height:44px;padding:8px 12px;border-radius:min(var(--vn-shell-radius,8px),10px);border:none;background:var(--vn-shell-accent,#a8d3c8);color:var(--vn-shell-accent-contrast,#0e1e1a);font-weight:750;font-size:12px;cursor:pointer;text-align:center}
 [data-vn-track-selection]{position:fixed;z-index:262;display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 10px;border-radius:12px;background:var(--vn-shell-panel,rgba(12,22,28,.96));border:1px solid var(--vn-shell-border-strong,rgba(168,211,200,.45));box-shadow:0 12px 32px rgba(0,0,0,.58);color:var(--vn-shell-text,#eef4f1);font-size:11.5px}
-[data-vn-track-selection] button{min-height:36px;padding:4px 9px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
+[data-vn-track-selection] button{min-height:44px;min-width:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
 ` + DOCUMENT_READER_CSS;
 var DOCKED_DOSSIER_CSS = `
 [data-vn-dossier][data-vn-workspace-tool="story"]{position:relative;inset:auto;display:flex;align-items:stretch;padding:0;background:transparent;height:100%;z-index:auto}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]{width:100%;max-height:100%;height:100%;border:0;border-radius:0;box-shadow:none;padding:18px;font-size:14px;line-height:1.7}
-[data-vn-workspace-tool="story"] [data-vn-dossier-card] > .dossier-topbar-header{display:none!important}
+[data-vn-workspace-tool="story"] [data-vn-dossier-card] > .dossier-topbar-header,
+[data-vn-workspace-tool="story"] [data-vn-dossier-card] > .dossier-page-title-block{display:none!important}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header{position:static;top:auto;padding:0 0 14px;background:transparent;display:flex;align-items:center;justify-content:space-between}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header button[aria-label^="Close"]{display:none}
 [data-vn-workspace-tool="story"] [data-vn-document-reader]>header button[aria-label="Back to item"]{display:none}
@@ -39784,8 +39839,8 @@ var RPG_HUD_CSS = `
     left: 12px;
     right: auto;
     max-width: calc(100% - 24px);
-    min-height: 36px;
-    padding: 4px 12px;
+    min-height: 44px;
+    padding: 6px 14px;
     font-size: 0.72rem;
     justify-content: flex-start;
   }
@@ -40222,12 +40277,35 @@ class RpgStageController {
     `;
     this.barEl.hidden = false;
   }
+  handleDrawerKeyDown = (event) => {
+    if (!this.drawerEl || this.drawerEl.hidden)
+      return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      this.toggleDrawer(false);
+      return;
+    }
+    if (event.key === "Tab") {
+      trapFocusWithin(this.drawerEl, event, document.activeElement ?? null);
+    }
+  };
   toggleDrawer(open2) {
     if (!this.drawerEl)
       return;
     this.drawerEl.hidden = !open2;
-    if (open2)
+    if (typeof window !== "undefined") {
+      window.removeEventListener("keydown", this.handleDrawerKeyDown, true);
+    }
+    if (open2) {
       this.renderDrawer();
+      if (typeof window !== "undefined") {
+        window.addEventListener("keydown", this.handleDrawerKeyDown, true);
+      }
+      this.drawerEl.querySelector("[data-rpg-close]")?.focus?.();
+    } else {
+      this.barEl?.focus?.();
+    }
   }
   renderDrawer() {
     if (!this.drawerEl)
@@ -40423,7 +40501,7 @@ aside[data-vn-workspace] { position:absolute;right:var(--reader-gap);top:calc(va
  [data-vn-reader-header] { padding:env(safe-area-inset-top) 10px 0 12px;gap:8px; }
  [data-vn-reader-wordmark],[data-reader-search] span,[data-reader-search] kbd,[data-reader-focus] span { display:none; }
  [data-vn-reader-header]>div { gap:4px; }
- [data-reader-caption] { font-size:12px;max-width:calc(100vw - 200px); }
+ [data-reader-caption] { font-size:12px;max-width:100%;min-width:0; }
  [data-vn-reader-header] [data-reader-header-actions] { margin-right:0; }
  [data-vn-reader-header] button { min-width:44px;padding:8px; }
  [data-vn-reader-first="true"] [data-vn-exit] { position:absolute;opacity:0;pointer-events:none;width:0;height:0;overflow:hidden; }
@@ -57793,7 +57871,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.173";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.174";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -63815,10 +63893,55 @@ class CharacterFolio {
     this.renderRoster();
     this.renderDetail();
   }
+  rosterQuery = "";
+  rosterInSceneOnly = false;
   renderRoster() {
     this.rosterCarousel.replaceChildren();
     const characters = Object.values(this.library);
-    for (const char of characters) {
+    if (characters.length > 4) {
+      const controls = document.createElement("div");
+      controls.className = "folio-roster-controls";
+      controls.style.cssText = "display:flex;align-items:center;gap:6px;width:100%;flex:0 0 100%;margin-bottom:4px;";
+      const search = document.createElement("input");
+      search.type = "search";
+      search.setAttribute("data-folio-roster-search", "");
+      search.placeholder = "Filter cast…";
+      search.setAttribute("aria-label", "Filter cast roster");
+      search.value = this.rosterQuery;
+      search.style.cssText = "flex:1;min-width:120px;min-height:44px;padding:6px 10px;border-radius:10px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.18));background:var(--vn-shell-field,rgba(0,0,0,.25));color:inherit;font-size:12px;";
+      search.oninput = () => {
+        this.rosterQuery = search.value;
+        this.renderRoster();
+        const nextInput = this.rosterCarousel.querySelector("[data-folio-roster-search]");
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.setSelectionRange?.(this.rosterQuery.length, this.rosterQuery.length);
+        }
+      };
+      const inSceneBtn = document.createElement("button");
+      inSceneBtn.type = "button";
+      inSceneBtn.setAttribute("data-folio-roster-inscene", "");
+      inSceneBtn.setAttribute("aria-pressed", String(this.rosterInSceneOnly));
+      inSceneBtn.textContent = this.rosterInSceneOnly ? "In Scene ✓" : "In Scene";
+      inSceneBtn.style.cssText = `min-height:44px;min-width:44px;padding:6px 12px;border-radius:10px;font-size:11.5px;font-weight:650;cursor:pointer;border:1px solid ${this.rosterInSceneOnly ? "var(--vn-shell-accent,#38bdf8)" : "var(--vn-shell-border,rgba(255,255,255,.18))"};background:${this.rosterInSceneOnly ? "color-mix(in srgb,var(--vn-shell-accent,#38bdf8) 18%,transparent)" : "var(--vn-shell-button,rgba(255,255,255,.06))"};color:inherit;white-space:nowrap;`;
+      inSceneBtn.onclick = () => {
+        this.rosterInSceneOnly = !this.rosterInSceneOnly;
+        this.renderRoster();
+      };
+      controls.append(search, inSceneBtn);
+      this.rosterCarousel.append(controls);
+    }
+    const q = this.rosterQuery.trim().toLowerCase();
+    const visibleCharacters = characters.filter((char) => {
+      const charKey = char.name.toLowerCase();
+      const lore = this.loreMap[charKey] || this.loreMap[char.id] || {};
+      if (this.rosterInSceneOnly && !lore.inScene && this.activeCharacterId !== char.id)
+        return false;
+      if (!q)
+        return true;
+      return charKey.includes(q) || (char.aliases ?? []).some((a) => a.toLowerCase().includes(q));
+    });
+    for (const char of visibleCharacters) {
       const charKey = char.name.toLowerCase();
       const lore = this.loreMap[charKey] || this.loreMap[char.id] || {};
       const isActive = this.activeCharacterId === char.id;
@@ -64669,7 +64792,7 @@ class CharacterFolio {
           inspClose.type = "button";
           inspClose.textContent = "×";
           inspClose.className = "folio-action-btn";
-          inspClose.style.cssText = "padding:1px 6px;min-height:20px;font-size:13px;";
+          inspClose.style.cssText = "padding:4px 10px;min-height:44px;min-width:44px;font-size:14px;";
           inspClose.onclick = () => {
             confidantInspector.hidden = true;
           };
@@ -64683,7 +64806,7 @@ class CharacterFolio {
             const boostBtn = document.createElement("button");
             boostBtn.type = "button";
             boostBtn.className = "folio-action-btn btn-accent";
-            boostBtn.style.cssText = "padding:3px 9px;min-height:24px;font-size:11px;";
+            boostBtn.style.cssText = "padding:6px 12px;min-height:44px;min-width:44px;font-size:11.5px;";
             boostBtn.textContent = "+5 Affinity";
             boostBtn.onclick = () => {
               const nextRels = structuredClone(char.relationships ?? []);
@@ -64701,7 +64824,7 @@ class CharacterFolio {
             const jumpBtn = document.createElement("button");
             jumpBtn.type = "button";
             jumpBtn.className = "folio-action-btn";
-            jumpBtn.style.cssText = "padding:3px 9px;min-height:24px;font-size:11px;";
+            jumpBtn.style.cssText = "padding:6px 12px;min-height:44px;min-width:44px;font-size:11.5px;";
             jumpBtn.textContent = `Open ${bond.targetName}’s Folio`;
             jumpBtn.onclick = () => {
               this.activeCharacterId = jumpTargetId;
@@ -64713,7 +64836,7 @@ class CharacterFolio {
           const editCardBtn = document.createElement("button");
           editCardBtn.type = "button";
           editCardBtn.className = "folio-action-btn";
-          editCardBtn.style.cssText = "padding:3px 9px;min-height:24px;font-size:11px;";
+          editCardBtn.style.cssText = "padding:6px 12px;min-height:44px;min-width:44px;font-size:11.5px;";
           editCardBtn.textContent = "Edit Bond Card";
           editCardBtn.onclick = () => {
             const cards2 = wrap.querySelectorAll(".rel-bond-card");
@@ -65369,9 +65492,22 @@ class CharacterFolio {
         deleteBtn.style.cssText = "font-size:11px;padding:4px 8px;background:rgba(239,68,68,0.18);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);";
         deleteBtn.textContent = "\uD83D\uDDD1️ Delete";
         deleteBtn.title = "Delete this picture";
+        let deleteArmed = false;
+        let deleteTimer = null;
         deleteBtn.onclick = () => {
-          if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete this picture for ${char.name}?`))
+          if (!deleteArmed) {
+            deleteArmed = true;
+            deleteBtn.textContent = "Tap again to delete";
+            if (deleteTimer)
+              clearTimeout(deleteTimer);
+            deleteTimer = setTimeout(() => {
+              deleteArmed = false;
+              deleteBtn.textContent = "\uD83D\uDDD1️ Delete";
+            }, 4000);
             return;
+          }
+          if (deleteTimer)
+            clearTimeout(deleteTimer);
           this.removeCg(cg.imageUrl);
           this.handlers.onDeleteImage?.(cg.imageUrl);
         };
@@ -66271,7 +66407,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 summary{cursor:pointer}summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .drawer{box-sizing:border-box;overflow-wrap:anywhere}
 :host{position:absolute;inset:0;pointer-events:none;z-index:50;font:13px/1.45 var(--vn-shell-family,system-ui);color:var(--ink);--edge:var(--vn-shell-border,rgba(134,219,178,.22));--ink:var(--vn-shell-text,#dbebe2);--muted:var(--vn-shell-muted,#9ab3a6);--paper:var(--vn-shell-panel,#0e181c);--accent:var(--vn-shell-accent,#86dbb2);--field:var(--vn-shell-field,#101a1e);--btn:var(--vn-shell-button,#16262a);--radius:var(--vn-shell-radius,999px)}
-button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:var(--btn);border:1px solid var(--edge);border-radius:min(var(--radius),8px);padding:7px 12px;min-height:34px;transition:border-color .14s ease,background-color .14s ease,transform .12s ease}button:hover{border-color:var(--accent)}button:active{transform:scale(.97)}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:var(--btn);border:1px solid var(--edge);border-radius:min(var(--radius),8px);padding:7px 12px;min-height:44px;min-width:44px;transition:border-color .14s ease,background-color .14s ease,transform .12s ease}button:hover{border-color:var(--accent)}button:active{transform:scale(.97)}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .launcher{display:none!important;position:absolute;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));pointer-events:auto;display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);min-height:44px;padding:8px 15px 8px 13px;background:var(--vn-shell-bg,#171822ed);color:var(--ink);font-weight:650;box-shadow:var(--vn-shell-shadow,0 4px 14px #0006);backdrop-filter:blur(12px)}
 .launcher::before{content:"";flex:none;width:5px;height:5px;margin:0 7px 7px 0;border-radius:1px;background:var(--accent);box-shadow:7px 0 0 var(--accent),0 7px 0 var(--accent),7px 7px 0 var(--accent)}
 .launcher:hover{background:var(--vn-shell-bg-hover,#252632)}.launcher[aria-expanded=true]{border-color:var(--accent)}
@@ -66281,7 +66417,7 @@ button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;backgroun
 /* F15: keep the 24px glyph but expose a 44px+ touch target via an invisible hit zone. */
 .resize::after{content:"";position:absolute;inset:-10px}
 @media(pointer:coarse){.resize::after{inset:-12px}}.remote{font-size:11px;padding:0 8px;margin:3px 0}.waiting{padding:12px;color:var(--muted)}
-@media(max-width:560px){button{min-height:40px}.launcher{padding:8px 12px 8px 11px;gap:6px}.drawer{top:62px}.bar button{min-height:36px}}
+@media(max-width:560px){button{min-height:44px}.launcher{padding:8px 12px 8px 11px;gap:6px}.drawer{top:62px}.bar button{min-height:44px;min-width:44px}}
 @media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}.resize{width:44px;height:44px;min-height:44px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
 `;

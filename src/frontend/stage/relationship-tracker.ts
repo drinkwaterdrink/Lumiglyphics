@@ -78,7 +78,7 @@ export class RelationshipTracker {
       const read=document.createElement('button');
       read.type='button';
       read.textContent='Read passage';
-      read.style.cssText='margin-top:4px;min-height:28px;padding:2px 8px;font-size:11px;border-radius:4px';
+      read.style.cssText='margin-top:4px;min-height:44px;min-width:44px;padding:6px 12px;font-size:11px;border-radius:6px';
       read.onclick=()=>this.seek(observation.key,observation.paragraphIndex);
       row.append(read);
     }
@@ -112,7 +112,7 @@ export class RelationshipTracker {
     prev.type=next.type='button';
     prev.textContent='Previous';
     next.textContent='Next';
-    prev.style.cssText=next.style.cssText='min-height:28px;padding:2px 8px;font-size:11px;border-radius:4px';
+    prev.style.cssText=next.style.cssText='min-height:44px;min-width:44px;padding:6px 12px;font-size:11px;border-radius:6px';
     prev.disabled=index===0;
     next.disabled=(index+1)*size>=total;
     label.textContent=`Page ${index+1} of ${Math.max(1,Math.ceil(total/size))}`;

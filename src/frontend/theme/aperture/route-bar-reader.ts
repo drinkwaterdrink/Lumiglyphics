@@ -27,6 +27,12 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   border: 1px solid var(--aperture-bottom-bar-border, rgba(160, 205, 185, 0.24));
 }
 
+.route-bar > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .route-bar .route-name {
   font-size: 10px;
   letter-spacing: 0.115em;
@@ -103,6 +109,19 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   font-size: 11px;
   font-weight: 740;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
+@media (max-width: 390px) {
+  .route-bar {
+    left: 8px;
+    right: 8px;
+    gap: 8px;
+    padding: 5px 6px 5px 10px;
+  }
+  .route-bar .route-actions .menu-key {
+    min-width: 44px;
+    padding: 0 10px;
+  }
 }
 
 /* Reserve scrolling room above the persistent route bar */
@@ -303,7 +322,7 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   color: inherit !important;
 }
 [data-vn-scene-postcard] button.vn-postcard-pill {
-  min-height: 36px !important;
+  min-height: 44px !important;
   cursor: pointer !important;
 }
 [data-vn-scene-postcard] .vn-postcard-cta {

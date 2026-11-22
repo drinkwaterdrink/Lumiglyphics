@@ -78,7 +78,7 @@ aside[data-vn-workspace] { position:absolute;right:var(--reader-gap);top:calc(va
  [data-vn-reader-header] { padding:env(safe-area-inset-top) 10px 0 12px;gap:8px; }
  [data-vn-reader-wordmark],[data-reader-search] span,[data-reader-search] kbd,[data-reader-focus] span { display:none; }
  [data-vn-reader-header]>div { gap:4px; }
- [data-reader-caption] { font-size:12px;max-width:calc(100vw - 200px); }
+ [data-reader-caption] { font-size:12px;max-width:100%;min-width:0; }
  [data-vn-reader-header] [data-reader-header-actions] { margin-right:0; }
  [data-vn-reader-header] button { min-width:44px;padding:8px; }
  [data-vn-reader-first="true"] [data-vn-exit] { position:absolute;opacity:0;pointer-events:none;width:0;height:0;overflow:hidden; }

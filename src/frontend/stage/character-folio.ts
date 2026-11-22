@@ -1092,11 +1092,60 @@ export class CharacterFolio implements WorkspaceSurface {
     this.renderDetail();
   }
 
+  private rosterQuery = '';
+  private rosterInSceneOnly = false;
+
   private renderRoster(): void {
     this.rosterCarousel.replaceChildren();
     const characters = Object.values(this.library);
 
-    for (const char of characters) {
+    if (characters.length > 4) {
+      const controls = document.createElement('div');
+      controls.className = 'folio-roster-controls';
+      controls.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%;flex:0 0 100%;margin-bottom:4px;';
+
+      const search = document.createElement('input');
+      search.type = 'search';
+      search.setAttribute('data-folio-roster-search', '');
+      search.placeholder = 'Filter cast…';
+      search.setAttribute('aria-label', 'Filter cast roster');
+      search.value = this.rosterQuery;
+      search.style.cssText = 'flex:1;min-width:120px;min-height:44px;padding:6px 10px;border-radius:10px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.18));background:var(--vn-shell-field,rgba(0,0,0,.25));color:inherit;font-size:12px;';
+      search.oninput = () => {
+        this.rosterQuery = search.value;
+        this.renderRoster();
+        const nextInput = this.rosterCarousel.querySelector<HTMLInputElement>('[data-folio-roster-search]');
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.setSelectionRange?.(this.rosterQuery.length, this.rosterQuery.length);
+        }
+      };
+
+      const inSceneBtn = document.createElement('button');
+      inSceneBtn.type = 'button';
+      inSceneBtn.setAttribute('data-folio-roster-inscene', '');
+      inSceneBtn.setAttribute('aria-pressed', String(this.rosterInSceneOnly));
+      inSceneBtn.textContent = this.rosterInSceneOnly ? 'In Scene ✓' : 'In Scene';
+      inSceneBtn.style.cssText = `min-height:44px;min-width:44px;padding:6px 12px;border-radius:10px;font-size:11.5px;font-weight:650;cursor:pointer;border:1px solid ${this.rosterInSceneOnly ? 'var(--vn-shell-accent,#38bdf8)' : 'var(--vn-shell-border,rgba(255,255,255,.18))'};background:${this.rosterInSceneOnly ? 'color-mix(in srgb,var(--vn-shell-accent,#38bdf8) 18%,transparent)' : 'var(--vn-shell-button,rgba(255,255,255,.06))'};color:inherit;white-space:nowrap;`;
+      inSceneBtn.onclick = () => {
+        this.rosterInSceneOnly = !this.rosterInSceneOnly;
+        this.renderRoster();
+      };
+
+      controls.append(search, inSceneBtn);
+      this.rosterCarousel.append(controls);
+    }
+
+    const q = this.rosterQuery.trim().toLowerCase();
+    const visibleCharacters = characters.filter((char) => {
+      const charKey = char.name.toLowerCase();
+      const lore = this.loreMap[charKey] || this.loreMap[char.id] || {};
+      if (this.rosterInSceneOnly && !lore.inScene && this.activeCharacterId !== char.id) return false;
+      if (!q) return true;
+      return charKey.includes(q) || (char.aliases ?? []).some((a) => a.toLowerCase().includes(q));
+    });
+
+    for (const char of visibleCharacters) {
       const charKey = char.name.toLowerCase();
       const lore = this.loreMap[charKey] || this.loreMap[char.id] || {};
       const isActive = this.activeCharacterId === char.id;
@@ -1951,7 +2000,7 @@ export class CharacterFolio implements WorkspaceSurface {
           inspClose.type = 'button';
           inspClose.textContent = '×';
           inspClose.className = 'folio-action-btn';
-          inspClose.style.cssText = 'padding:1px 6px;min-height:20px;font-size:13px;';
+          inspClose.style.cssText = 'padding:4px 10px;min-height:44px;min-width:44px;font-size:14px;';
           inspClose.onclick = () => { confidantInspector.hidden = true; };
           inspHead.append(inspTitle, inspClose);
           const inspMeta = document.createElement('div');
@@ -1963,7 +2012,7 @@ export class CharacterFolio implements WorkspaceSurface {
             const boostBtn = document.createElement('button');
             boostBtn.type = 'button';
             boostBtn.className = 'folio-action-btn btn-accent';
-            boostBtn.style.cssText = 'padding:3px 9px;min-height:24px;font-size:11px;';
+            boostBtn.style.cssText = 'padding:6px 12px;min-height:44px;min-width:44px;font-size:11.5px;';
             boostBtn.textContent = '+5 Affinity';
             boostBtn.onclick = () => {
               const nextRels = structuredClone(char.relationships ?? []);
@@ -1981,7 +2030,7 @@ export class CharacterFolio implements WorkspaceSurface {
             const jumpBtn = document.createElement('button');
             jumpBtn.type = 'button';
             jumpBtn.className = 'folio-action-btn';
-            jumpBtn.style.cssText = 'padding:3px 9px;min-height:24px;font-size:11px;';
+            jumpBtn.style.cssText = 'padding:6px 12px;min-height:44px;min-width:44px;font-size:11.5px;';
             jumpBtn.textContent = `Open ${bond.targetName}’s Folio`;
             jumpBtn.onclick = () => {
               this.activeCharacterId = jumpTargetId;
@@ -1994,7 +2043,7 @@ export class CharacterFolio implements WorkspaceSurface {
           const editCardBtn = document.createElement('button');
           editCardBtn.type = 'button';
           editCardBtn.className = 'folio-action-btn';
-          editCardBtn.style.cssText = 'padding:3px 9px;min-height:24px;font-size:11px;';
+          editCardBtn.style.cssText = 'padding:6px 12px;min-height:44px;min-width:44px;font-size:11.5px;';
           editCardBtn.textContent = 'Edit Bond Card';
           editCardBtn.onclick = () => {
             const cards = wrap.querySelectorAll('.rel-bond-card');
@@ -2705,8 +2754,17 @@ export class CharacterFolio implements WorkspaceSurface {
         deleteBtn.style.cssText = 'font-size:11px;padding:4px 8px;background:rgba(239,68,68,0.18);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);';
         deleteBtn.textContent = '🗑️ Delete';
         deleteBtn.title = 'Delete this picture';
+        let deleteArmed = false;
+        let deleteTimer: ReturnType<typeof setTimeout> | null = null;
         deleteBtn.onclick = () => {
-          if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Delete this picture for ${char.name}?`)) return;
+          if (!deleteArmed) {
+            deleteArmed = true;
+            deleteBtn.textContent = 'Tap again to delete';
+            if (deleteTimer) clearTimeout(deleteTimer);
+            deleteTimer = setTimeout(() => { deleteArmed = false; deleteBtn.textContent = '🗑️ Delete'; }, 4000);
+            return;
+          }
+          if (deleteTimer) clearTimeout(deleteTimer);
           this.removeCg(cg.imageUrl);
           this.handlers.onDeleteImage?.(cg.imageUrl);
         };

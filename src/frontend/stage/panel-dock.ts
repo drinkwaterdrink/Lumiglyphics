@@ -20,7 +20,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 summary{cursor:pointer}summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .drawer{box-sizing:border-box;overflow-wrap:anywhere}
 :host{position:absolute;inset:0;pointer-events:none;z-index:50;font:13px/1.45 var(--vn-shell-family,system-ui);color:var(--ink);--edge:var(--vn-shell-border,rgba(134,219,178,.22));--ink:var(--vn-shell-text,#dbebe2);--muted:var(--vn-shell-muted,#9ab3a6);--paper:var(--vn-shell-panel,#0e181c);--accent:var(--vn-shell-accent,#86dbb2);--field:var(--vn-shell-field,#101a1e);--btn:var(--vn-shell-button,#16262a);--radius:var(--vn-shell-radius,999px)}
-button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:var(--btn);border:1px solid var(--edge);border-radius:min(var(--radius),8px);padding:7px 12px;min-height:34px;transition:border-color .14s ease,background-color .14s ease,transform .12s ease}button:hover{border-color:var(--accent)}button:active{transform:scale(.97)}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:var(--btn);border:1px solid var(--edge);border-radius:min(var(--radius),8px);padding:7px 12px;min-height:44px;min-width:44px;transition:border-color .14s ease,background-color .14s ease,transform .12s ease}button:hover{border-color:var(--accent)}button:active{transform:scale(.97)}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .launcher{display:none!important;position:absolute;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));pointer-events:auto;display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);min-height:44px;padding:8px 15px 8px 13px;background:var(--vn-shell-bg,#171822ed);color:var(--ink);font-weight:650;box-shadow:var(--vn-shell-shadow,0 4px 14px #0006);backdrop-filter:blur(12px)}
 .launcher::before{content:"";flex:none;width:5px;height:5px;margin:0 7px 7px 0;border-radius:1px;background:var(--accent);box-shadow:7px 0 0 var(--accent),0 7px 0 var(--accent),7px 7px 0 var(--accent)}
 .launcher:hover{background:var(--vn-shell-bg-hover,#252632)}.launcher[aria-expanded=true]{border-color:var(--accent)}
@@ -30,7 +30,7 @@ button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;backgroun
 /* F15: keep the 24px glyph but expose a 44px+ touch target via an invisible hit zone. */
 .resize::after{content:"";position:absolute;inset:-10px}
 @media(pointer:coarse){.resize::after{inset:-12px}}.remote{font-size:11px;padding:0 8px;margin:3px 0}.waiting{padding:12px;color:var(--muted)}
-@media(max-width:560px){button{min-height:40px}.launcher{padding:8px 12px 8px 11px;gap:6px}.drawer{top:62px}.bar button{min-height:36px}}
+@media(max-width:560px){button{min-height:44px}.launcher{padding:8px 12px 8px 11px;gap:6px}.drawer{top:62px}.bar button{min-height:44px;min-width:44px}}
 @media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}.resize{width:44px;height:44px;min-height:44px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
 `;
