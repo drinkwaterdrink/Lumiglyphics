@@ -2,8 +2,8 @@
 
 ## Testing-(Codex) delivery
 
-1. Protect Story DNA, autofill saves, speech consent, host lifecycle, and Director artwork targeting.
-2. Ground Sidecar output and make saved story data branch-aware.
+1. Shipped in `0.2.12-beta.185`: Story DNA, autofill saves, speech consent, host lifecycle, and Director artwork targeting.
+2. Shipped in `0.2.13-beta.185`: source-grounded Sidecar and branch-aware story data.
 3. Improve the reader layout, navigation, overlays, and presentation preferences.
 4. Polish World Lens, the Folio, Director Studio, and the existing Saved Artwork and History views. Add field-by-field autofill review here.
 5. Add opt-in CYOA enhancements and optional Sidecar profiles.

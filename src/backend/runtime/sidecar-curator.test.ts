@@ -11,9 +11,32 @@ import type { StoryDNASet } from "../../shared/story-dna.js";
 import { TurnPlanSchema } from "../../shared/contracts.js";
 import { resolveSidecarConnection } from "./connections.js";
 import { extractTurnLoreAsync } from "./planner.js";
-import { harvestTurnStoryDNA } from "./story-dna-harvester.js";
+import { filterStoryDnaForActiveBranch, harvestTurnStoryDNA } from "./story-dna-harvester.js";
+import { swipeTurnTag } from "../../shared/character-dna.js";
 
 describe("P0 storyDocuments.sections <= 16 & Sidecar Curator Engine", () => {
+  test("provider rejection, malformed JSON and partial channels retain a quoted document", async () => {
+    const paragraphs = [{ index: 0, text: 'The sealed letter reads: "Meet me at dawn."' }];
+    const config = normalizeConfig({ collectEntityReferences: true, strictDocumentSensing: true });
+    async function read(content: string | Error) {
+      const spindle = {
+        connections: { list: async () => [] },
+        generate: { raw: async () => {
+          if (content instanceof Error) throw content;
+          return { content };
+        } },
+      } as unknown as SpindleAPI;
+      return extractTurnLoreAsync(spindle, { config, paragraphs });
+    }
+    for (const response of [new Error('provider not available'), 'malformed', '{}']) {
+      const result = await read(response);
+      expect(result.sidecarSucceeded).toBe(false);
+      expect(result.storyDocuments.flatMap(document => document.sections).map(section => section.text).join(' ')).toContain('Meet me at dawn.');
+    }
+    const partial = await read(JSON.stringify({ storyReferences: [], npcBeliefs: "wrong type", suppressedDocumentNouns: ["sealed letter"] }));
+    expect(partial.channels).toMatchObject({ storyReferences: "valid", storyDocuments: "unavailable", npcBeliefs: "invalid", suppressedDocumentNouns: "valid" });
+    expect(partial.storyDocuments.flatMap(document => document.sections)).toHaveLength(1);
+  });
   test("senseDocumentsDeterministically and mergeStoryDocuments cap sections at <=16 and documents at <=12", () => {
     const quotes = Array.from({ length: 24 }, (_, idx) => `"Line ${idx + 1} of the long ledger entry."`).join(" ");
     const paragraphs = [
@@ -77,7 +100,10 @@ describe("P0 storyDocuments.sections <= 16 & Sidecar Curator Engine", () => {
     const filtered = filterStrictStoryDocuments([bareGeneric, quotedLetter, suppressedFlyer], {
       suppressedNouns: ["torn flyer"],
     });
-    expect(filtered.map((d) => d.name)).toEqual(["crimson-sealed warrant"]);
+    expect(filtered.map((d) => d.name)).toEqual(["crimson-sealed warrant", "torn flyer"]);
+    expect(filterStrictStoryDocuments([{ ...suppressedFlyer, sections: [] }], {
+      suppressedNouns: ["torn flyer"], fromSidecarLlm: true,
+    })).toEqual([]);
 
     const sidecarKept = filterStrictStoryDocuments([bareGeneric], {
       fromSidecarLlm: true,
@@ -288,7 +314,8 @@ describe("P0 storyDocuments.sections <= 16 & Sidecar Curator Engine", () => {
       },
     });
 
-    expect(dnaSet.npcBeliefs?.["Vane"]?.[0]?.knowsSecret).toBe(true);
-    expect(dnaSet.thoughtCabinet?.some((t) => t.title === "The Sealed Vaults")).toBe(true);
+    const projected = filterStoryDnaForActiveBranch(dnaSet, new Set([swipeTurnTag(plan.key.assistantMessageId, Number(plan.key.swipeId ?? 0))]));
+    expect(projected.npcBeliefs?.["Vane"]?.[0]).toMatchObject({ knowsSecret: true, knowledgeStatus: "knows" });
+    expect(projected.thoughtCabinet?.some((t) => t.title === "The Sealed Vaults")).toBe(true);
   });
 });

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { TurnKeySchema } from './turn-key.js';
+import { ReadingPositionSchema } from './reading-position.js';
 
 export const LocationSpatialAnchorsSchema = z.object({
   lightSourceAxis: z.enum(['left', 'right', 'backlit', 'overhead', 'ambient']).optional(),
@@ -56,6 +58,7 @@ export const ThoughtCabinetEntrySchema = z.object({
   description: z.string().trim().max(1500),
   status: z.enum(['active', 'developing', 'resolved', 'germinating', 'internalized']).catch('active').default('active'),
   linkedEntities: z.array(z.string().trim().max(160)).max(12).optional(),
+  authored: z.boolean().optional(),
   seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
   updatedAt: z.number().int().nonnegative().default(() => Date.now()),
 }).strict();
@@ -80,6 +83,7 @@ export const NpcBeliefSchema = z.object({
   topic: z.string().trim().min(1).max(120),
   belief: z.string().trim().min(1).max(400),
   knowsSecret: z.boolean().default(false),
+  knowledgeStatus: z.enum(['knows', 'suspects', 'unaware']).optional(),
   seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
   updatedAt: z.number().int().nonnegative().default(() => Date.now()),
 }).strict();
@@ -91,8 +95,10 @@ export const StoryDocumentLedgerEntrySchema = z.object({
   kind: z.string().trim().min(1).max(60),
   aliases: z.array(z.string().trim().max(160)).max(16).default([]),
   visualDetails: z.string().trim().max(800).optional(),
+  appearances: z.array(z.object({ key: TurnKeySchema, paragraphIndex: z.number().int().nonnegative() }).strict()).max(64).optional(),
   observations: z.array(z.object({
     paragraphIndex: z.number().int().nonnegative(),
+    sourceTurn: TurnKeySchema.optional(),
     summary: z.string().trim().max(500).optional(),
     visualDetails: z.array(z.string().trim().max(160)).max(8).optional(),
     material: z.string().trim().max(120).optional(),
@@ -103,6 +109,7 @@ export const StoryDocumentLedgerEntrySchema = z.object({
     paragraphIndex: z.number().int().nonnegative(),
     text: z.string().min(1).max(6000),
     messageId: z.string().trim().max(160).optional(),
+    sourceTurn: TurnKeySchema.optional(),
   }).strict()).max(64).default([]),
   customNotes: z.string().trim().max(4000).optional(),
   sourceMessageIds: z.array(z.string().trim().max(160)).max(64).optional(),
@@ -118,6 +125,25 @@ export const StoryDocumentLedgerEntrySchema = z.object({
 }).strict();
 export type StoryDocumentLedgerEntry = z.infer<typeof StoryDocumentLedgerEntrySchema>;
 
+export const StoryLoreEventSchema = z.object({
+  key: TurnKeySchema,
+  paragraphIndex: z.number().int().nonnegative(),
+  npcBeliefs: z.array(z.object({
+    npc: z.string().trim().min(1).max(120), topic: z.string().trim().min(1).max(120),
+    belief: z.string().trim().min(1).max(400), status: z.enum(['knows', 'suspects', 'unaware']).optional(),
+    paragraphIndex: z.number().int().nonnegative().optional(),
+  }).strict()).max(24),
+  threadUpdates: z.array(z.object({
+    title: z.string().trim().min(1).max(160), action: z.enum(['open', 'advance', 'resolve']),
+    summary: z.string().trim().max(1500).optional(),
+    paragraphIndex: z.number().int().nonnegative().optional(),
+  }).strict()).max(24),
+  wardrobeDeltas: z.array(z.object({
+    character: z.string().trim().min(1).max(120), activeOutfit: z.string().trim().min(1).max(320),
+  }).strict()).max(24),
+}).strict();
+export type StoryLoreEvent = z.infer<typeof StoryLoreEventSchema>;
+
 export const StoryDNASetSchema = z.object({
   locations: z.record(z.string(), LocationDNASchema).default({}),
   items: z.record(z.string(), ItemDNASchema).default({}),
@@ -129,11 +155,29 @@ export const StoryDNASetSchema = z.object({
   thoughtCabinet: z.array(ThoughtCabinetEntrySchema).max(40).optional(),
   chapterCodex: z.array(ChapterCodexEntrySchema).max(40).optional(),
   npcBeliefs: z.record(z.string(), z.array(NpcBeliefSchema).max(12)).optional(),
+  loreEvents: z.array(StoryLoreEventSchema).max(96).optional(),
+  loreHeads: z.array(TurnKeySchema).max(192).optional(),
+  hiddenLoreThreads: z.array(z.string().max(200)).max(96).optional(),
   deletedLocations: z.record(z.string(), LocationDNASchema).optional(),
   deletedItems: z.record(z.string(), ItemDNASchema).optional(),
   revision: z.number().int().nonnegative().default(0),
 }).strict();
 export type StoryDNASet = z.infer<typeof StoryDNASetSchema>;
+
+export function storyLoreThreadId(title: string): string {
+  return `lore:${title.trim().toLowerCase()}`;
+}
+
+/** Takes already projected lore so branch-local wardrobe never mutates the Folio. */
+export function inferredSceneOutfits(set: Pick<StoryDNASet, 'loreEvents'>): ReadonlyMap<string, string> {
+  const outfits = new Map<string, string>();
+  for (const event of set.loreEvents ?? []) {
+    for (const { character, activeOutfit } of event.wardrobeDeltas) {
+      outfits.set(character.trim().toLowerCase(), activeOutfit);
+    }
+  }
+  return outfits;
+}
 
 export function createLocationId(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'location';
@@ -451,6 +495,7 @@ export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
     action: z.literal('list'),
     chatId: z.string(),
     requestId: z.string().optional(),
+    readingPosition: ReadingPositionSchema.optional(),
   }),
   z.object({
     type: z.literal('vn_story_dna'),

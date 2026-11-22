@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { alignSpanInParagraph, normalizeForGroundMatch, type SpanRange } from './grounding.js';
+import { alignSpanInParagraph, isClaimGroundedInEvidence, normalizeForGroundMatch, type SpanRange } from './grounding.js';
 
 export const STORY_DOCUMENT_KINDS = [
   'flyer',
@@ -40,6 +40,23 @@ export const DocumentObservationSchema = z.object({
   evidence: z.string().min(1).max(1200),
 }).strict();
 export type DocumentObservation = z.infer<typeof DocumentObservationSchema>;
+
+function groundDocumentObservation(observation: DocumentObservation, text: string | undefined): DocumentObservation | null {
+  if (!text) return null;
+  const span = alignSpanInParagraph(text, observation.evidence);
+  if (!span || span.matchType === 'fuzzy' || span.text.length > 1200) return null;
+  const grounded = (value: string | undefined): value is string =>
+    Boolean(value && isClaimGroundedInEvidence(span.text, value, 1));
+  const { paragraphIndex, summary, visualDetails, material, condition } = observation;
+  const details = visualDetails?.filter(grounded);
+  return {
+    paragraphIndex, evidence: span.text,
+    ...(grounded(summary) ? { summary } : {}),
+    ...(details?.length ? { visualDetails: details } : {}),
+    ...(grounded(material) ? { material } : {}),
+    ...(grounded(condition) ? { condition } : {}),
+  };
+}
 
 export const StoryDocumentSectionSchema = z.object({
   paragraphIndex: z.number().int().nonnegative(),
@@ -269,12 +286,12 @@ export function normalizeStoryDocuments(
           continue;
         }
 
-        const normEvid = normalizeForGroundMatch(s.evidence);
         const evidSpan = alignSpanInParagraph(text, s.evidence);
-        if (!evidSpan) {
+        if (!evidSpan || evidSpan.matchType === 'fuzzy') {
           if (trace) trace.droppedSections += 1;
           continue;
         }
+        const normEvid = normalizeForGroundMatch(evidSpan.text);
 
         // On the intro paragraph (or when multiple documents share a later paragraph),
         // require the evidence to mention this document's name/alias. On subsequent
@@ -283,7 +300,7 @@ export function normalizeStoryDocuments(
         const mentionsDocAlias = aliases.some((a) => a.length >= 2 && normEvid.includes(a));
         if ((s.paragraphIndex === doc.paragraphIndex || multiDocSameParagraph) && !mentionsDocAlias) {
           // On exact intro paragraph, still allow if a reading verb links a pronoun when doc was grounded right there
-          const hasReadingCue = /\b(?:reads?|says?|printed|written|inscribed|scrawled|displays?|shows?)\b|^>/i.test(s.evidence);
+          const hasReadingCue = /\b(?:reads?|says?|printed|written|inscribed|scrawled|displays?|shows?)\b|^>/i.test(evidSpan.text);
           if (!(s.paragraphIndex === doc.paragraphIndex && !multiDocSameParagraph && hasReadingCue)) {
             if (trace) trace.droppedSections += 1;
             continue;
@@ -295,7 +312,7 @@ export function normalizeStoryDocuments(
         const insideSpan = alignSpanInParagraph(evidenceWindow, s.text, {
           claimedSpans: claimed.map((c) => ({ start: c.start - evidSpan.start, end: c.end - evidSpan.start })),
         });
-        if (!insideSpan) {
+        if (!insideSpan || insideSpan.matchType === 'fuzzy') {
           if (trace) trace.droppedSections += 1;
           continue;
         }
@@ -323,18 +340,22 @@ export function normalizeStoryDocuments(
           if (trace) trace.droppedObservations += 1;
           continue;
         }
-        const text = paragraphs[o.data.paragraphIndex]?.text;
-        if (!text || o.data.paragraphIndex < doc.paragraphIndex || alignSpanInParagraph(text, o.data.evidence) === null) {
+        const grounded = o.data.paragraphIndex < doc.paragraphIndex ? null
+          : groundDocumentObservation(o.data, paragraphs[o.data.paragraphIndex]?.text);
+        if (!grounded) {
           if (trace) trace.droppedObservations += 1;
           continue;
         }
-        obsList.push(o.data);
+        obsList.push(grounded);
       }
     }
 
     passages.sort((a, b) => a.paragraphIndex - b.paragraphIndex || a.start - b.start);
+    const { visualDetails, ...identity } = doc;
+    const intro = paragraphs[doc.paragraphIndex]?.text;
     result.push({
-      ...doc,
+      ...identity,
+      ...(visualDetails && intro && isClaimGroundedInEvidence(intro, visualDetails, 1) ? { visualDetails } : {}),
       id: stableDocumentId(doc.kind, doc.name, usedIds),
       sections: passages,
       ...(obsList.length ? { observations: obsList } : {}),
@@ -371,12 +392,19 @@ export function validateStoryDocuments(value: unknown, paragraphs: readonly { te
       characters += s.text.length;
       return true;
     });
-    const observations = (d.observations ?? []).filter(
-      (o) => o.paragraphIndex >= d.paragraphIndex && Boolean(paragraphs[o.paragraphIndex]?.text && alignSpanInParagraph(paragraphs[o.paragraphIndex]!.text, o.evidence) !== null)
-    );
+    const observations = (d.observations ?? []).flatMap(o => {
+      const grounded = o.paragraphIndex >= d.paragraphIndex
+        ? groundDocumentObservation(o, paragraphs[o.paragraphIndex]?.text) : null;
+      return grounded ? [grounded] : [];
+    });
     ids.add(d.id);
     names.add(d.name.toLowerCase());
-    result.push({ ...d, sections, ...(observations.length ? { observations } : {}) });
+    const { observations: _storedObservations, visualDetails, ...document } = d;
+    result.push({
+      ...document, sections,
+      ...(visualDetails && isClaimGroundedInEvidence(introText, visualDetails, 1) ? { visualDetails } : {}),
+      ...(observations.length ? { observations } : {}),
+    });
   }
   return result;
 }
@@ -797,7 +825,8 @@ export function filterStrictStoryDocuments(
     if (result.length >= 12) break;
     const lowerName = doc.name.trim().toLowerCase();
     if (!lowerName) continue;
-    if (suppressed.has(lowerName) || doc.aliases?.some((a) => suppressed.has(a.trim().toLowerCase()))) {
+    if (!doc.sections.length && !doc.observations?.some(o => o.summary || o.visualDetails?.length || o.material || o.condition)
+      && (suppressed.has(lowerName) || doc.aliases?.some((a) => suppressed.has(a.trim().toLowerCase())))) {
       continue;
     }
 

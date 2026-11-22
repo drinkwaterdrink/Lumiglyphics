@@ -17,6 +17,15 @@ Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visu
 | Listen to a passage | Configure a voice and enable speech. [Speech setup and troubleshooting](SPEECH.md) |
 | Diagnose installation or build issues | [Local staging installation](#install-into-a-local-lumiverse-staging-checkout) · [Development checks](#development) |
 
+### How the reader keeps story context
+
+- **Sidecar Curator** collects optional story details after the reply is readable. If the provider is unavailable or returns partial data, you can keep reading and verified document quotes remain available.
+- **World Lens** follows the current swipe and reading position. Document excerpts appear when you reach their source paragraph. Turn-level discoveries, such as inferred beliefs, thread changes, and outfits, appear at the last paragraph of their source reply.
+- **Character Folio** keeps your saved outfit selections and locks. An inferred scene outfit can inform the reader and future scene planning without changing what you saved in the Folio.
+- Old inferred transcripts without a reliable source may be hidden from the reader. The saved data and any authored notes remain available for recovery.
+
+**Downgrading to Phase 1:** Stop the extension before restoring Story DNA. Preserve the current `story-dna.json` with its scoped lore. The companion `story-dna.phase1-backup.json` contains a compatible copy without the new inferred lore. Confirm that its revision matches the primary file before using it in place of the primary. If the revisions differ, preserve both files and resolve the interrupted save first.
+
 ### If something is missing
 
 - **The reader has nothing to show.** Open a chat with an assistant reply and verify that the story-reader connection is available. A new chat needs its first assistant reply before the reader can open a passage.

@@ -19,6 +19,17 @@ try{
     return s.getState();
   });
   assert.equal(revised.currentParagraphIndex,1);assert.equal(revised.draft,'Keep this unsent reply');assert.notEqual(revised.phase,'planning');assert.equal(revised.paragraphs[1].speaker,'Jo');assert.equal(revised.choices[0].label,'Ask Jo');
+  const staleLore = await page.evaluate(() => {
+    const f=(window as any).hostFixture;
+    const latest=f.sent.filter((m:any)=>m.type==='vn_story_dna'&&m.action==='list').at(-1);
+    f.stage().previous();
+    f.receive({type:'vn_story_dna',chatId:'A',requestId:latest.requestId,storyDna:{revision:99,locations:{},items:{}}});
+    return {scope:latest.readingPosition, applied:f.loreApplications.some((v:any)=>v.revision===99)};
+  });
+  assert.equal(staleLore.scope.key.revision,1);
+  assert.equal(staleLore.scope.paragraphIndex,1);
+  assert.equal(staleLore.applied,false,'a delayed lore reply cannot restore a newer reveal after rewinding');
+  await page.evaluate(()=>(window as any).hostFixture.stage().advance());
   const afterOptionalRevoke = await page.evaluate(()=>{
     const f=(window as any).hostFixture;
     const start=f.sent.length;

@@ -8,6 +8,8 @@ import { PanelArtifactSchema } from "./panels.js";
 import { ImageTemplateSnapshotSchema } from "./image-templates.js";
 import { ShotIntentSchema, ShotSizeSchema, CameraAngleSchema, CompositionModeSchema } from "./image-shot-spec.js";
 import { ChoiceRequirementsSchema, SkillCheckSchema, RpgStateSchema } from "./rpg-state.js";
+import { TurnKeySchema } from './turn-key.js';
+export { TurnKeySchema, type TurnKey } from './turn-key.js';
 
 export { ActionPropFieldSchema, ActionPropSchema, type ActionProp };
 
@@ -15,15 +17,6 @@ const IdentifierSchema = z.string().trim().min(1).max(256);
 const PropertyNameSchema = z.string().trim().min(1).max(128);
 const TextSchema = z.string().trim().min(1);
 const NonNegativeIntegerSchema = z.number().int().nonnegative();
-
-export const TurnKeySchema = z.object({
-  chatId: IdentifierSchema,
-  assistantMessageId: IdentifierSchema,
-  swipeId: z.union([IdentifierSchema, NonNegativeIntegerSchema]).nullable().default(null),
-  sourceFingerprint: z.string().trim().min(8).max(256),
-  revision: NonNegativeIntegerSchema
-}).strict();
-export type TurnKey = z.infer<typeof TurnKeySchema>;
 
 export const ParagraphSchema = z.object({
   index: NonNegativeIntegerSchema,

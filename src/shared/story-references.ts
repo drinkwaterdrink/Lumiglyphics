@@ -143,18 +143,14 @@ export function normalizeStoryReferences(
     }
 
     const normPara = normalizeForGroundMatch(paragraph);
-    const normEvid = normalizeForGroundMatch(r.evidence);
-    const evidGrounded = Boolean(
-      normEvid
-      && (normPara.includes(normEvid) || normEvid.includes(normPara) || alignSpanInParagraph(paragraph, r.evidence) !== null)
-    );
-    if (!evidGrounded) {
+    const span = alignSpanInParagraph(paragraph, r.evidence);
+    if (!span || span.matchType === 'fuzzy' || span.text.length > 1200) {
       if (trace) trace.ungroundedEvidence += 1;
       continue;
     }
 
     const candidates = collectCandidateNames(r.name);
-    let nameGrounded = matchesAnyCandidateInText(normPara, candidates) || matchesAnyCandidateInText(normEvid, candidates);
+    let nameGrounded = matchesAnyCandidateInText(normPara, candidates);
 
     // Cross-beat subject inheritance: smart beat segmentation often splits a long
     // paragraph so the pronoun/detail beat no longer repeats the entity name.
@@ -185,16 +181,17 @@ export function normalizeStoryReferences(
       continue;
     }
 
-    const valGrounded = isClaimGroundedInEvidence(r.evidence, r.value, 0.8) || isClaimGroundedInEvidence(paragraph, r.value, 0.8);
+    const valGrounded = isClaimGroundedInEvidence(span.text, r.value, 0.8);
     if (!valGrounded) {
       if (trace) trace.ungroundedValue += 1;
       continue;
     }
 
-    const key = JSON.stringify(r);
+    const grounded = { ...r, evidence: span.text };
+    const key = JSON.stringify(grounded);
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push(r);
+    result.push(grounded);
     if (trace) trace.accepted += 1;
     if (result.length === 32) break;
   }

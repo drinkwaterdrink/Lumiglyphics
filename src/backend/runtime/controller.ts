@@ -5,9 +5,9 @@ import {ImageUsageLedger} from './image-usage.js';
 import {ImageDispatchPolicy} from './image-dispatch-policy.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
-import { createEmptyCharacterDNA, findCharacterDNA, isGenericAttire, scrubCharacterDNASwipes, swipeTurnTag } from '../../shared/character-dna.js';
+import { createEmptyCharacterDNA, findCharacterDNA, scrubCharacterDNASwipes, swipeTurnTag } from '../../shared/character-dna.js';
 import { scrubStoryDNASwipes } from '../../shared/story-dna.js';
-import { mergeStoryDocuments } from '../../shared/story-documents.js';
+import { filterStrictStoryDocuments, mergeStoryDocuments, validateStoryDocuments } from '../../shared/story-documents.js';
 import { stripTextEffectTags } from '../../shared/text-effects.js';
 import { characterAppearanceKey } from '../../shared/identity.js';
 import type { StructuredTurnHints } from '../core/paragraphs.js';
@@ -208,7 +208,10 @@ export function scheduleSplitHorizonLore(
       if (spindle.userStorage) {
         try {
           const existingDna = await loadStoryDNASet(spindle, params.chatId, params.userId);
-          const titles = Object.values(existingDna.documents ?? {}).map((d) => d.name).filter(Boolean);
+          const scopedDna = filterStoryDnaForActiveBranch(existingDna, activeBranchSwipeTags(params.messages), {
+            version: 1, key: params.turnKey, paragraphIndex: Math.max(0, paragraphs.length - 1),
+          });
+          const titles = Object.values(scopedDna.documents ?? {}).map((d) => d.name).filter(Boolean);
           if (titles.length > 0) openDocumentTitles = titles.slice(-16);
         } catch {}
       }
@@ -233,13 +236,16 @@ export function scheduleSplitHorizonLore(
         signal: controller.signal,
       });
       if (!isCurrent()) return;
+      if (config.debugLogging) {
+        spindle.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name, status]) => `${name}=${status}`).join(", ")}`);
+      }
       if (
         lore.storyReferences.length === 0
         && lore.storyDocuments.length === 0
         && lore.npcBeliefs.length === 0
         && lore.threadUpdates.length === 0
         && lore.wardrobeDeltas.length === 0
-        && !lore.sidecarSucceeded
+        && lore.suppressedDocumentNouns.length === 0
       ) return;
       let previousDocIds = new Set<string>();
       const updated = await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, (current) => {
@@ -253,11 +259,13 @@ export function scheduleSplitHorizonLore(
             mergedRefs.push(ref);
           }
         }
-        const mergedDocs = lore.sidecarSucceeded && config.strictDocumentSensing !== false
-          ? lore.storyDocuments
-          : (lore.storyDocuments.length > 0 || current.plan.storyDocuments?.length
-              ? mergeStoryDocuments(lore.storyDocuments, current.plan.storyDocuments ?? [])
-              : undefined);
+        const previous = validateStoryDocuments(current.plan.storyDocuments, strippedParagraphs);
+        const retained = config.strictDocumentSensing !== false && lore.suppressedDocumentNouns.length
+          ? filterStrictStoryDocuments(previous, { suppressedNouns: lore.suppressedDocumentNouns, fromSidecarLlm: true })
+          : previous;
+        const mergedDocs = lore.storyDocuments.length > 0 || current.plan.storyDocuments !== undefined
+          ? mergeStoryDocuments(lore.storyDocuments, retained)
+          : undefined;
         return {
           ...current,
           plan: {
@@ -271,7 +279,8 @@ export function scheduleSplitHorizonLore(
       if (spindle.userStorage) {
         try {
           const swipeTag = swipeTurnTag(params.turnKey.assistantMessageId, Number(params.turnKey.swipeId ?? 0) || 0);
-          const nextStoryDna = await mutateStoryDNASet(spindle, params.chatId, params.userId, undefined, (set) => {
+          await mutateStoryDNASet(spindle, params.chatId, params.userId, undefined, (set) => {
+            if (!isCurrent()) throw new Error("Sidecar turn was superseded before Story DNA could be saved.");
             harvestTurnStoryDNA(updated.plan, set, swipeTag, params.prevLocationName, {
               mindLedgerEnabled: config.mindLedgerEnabled,
               chapterCodexEnabled: config.chapterCodexEnabled,
@@ -279,26 +288,10 @@ export function scheduleSplitHorizonLore(
               sidecar: {
                 npcBeliefs: lore.npcBeliefs,
                 threadUpdates: lore.threadUpdates,
+                wardrobeDeltas: lore.wardrobeDeltas,
               },
             });
           });
-          if (lore.wardrobeDeltas.length > 0) {
-            await mutateCharacterDnaLibrary(spindle, params.chatId, params.userId, undefined, (lib) => {
-              let libChanged = false;
-              for (const delta of lore.wardrobeDeltas) {
-                const existingChar = findCharacterDNA(lib.characters, delta.character);
-                if (existingChar && !existingChar.locked && delta.activeOutfit.trim()) {
-                  existingChar.activeOutfit = delta.activeOutfit.trim();
-                  libChanged = true;
-                }
-              }
-              return libChanged;
-            });
-          }
-          if (isCurrent()) {
-            const filtered = filterStoryDnaForActiveBranch(nextStoryDna, activeBranchSwipeTags(params.messages));
-            spindle.sendToFrontend({ type: "vn_story_dna", chatId: params.chatId, storyDna: filtered }, params.userId);
-          }
         } catch {}
       }
       if (!isCurrent()) return;
@@ -1576,6 +1569,7 @@ async function processAssistantMessage(
       previousContinuity: replacesGreeting ? null : isReswipeOrReplan ? (priorTurnRecord ? priorTurnRecord.plan.terminalContinuity : (options?.retry && existing ? existing.plan.initialContinuity : null)) : chatState.terminalContinuity,
       previousRpgState: previousTurnRecord?.plan.rpgState ?? null,
       splitHorizonLore: true,
+      loreBranch: activeBranchSwipeTags(messages.slice(0, Math.max(0, messages.findIndex(entry => entry.id === message.id)))),
       recentMessages,
       config,
       singleCharacter,
@@ -1804,20 +1798,6 @@ async function processAssistantMessage(
           && prevLocationName.trim().toLowerCase() !== nextLocationName.trim().toLowerCase()
         );
         if (turnCastNames.size > 0 || locationChanged || isReswipeOrReplan) {
-          const turnAttires = new Map<string, string>();
-          for (const scene of record.plan.scenes) {
-            const charKey = (scene.character || scene.cast?.[0] || "").trim().toLowerCase();
-            if (charKey && scene.attire && !isGenericAttire(scene.attire)) {
-              turnAttires.set(charKey, scene.attire.trim().slice(0, 600));
-            }
-          }
-          for (const cue of record.plan.visualCues) {
-            const sceneForBeat = record.plan.scenes.find((s) => s.sceneId === cue.sceneId);
-            const charKey = (cue.character || sceneForBeat?.character || "").trim().toLowerCase();
-            if (charKey && cue.attire && !isGenericAttire(cue.attire)) {
-              turnAttires.set(charKey, cue.attire.trim().slice(0, 600));
-            }
-          }
           await mutateCharacterDnaLibrary(spindle, chatId, userId, undefined, l => {
             if (locationChanged) {
               for (const char of Object.values(l.characters)) {
@@ -1832,17 +1812,12 @@ async function processAssistantMessage(
               if (userSpeaker !== 'You' && name.toLowerCase() === userSpeaker.toLowerCase()) continue;
               if (l.deleted?.[name] || findCharacterDNA(l.deleted ?? {}, name)) continue;
               const existingChar = findCharacterDNA(l.characters, name);
-              const inferredAttire = turnAttires.get(name.toLowerCase());
               if (!existingChar) {
                 const dna = createEmptyCharacterDNA(name);
                 dna.autoDiscovered = true;
                 dna.seenInSwipes = [swipeTag];
-                if (inferredAttire) dna.activeOutfit = inferredAttire;
                 l.characters[dna.id] = dna;
               } else {
-                if (!existingChar.locked && inferredAttire) {
-                  existingChar.activeOutfit = inferredAttire;
-                }
                 if (existingChar.autoDiscovered) {
                   const seen = existingChar.seenInSwipes ?? [];
                   if (!seen.includes(swipeTag)) {
@@ -1858,6 +1833,9 @@ async function processAssistantMessage(
           });
         }
         await mutateStoryDNASet(spindle, chatId, userId, undefined, (set) => {
+          if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) {
+            throw new Error("A newer reply superseded the Story DNA harvest.");
+          }
           harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName, {
             mindLedgerEnabled: config.mindLedgerEnabled,
             chapterCodexEnabled: config.chapterCodexEnabled,
@@ -2339,6 +2317,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
         previousScene:old.plan.scenes[0] ?? null,previousContinuity:old.plan.initialContinuity,
         previousRpgState:config.rpgMode !== "off" ? (replanPriorRecord?.plan.rpgState ?? null) : null,
         splitHorizonLore: true,
+        loreBranch: activeBranchSwipeTags(messages.slice(0, Math.max(0, messages.findIndex(entry => entry.id === latest.id)))),
         recentMessages,config,singleCharacter,characterAppearance,characterRegistry,userId,
         gameHints:gameHintsForTurn(messages,latest.id),
         ...(config.includeSimTrackerContext ? {simTrackerEvidence:extractSimTracker(messages,latest.id,config.simTrackerMappings)} : {})});
@@ -2387,6 +2366,19 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
       if (!current()) return;
       activeTurnKeys.set(key,plan.key);
       spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
+      const committed = () => !operation.controller.signal.aborted && views.isOpen(userId, action.chatId) &&
+        (intakeEpochs.get(key) ?? 0) === epoch && compareTurnKeys(activeTurnKeys.get(key) ?? null, plan.key).accepted;
+      if (spindle.userStorage) {
+        try {
+          await mutateStoryDNASet(spindle, action.chatId, userId, undefined, set => {
+            if (!committed()) throw new Error("A newer reply superseded the replanned lore.");
+            harvestTurnStoryDNA(plan, set, swipeTurnTag(latest.id, action.swipeId), null, {
+              mindLedgerEnabled: config.mindLedgerEnabled, chapterCodexEnabled: config.chapterCodexEnabled,
+            });
+          });
+        } catch {}
+      }
+      if (!committed()) return;
       scheduleSplitHorizonLore(spindle, {
         ...(userId ? { userId } : {}),
         chatId: action.chatId,

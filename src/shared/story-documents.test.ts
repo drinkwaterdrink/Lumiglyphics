@@ -29,6 +29,20 @@ test('saved offsets are revalidated against actual source; missing text stays mi
  expect(validateStoryDocuments([{...docs[0],sections:[{...docs[0]!.sections[0],start:0}]}],paragraphs)[0]?.sections).toEqual([]);
  expect(normalizeStoryDocuments([{...proposal,sections:[]}],paragraphs)[0]?.sections).toEqual([]);
 });
+test('documents with no surviving observation do not show the old evidence', () => {
+  const docs = normalizeStoryDocuments([{ ...proposal, observations: [{ paragraphIndex: 0,
+    evidence: paragraphs[0]!.text, summary: 'The sealed letter lies on the desk.' }] }], paragraphs);
+  expect(docs[0]?.observations).toHaveLength(1);
+  const edited = [{ text: 'The sealed letter arrived.' }, ...paragraphs.slice(1)];
+  expect(validateStoryDocuments(docs, edited)[0]?.observations).toBeUndefined();
+});
+test('source evidence does not authorize invented observation details', () => {
+  const docs = normalizeStoryDocuments([{ ...proposal, visualDetails: 'gold leaf', observations: [{
+    paragraphIndex: 0, evidence: paragraphs[0]!.text, summary: 'written in violet ink', material: 'gold leaf',
+  }] }], paragraphs);
+  expect(docs[0]?.visualDetails).toBeUndefined();
+  expect(docs[0]?.observations).toEqual([{ paragraphIndex: 0, evidence: paragraphs[0]!.text }]);
+});
 test('Unicode, literal hostile markup, bounded long text and duplicate records',()=>{
  const body='灯台 🌙 <script>alert(1)</script>\nKeep  two spaces.';
  const ps=[{text:`phone shows: ${body}`}];

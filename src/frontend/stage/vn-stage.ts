@@ -16,7 +16,7 @@ import { FullscreenLightbox } from "./fullscreen-lightbox.js";
 import { createScenePostcardPopover, renderWorldAtmosphereStrip } from "./world-strip.js";
 import { atmosphereForPosition } from "../../shared/scene-atmosphere.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
-import type { StoryDnaActionBody, StoryDNASet } from "../../shared/story-dna.js";
+import { inferredSceneOutfits, type StoryDnaActionBody, type StoryDNASet } from "../../shared/story-dna.js";
 import type { LocationArtAction, LocationArtLibrary } from "../../shared/stage-assets.js";
 import { findCharacterDNA, type CharacterDNA } from "../../shared/character-dna.js";
 import { gameMoveKey, type GameMoveSnapshot } from '../../shared/game-moves.js';
@@ -516,7 +516,11 @@ export class VnStage {
     return this.dossiers.buildNpcActionTools(charName);
   }
 
-  setStoryDna(storyDna: StoryDNASet): void { this.dossiers.setStoryDna(storyDna); }
+  private inferredOutfits: ReadonlyMap<string, string> = new Map();
+  setStoryDna(storyDna: StoryDNASet): void {
+    this.inferredOutfits = inferredSceneOutfits(storyDna);
+    this.dossiers.setStoryDna(storyDna);
+  }
   setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void { this.dossiers.setStoryDnaRequester(fn); }
   setStoryDnaError(error: string): void { this.dossiers.setStoryDnaError(error); }
   setLocationArtLibrary(library: LocationArtLibrary): void { this.dossiers.setLocationArtLibrary(library); }
@@ -717,9 +721,12 @@ export class VnStage {
     card.append(head);
 
     if (char) {
+      const authoredOutfit = char.locked || char.activeWardrobeKey || (char.activeOutfit && !char.autoDiscovered);
+      const outfit = (authoredOutfit ? char.activeOutfit : this.inferredOutfits.get(name.toLowerCase()) ?? char.activeOutfit)
+        || char.signatureOutfit;
       const summary = [
         char.demeanor ? char.demeanor : "",
-        char.activeOutfit || char.signatureOutfit ? `Wearing: ${char.activeOutfit || char.signatureOutfit}` : ""
+        outfit ? `Wearing: ${outfit}` : ""
       ].filter(Boolean).join(" · ");
       if (summary) {
         const sub = document.createElement("div");

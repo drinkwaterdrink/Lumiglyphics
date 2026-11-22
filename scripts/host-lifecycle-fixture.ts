@@ -8,9 +8,12 @@ let receive: (message: unknown) => void = () => {};
 let toggle: () => void = () => {};
 let stage!: VnStage;
 const sent: any[] = [];
+const loreApplications: Array<Parameters<VnStage['setStoryDna']>[0]> = [];
 const events = new Map<string, Set<(payload: unknown) => void>>();
 const load = VnStage.prototype.loadTurn;
 VnStage.prototype.loadTurn = function (turn) { stage = this; return load.call(this, turn); };
+const setLore = VnStage.prototype.setStoryDna;
+VnStage.prototype.setStoryDna = function (view) { loreApplications.push(view); setLore.call(this, view); };
 const config = normalizeConfig({ textSpeed: 0, autoEnter: false, speech: { enabled: false }, generateImages: false, skipMode: "all" });
 const header = document.createElement("div"); document.body.append(header);
 const ctx: any = {
@@ -40,7 +43,7 @@ function state(view:TurnView|null, chatId=activeChat, requestId=sent.filter(m=>m
   receive({type:"vn_state",chatId,config,turn:view,requestId});
 }
 Object.assign(window,{hostFixture:{
-  sent, config, turn, receive:(message:unknown)=>receive(message), state,
+  sent, config, turn, loreApplications, receive:(message:unknown)=>receive(message), state,
   open:()=>toggle(), stage:()=>stage,
   revoke:(permission:string)=>{for(const handler of events.get('PERMISSION_CHANGED')??[])handler({permission,granted:false});},
   permissionListeners:()=>events.get('PERMISSION_CHANGED')?.size??0,

@@ -539,10 +539,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const loadedReadingCursor = new LoadedReadingCursor();
   let savedReadingPosition: ReadingPosition | null = null;
   let readingPositionTimer: ReturnType<typeof setTimeout> | null = null;
+  let latestStoryDnaRequestId: string | null = null;
+  const pendingStoryDnaWrites = new Set<string>();
   function saveCursor(paragraphIndex: number, immediate = false): void {
     if (stage.isReadingUserParagraph()) return;
     const position = loadedReadingCursor.position(paragraphIndex);
     if (!position) return;
+    if (!immediate) {
+      latestStoryDnaRequestId = null;
+      if (savedReadingPosition && position.paragraphIndex < savedReadingPosition.paragraphIndex) clearStoryLore();
+    }
     savedReadingPosition = position;
     if (readingPositionTimer) clearTimeout(readingPositionTimer);
     readingPositionTimer = null;
@@ -550,6 +556,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       readingPositionTimer = null;
       if (destroyed) return;
       ctx.sendToBackend({ type: "vn_reading_position", position });
+      if (!immediate) refreshStoryLore();
     };
     if (immediate) send(); else readingPositionTimer = setTimeout(send, 250);
   }
@@ -921,8 +928,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       stage.setStoryDnaError(checked.error.issues[0]?.message ?? 'Invalid location or item DNA field.');
       return;
     }
+    if (body.action === 'list') latestStoryDnaRequestId = requestId;
+    else pendingStoryDnaWrites.add(requestId);
     ctx.sendToBackend(checked.data);
   };
+  function clearStoryLore(): void {
+    latestStoryDnaRequestId = null;
+    stage.setStoryDna({ locations: {}, items: {}, revision: 0 });
+  }
+  function refreshStoryLore(): void {
+    if (!active) return;
+    const position = loadedReadingCursor.position(stage.getState().currentParagraphIndex);
+    if (position) sendStoryDna({ action: 'list', readingPosition: position });
+  }
   const characterFolio = new CharacterFolio({
     onSaveDNA:(dna,revision)=>sendDna({action:'save',dna,revision}),
     onAutoFillDNA:(characterName,characterId,fields)=>sendDna({action:'propose',characterName,characterId,...(fields?{fields}:{})}),
@@ -1235,6 +1253,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   }
 
   function deactivate(): void {
+    pendingStoryDnaWrites.clear();
+    clearStoryLore();
     if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}stage.setReferenceHistory(undefined);
     characterFolio.setContext(null);dnaRequests.clear();dnaTurnToken='';dnaChangedThisTurn=false;
     preparationActive=false;stage.clearPreparationPreview();imageStudio.setPlanning(chatId(),false);
@@ -1356,8 +1376,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     characterFolio.setContext(next.chatId);
 
     if (dnaChangedThisTurn && next?.chatId) {
+      if (readingPositionTimer) clearTimeout(readingPositionTimer);
+      readingPositionTimer = null;
       sendDna({action:'list'});
-      sendStoryDna({action:'list'});
+      clearStoryLore();
     }
     imageLibrary.setContext(next,stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
@@ -1392,6 +1414,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       audioEngine.setBgmAttenuation(musicAttenuationForParagraph(next,decision.paragraphIndex));
       syncMusicChoices(next,decision.paragraphIndex);syncAudioForParagraph(next,decision.paragraphIndex,false);
       loadedReadingCursor.load(next);
+      if (!latestStoryDnaRequestId) refreshStoryLore();
       if(imageLibrary.isOpen())syncReadingHistory();
       // Identical cursor identity: SpeechController treats this as a no-op, so
       // a same-turn rebroadcast (e.g. an image/asset update) never replays speech.
@@ -1420,6 +1443,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.workspace.setAttention(computeReviewAttention(next,localPictureOperations));
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
+    refreshStoryLore();
     if(imageLibrary.isOpen())syncReadingHistory();
     stage.workspace.setResume(resume);
     syncMusicChoices(next,cursor);
@@ -1499,8 +1523,17 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if(owner&&(!dnaTurnScoped(owner.action)||owner.turnToken===dnaTurnToken)&&owner.chatId===chatId()&&owner.chatId===characterFolio.getContext()){characterFolio.showError(message.error);if(message.error.includes('DNA changed'))sendDna({action:'list'});}
       return;
     }
-    if(type==='vn_story_dna'&&message.type==='vn_story_dna'){if(message.chatId===chatId())stage.setStoryDna(message.storyDna);return;}
-    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_story_dna'){if(!message.chatId||message.chatId===chatId())stage.setStoryDnaError(message.error);return;}
+    if (type === 'vn_story_dna' && message.type === 'vn_story_dna') {
+      if (message.chatId !== chatId() || !message.requestId) return;
+      if (message.requestId === latestStoryDnaRequestId) stage.setStoryDna(message.storyDna);
+      else if (pendingStoryDnaWrites.delete(message.requestId)) refreshStoryLore();
+      return;
+    }
+    if (type === 'vn_error' && message.type === 'vn_error' && message.operation === 'vn_story_dna') {
+      const accepted = !message.requestId || message.requestId === latestStoryDnaRequestId || pendingStoryDnaWrites.delete(message.requestId);
+      if (accepted && (!message.chatId || message.chatId === chatId())) stage.setStoryDnaError(message.error);
+      return;
+    }
     if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true,prepare:false});return;}
     if(type==='vn_cast_gallery'&&message.type==='vn_cast_gallery'){settingsPanel?.setCastGallery(message.chatId,message.requestId,message.gallery);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_gallery'){if(message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
@@ -1610,7 +1643,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_turn_lore_patch" && message.type === "vn_turn_lore_patch") {
-      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint) return;
+      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint || turn.revision !== message.revision) return;
       if (invalidatedReferenceTurn === referenceTurnToken(turn) && message.referenceHistory !== undefined) return;
       turn = {
         ...turn,
@@ -1622,6 +1655,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         presentation: message.presentation,
         referenceHistory: message.referenceHistory,
       });
+      refreshStoryLore();
       return;
     }
     if (type === "vn_document_image" && message.type === "vn_document_image") {
@@ -1773,6 +1807,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     characterFolio.setContext(null);
     dnaRequests.clear();
     dnaTurnToken = "";
+    pendingStoryDnaWrites.clear();
+    clearStoryLore();
     dnaChangedThisTurn = false;
     documentArtRequests.clear();
     preparationActive = false;

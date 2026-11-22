@@ -24,6 +24,8 @@ import {
 } from './story-dna-store.js';
 import { activeBranchSwipeTags, activeMessageSwipeMap } from './character-dna-workflow.js';
 import { generateItemPropArtwork } from './document-art.js';
+import { loadReadingPosition, loadTurnRecord, turnPath } from './storage.js';
+import { sameLoreSource } from './story-dna-projection.js';
 import {
   autofillItemDNA,
   autofillLocationDNA,
@@ -42,7 +44,17 @@ export async function handleStoryDnaRequest(
     const msgs = typeof spindle.chat?.getMessages === 'function'
       ? await spindle.chat.getMessages(request.chatId).catch(() => [])
       : [];
-    const filtered = filterStoryDnaForActiveBranch(storyDna, activeBranchSwipeTags(msgs));
+    const position = request.action === 'list' && request.readingPosition
+      ? request.readingPosition : await loadReadingPosition(spindle, request.chatId, userId);
+    const branch = activeBranchSwipeTags(msgs);
+    if (position) {
+      const key = position.key;
+      const record = key.chatId === request.chatId
+        ? await loadTurnRecord(spindle, turnPath(request.chatId, key.assistantMessageId, key.swipeId), userId).catch(() => null)
+        : null;
+      if (!record || !sameLoreSource(record.plan.key, key)) branch.clear();
+    }
+    const filtered = filterStoryDnaForActiveBranch(storyDna, branch, position ?? undefined);
     spindle.sendToFrontend({
       type: 'vn_story_dna',
       chatId: request.chatId,

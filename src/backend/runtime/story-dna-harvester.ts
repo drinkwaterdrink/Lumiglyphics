@@ -1,14 +1,18 @@
 import type { SpindleAPI } from 'lumiverse-spindle-types';
 import { z } from 'zod';
-import type { TurnPlan } from '../../shared/contracts.js';
+import { TurnKeySchema, type TurnKey, type TurnPlan } from '../../shared/contracts.js';
+import { sameLoreSource } from './story-dna-projection.js';
+export { filterStoryDnaForActiveBranch } from './story-dna-projection.js';
 import { isMetaScenarioWrapper } from '../../shared/card-role.js';
+import { isGenericAttire, swipeTurnTag } from '../../shared/character-dna.js';
 import {
   createItemId,
   createLocationId,
   deriveShortAliases,
   findMatchingItem,
   findMatchingLocation,
-  isStoryEntryActiveOnBranch,
+  StoryLoreEventSchema,
+  type StoryLoreEvent,
   ItemDNASchema,
   LocationDNASchema,
   type ItemDNA,
@@ -71,53 +75,6 @@ export function isSignificantStoryItem(name: string, contextText?: string): bool
   return false;
 }
 
-export function filterStoryDnaForActiveBranch(
-  set: StoryDNASet,
-  activeTags: ReadonlySet<string>
-): StoryDNASet {
-  if (!activeTags || activeTags.size === 0) return set;
-  const locations: Record<string, LocationDNA> = Object.create(null);
-  for (const [id, loc] of Object.entries(set.locations)) {
-    if (isStoryEntryActiveOnBranch(loc, activeTags)) locations[id] = loc;
-  }
-  const items: Record<string, ItemDNA> = Object.create(null);
-  for (const [id, item] of Object.entries(set.items)) {
-    if (isStoryEntryActiveOnBranch(item, activeTags)) items[id] = item;
-  }
-  let documents: StoryDNASet['documents'];
-  if (set.documents) {
-    documents = Object.create(null);
-    for (const [id, doc] of Object.entries(set.documents)) {
-      if (isStoryEntryActiveOnBranch(doc, activeTags)) documents![id] = doc;
-    }
-  }
-  const thoughtCabinet = set.thoughtCabinet?.filter(
-    (entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t))
-  );
-  const chapterCodex = set.chapterCodex?.filter(
-    (entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t))
-  );
-  let npcBeliefs: StoryDNASet['npcBeliefs'];
-  if (set.npcBeliefs) {
-    npcBeliefs = Object.create(null);
-    for (const [npcKey, beliefs] of Object.entries(set.npcBeliefs)) {
-      const kept = beliefs.filter(
-        (b) => !b.seenInSwipes?.length || b.seenInSwipes.some((t) => activeTags.has(t))
-      );
-      if (kept.length > 0) npcBeliefs![npcKey] = kept;
-    }
-  }
-  return {
-    ...set,
-    locations,
-    items,
-    ...(documents !== undefined ? { documents } : {}),
-    ...(thoughtCabinet !== undefined ? { thoughtCabinet } : {}),
-    ...(chapterCodex !== undefined ? { chapterCodex } : {}),
-    ...(npcBeliefs !== undefined ? { npcBeliefs } : {}),
-  };
-}
-
 function recordSwipeTag(
   entry: { autoDiscovered?: boolean | undefined; seenInSwipes?: string[] | undefined },
   swipeTag: string
@@ -157,11 +114,24 @@ export function harvestTurnStoryDNA(
     sidecar?: {
       npcBeliefs?: readonly { npc: string; topic: string; belief: string; status: 'knows' | 'suspects' | 'unaware' }[];
       threadUpdates?: readonly { title: string; action: 'open' | 'advance' | 'resolve'; summary?: string }[];
+      wardrobeDeltas?: readonly { character: string; activeOutfit: string }[];
     };
   }
 ): boolean {
   let changed = false;
   let skippedNames = 0;
+  const parsedTurn = TurnKeySchema.safeParse(plan.key);
+  const sourceTurn = parsedTurn.success ? parsedTurn.data : undefined;
+  const inferredThreadUpdates: StoryLoreEvent['threadUpdates'] = [];
+  const referenceBeliefs: StoryLoreEvent['npcBeliefs'] = [];
+  if (sourceTurn && swipeTag) {
+    const heads = set.loreHeads ?? [];
+    const head = heads.find(key => swipeTurnTag(key.assistantMessageId, Number(key.swipeId ?? 0)) === swipeTag);
+    if (!sameLoreSource(head, sourceTurn)) {
+      set.loreHeads = [...heads.filter(key => key !== head), sourceTurn].slice(-192);
+      changed = true;
+    }
+  }
   let lastLoc: LocationDNA | undefined = prevLocationName
     ? findMatchingLocation(set.locations, prevLocationName)
     : undefined;
@@ -418,14 +388,9 @@ export function harvestTurnStoryDNA(
   };
 
   for (const doc of plan.storyDocuments ?? []) {
-    const body = doc.sections.map((s) => s.text.trim()).filter(Boolean).join('\n');
-    const obsSummary = (doc.observations ?? []).map((o) => o.summary?.trim()).filter(Boolean).join('; ');
-    const materials = (doc.observations ?? []).map((o) => o.material?.trim()).filter(Boolean).join(', ');
     upsertItem(doc.name, {
       itemType: doc.kind,
-      description: doc.visualDetails || obsSummary || body || `${doc.kind}: ${doc.name}`,
-      ...(materials ? { materials } : {}),
-      ...(body || obsSummary ? { loreText: body || obsSummary } : {}),
+      description: `${doc.kind}: ${doc.name}`,
       ...(doc.aliases ? { aliases: doc.aliases } : {}),
     });
 
@@ -448,6 +413,7 @@ export function harvestTurnStoryDNA(
         ...(doc.observations?.length ? {
           observations: doc.observations.slice(0, 32).map((o) => ({
             paragraphIndex: o.paragraphIndex,
+            ...(sourceTurn ? { sourceTurn } : {}),
             ...(o.summary ? { summary: o.summary.slice(0, 500) } : {}),
             ...(o.visualDetails ? { visualDetails: o.visualDetails.slice(0, 8) } : {}),
             ...(o.material ? { material: o.material.slice(0, 120) } : {}),
@@ -459,6 +425,7 @@ export function harvestTurnStoryDNA(
           paragraphIndex: s.paragraphIndex,
           text: s.text,
           ...(msgId ? { messageId: msgId } : {}),
+          ...(sourceTurn ? { sourceTurn } : {}),
         })),
         ...(msgId ? { sourceMessageIds: [msgId] } : {}),
         autoDiscovered: true,
@@ -495,11 +462,13 @@ export function harvestTurnStoryDNA(
         existingEntry.observations = existingEntry.observations ?? [];
         for (const obs of doc.observations) {
           const dup = existingEntry.observations.some(
-            (o) => o.evidence.slice(0, 80).toLowerCase() === obs.evidence.slice(0, 80).toLowerCase()
+            (o) => sameLoreSource(o.sourceTurn, sourceTurn) && o.paragraphIndex === obs.paragraphIndex &&
+              o.evidence === obs.evidence
           );
           if (!dup && existingEntry.observations.length < 32) {
             existingEntry.observations.push({
               paragraphIndex: obs.paragraphIndex,
+              ...(sourceTurn ? { sourceTurn } : {}),
               ...(obs.summary ? { summary: obs.summary.slice(0, 500) } : {}),
               ...(obs.visualDetails ? { visualDetails: obs.visualDetails.slice(0, 8) } : {}),
               ...(obs.material ? { material: obs.material.slice(0, 120) } : {}),
@@ -512,18 +481,24 @@ export function harvestTurnStoryDNA(
       }
       for (const sec of doc.sections) {
         const dup = existingEntry.sections.some(
-          (s) => (s.messageId ?? '') === (msgId ?? '') && s.paragraphIndex === sec.paragraphIndex && s.text.trim().toLowerCase() === sec.text.trim().toLowerCase()
+          (s) => sameLoreSource(s.sourceTurn, sourceTurn) && (s.messageId ?? '') === (msgId ?? '') &&
+            s.paragraphIndex === sec.paragraphIndex && s.text === sec.text
         );
         if (!dup && existingEntry.sections.length < 64) {
           existingEntry.sections = [...existingEntry.sections, {
             paragraphIndex: sec.paragraphIndex,
             text: sec.text,
             ...(msgId ? { messageId: msgId } : {}),
+            ...(sourceTurn ? { sourceTurn } : {}),
           }];
           changed = true;
         }
       }
       existingEntry.lastUpdated = Date.now();
+    }
+    if (sourceTurn && !existingEntry.appearances?.some(entry => sameLoreSource(entry.key, sourceTurn) && entry.paragraphIndex === doc.paragraphIndex)) {
+      existingEntry.appearances = [...(existingEntry.appearances ?? []), { key: sourceTurn, paragraphIndex: doc.paragraphIndex }].slice(-64);
+      changed = true;
     }
   }
 
@@ -584,7 +559,7 @@ export function harvestTurnStoryDNA(
     const RESOLUTION_VERBS = /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/i;
     // 1. Advance existing Thought Cabinet threads (germinating -> internalized -> resolved)
     for (const entry of ledger) {
-      if (entry.status === 'resolved') continue;
+      if (entry.authored || entry.status === 'resolved') continue;
       const keywords = entry.title
         .toLowerCase()
         .split(/[^a-z0-9]+/)
@@ -607,12 +582,11 @@ export function harvestTurnStoryDNA(
         const hits = keywords.filter((kw) => pText.includes(kw)).length;
         return hits >= minKw;
       });
-      if (threadExplicitlyResolved || questResolved || sameParagraphResolved) {
-        entry.status = 'resolved';
-        entry.updatedAt = Date.now();
-        changed = true;
-      } else if (entry.status === 'germinating' && mentioned) {
-        entry.status = 'internalized';
+      const action = threadExplicitlyResolved || questResolved || sameParagraphResolved ? 'resolve'
+        : entry.status === 'germinating' && mentioned ? 'advance' : null;
+      if (action && sourceTurn) inferredThreadUpdates.push({ title: entry.title, action });
+      else if (action) {
+        entry.status = action === 'resolve' ? 'resolved' : 'internalized';
         entry.updatedAt = Date.now();
         changed = true;
       }
@@ -626,7 +600,9 @@ export function harvestTurnStoryDNA(
       if (!cleanVal) continue;
       if (ref.kind === 'npc' && (ref.field === 'statedGoals' || ref.field === 'relationships' || ref.field === 'condition')) {
         const npcKey = ref.name.trim().slice(0, 120);
-        if (npcKey) {
+        if (npcKey && sourceTurn) {
+          referenceBeliefs.push({ npc: npcKey, topic: ref.field, belief: cleanVal.slice(0, 400), paragraphIndex: ref.paragraphIndex });
+        } else if (npcKey) {
           const list = [...(nextBeliefs[npcKey] ?? [])];
           const topic = ref.field;
           const existingBelief = list.find((b) => b.topic === topic && b.belief.toLowerCase() === cleanVal.slice(0, 400).toLowerCase());
@@ -645,12 +621,19 @@ export function harvestTurnStoryDNA(
       }
       if (ref.field !== 'significance' && ref.field !== 'statedGoals' && ref.field !== 'customs' && ref.field !== 'risks') continue;
       const title = `${ref.name}: ${cleanVal.split(/[.;!?]/)[0]?.trim() || cleanVal}`.slice(0, 160);
+      if (sourceTurn) {
+        inferredThreadUpdates.push({ title, action: 'open', summary: (ref.evidence?.trim() || cleanVal).slice(0, 1500), paragraphIndex: ref.paragraphIndex });
+        continue;
+      }
       const existingEntry = ledger.find((e) => e.title.toLowerCase() === title.toLowerCase());
       if (existingEntry) {
-        if (existingEntry.status === 'germinating') {
-          existingEntry.status = 'internalized';
-          existingEntry.updatedAt = Date.now();
-          changed = true;
+        if (existingEntry.status === 'germinating' && !existingEntry.authored && !existingEntry.seenInSwipes?.includes(swipeTag)) {
+          if (sourceTurn) inferredThreadUpdates.push({ title: existingEntry.title, action: 'advance' });
+          else {
+            existingEntry.status = 'internalized';
+            existingEntry.updatedAt = Date.now();
+            changed = true;
+          }
         }
         continue;
       }
@@ -674,70 +657,6 @@ export function harvestTurnStoryDNA(
       });
       changed = true;
     }
-    for (const belief of options?.sidecar?.npcBeliefs ?? []) {
-      const npcKey = belief.npc.trim().slice(0, 120);
-      const topic = belief.topic.trim().slice(0, 120);
-      const text = belief.belief.trim().slice(0, 400);
-      if (!npcKey || !topic || !text) continue;
-      const list = [...(nextBeliefs[npcKey] ?? [])];
-      const knowsSecret = belief.status === 'knows';
-      const existingIdx = list.findIndex((b) => b.topic.toLowerCase() === topic.toLowerCase() && b.belief.toLowerCase() === text.toLowerCase());
-      const existingItem = existingIdx >= 0 ? list[existingIdx] : undefined;
-      if (existingItem) {
-        if (existingItem.knowsSecret !== knowsSecret) {
-          list[existingIdx] = { ...existingItem, knowsSecret, updatedAt: Date.now() };
-          nextBeliefs[npcKey] = list;
-          changed = true;
-        }
-      } else {
-        list.push({
-          topic,
-          belief: text,
-          knowsSecret,
-          seenInSwipes: swipeTag ? [swipeTag] : [],
-          updatedAt: Date.now(),
-        });
-        nextBeliefs[npcKey] = list.slice(-12);
-        changed = true;
-      }
-    }
-    for (const thread of options?.sidecar?.threadUpdates ?? []) {
-      const title = thread.title.trim().slice(0, 160);
-      if (!title) continue;
-      const lowerTitle = title.toLowerCase();
-      const match = ledger.find((e) => e.title.toLowerCase() === lowerTitle || e.title.toLowerCase().includes(lowerTitle));
-      if (match) {
-        if (thread.action === 'resolve' && match.status !== 'resolved') {
-          match.status = 'resolved';
-          match.updatedAt = Date.now();
-          changed = true;
-        } else if (thread.action === 'advance') {
-          if (match.status === 'germinating') match.status = 'internalized';
-          if (thread.summary?.trim()) match.description = thread.summary.trim().slice(0, 1500);
-          match.updatedAt = Date.now();
-          changed = true;
-        }
-      } else if (thread.action === 'open' || thread.action === 'advance') {
-        let seq = 1;
-        const baseTcId = `tc-${createItemId(title)}`;
-        let entryId = `${baseTcId}-${seq}`.slice(0, 250);
-        while (seenLedgerIds.has(entryId)) {
-          seq += 1;
-          entryId = `${baseTcId}-${seq}`.slice(0, 250);
-        }
-        seenLedgerIds.add(entryId);
-        ledger.push({
-          id: entryId,
-          title,
-          category: 'clue',
-          description: (thread.summary?.trim() || title).slice(0, 1500),
-          status: thread.action === 'advance' ? 'internalized' : 'germinating',
-          seenInSwipes: swipeTag ? [swipeTag] : [],
-          updatedAt: Date.now(),
-        });
-        changed = true;
-      }
-    }
     if (Object.keys(nextBeliefs).length > 0) {
       set.npcBeliefs = nextBeliefs;
     }
@@ -746,6 +665,43 @@ export function harvestTurnStoryDNA(
     }
   }
 
+  if (sourceTurn) {
+    const sidecar = options?.sidecar;
+    const events = set.loreEvents ?? [];
+    const existing = events.find(entry => sameLoreSource(entry.key, sourceTurn));
+    const threads = new Map<string, StoryLoreEvent['threadUpdates'][number]>();
+    for (const entry of [...inferredThreadUpdates, ...(existing?.threadUpdates ?? []), ...(sidecar?.threadUpdates ?? [])]) {
+      threads.set(entry.title.trim().toLowerCase(), entry);
+    }
+    const outfitChanges = new Map<string, StoryLoreEvent['wardrobeDeltas'][number]>();
+    const addOutfit = (name: string | null | undefined, outfit: string | null | undefined) => {
+      const character = name?.trim().slice(0, 120);
+      const activeOutfit = outfit?.trim().slice(0, 320);
+      if (character && activeOutfit && !isGenericAttire(activeOutfit)) {
+        outfitChanges.set(character.toLowerCase(), { character, activeOutfit });
+      }
+    };
+    for (const scene of plan.scenes) addOutfit(scene.character || scene.cast?.[0], scene.attire);
+    for (const cue of plan.visualCues) addOutfit(cue.character, cue.attire);
+    for (const delta of [...(existing?.wardrobeDeltas ?? []), ...(sidecar?.wardrobeDeltas ?? [])]) addOutfit(delta.character, delta.activeOutfit);
+    const event = StoryLoreEventSchema.safeParse({
+      key: sourceTurn,
+      // These updates are turn-level. Reveal them only after the last paragraph.
+      paragraphIndex: Math.max(0, (plan.paragraphs?.length ?? 1) - 1),
+      npcBeliefs: options?.mindLedgerEnabled === false ? [] : [
+        ...referenceBeliefs, ...(sidecar?.npcBeliefs ?? existing?.npcBeliefs.filter(entry => entry.paragraphIndex === undefined) ?? []),
+      ].slice(-24),
+      threadUpdates: options?.mindLedgerEnabled === false ? [] : [...threads.values()].slice(-24),
+      wardrobeDeltas: [...outfitChanges.values()].slice(-24),
+    });
+    if (event.success && (event.data.npcBeliefs.length || event.data.threadUpdates.length || event.data.wardrobeDeltas.length)) {
+      const next = event.data;
+      if (JSON.stringify(existing) !== JSON.stringify(next)) {
+        set.loreEvents = [...events.filter(entry => !sameLoreSource(entry.key, next.key)), next].slice(-96);
+        changed = true;
+      }
+    }
+  }
   if (skippedNames > 0) options?.onSkippedNames?.(skippedNames);
   return changed;
 }

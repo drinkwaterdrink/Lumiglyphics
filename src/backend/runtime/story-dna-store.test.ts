@@ -78,3 +78,22 @@ test('a failed storage write does not consume the revision or block retry', asyn
   expect((await edit()).revision).toBe(10);
   expect((await loadStoryDNASet(f.spindle, 'chat', 'user')).locations.keep!.notes).toBe('New note');
 });
+
+test('scoped saves preserve Phase 1-readable authored data at the same revision', async () => {
+  const files = new Map<string, unknown>();
+  const spindle = { userStorage: {
+    getJson: async (path: string) => files.get(path) ?? null,
+    setJson: async (path: string, value: unknown) => { files.set(path, structuredClone(value)); },
+  } } as unknown as SpindleAPI;
+  const key = { chatId: 'chat', assistantMessageId: 'm1', sourceFingerprint: 'document-1', swipeId: 0, revision: 0 };
+  const saved = await mutateStoryDNASet(spindle, 'chat', 'user', 0, set => {
+    set.loreHeads = [key];
+    set.thoughtCabinet = [{ id: 'mine', title: 'My thread', description: 'My note', authored: true,
+      category: 'goal', status: 'active', updatedAt: 0 }];
+  });
+  const rollback = files.get('chats/chat/story-dna.phase1-backup.json') as Record<string, unknown>;
+  expect(rollback.revision).toBe(saved.revision);
+  expect(rollback.loreHeads).toBeUndefined();
+  expect(rollback.thoughtCabinet).toEqual([{ id: 'mine', title: 'My thread', description: 'My note',
+    category: 'goal', status: 'active', updatedAt: 0 }]);
+});

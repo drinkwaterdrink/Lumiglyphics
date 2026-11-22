@@ -525,6 +525,39 @@ test('closing the reader before narrative preparation suppresses the optional pr
  gate.resolve(await original('chat'));await new Promise(resolve=>setTimeout(resolve,25));
  expect(f.sent.some((m:any)=>m.type==='vn_narrative_preview')).toBe(false);expect(f.gates).toHaveLength(0);
 });
+
+test('reader turn is available while Sidecar is pending and retains literal documents after a partial result', async () => {
+  const f = generationFixture();
+  const original = (await f.spindle.chat.getMessages('chat'))[0]!;
+  f.spindle.chat.getMessages = async () => [{ ...original, content: 'Mira opens the sealed letter. The sealed letter reads: "Meet me at dawn."' }];
+  f.data.set('config.json', {
+    generateImages: false, collectEntityReferences: true, tooltips: { enabled: true },
+    includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false,
+  });
+  const sidecar = deferred<any>();
+  let started = false;
+  f.spindle.generate.raw = (async (request: any) => {
+    if (request.messages[0]?.content?.includes('Master Narrative Sidecar Curator')) {
+      started = true;
+      return sidecar.promise;
+    }
+    return { content: JSON.stringify(generationPayload([])) };
+  }) as typeof f.spindle.generate.raw;
+  registerVisualNovelBackend(f.spindle);
+  try {
+    await sendState(f.spindle, 'chat', 'sidecar-readiness', { viewOpen: true });
+    await waitFor(() => started);
+    expect(f.sent.some((m: any) => m.type === 'vn_turn' && m.turn.status === 'ready')).toBe(true);
+    expect(f.sent.some((m: any) => m.type === 'vn_turn_lore_patch')).toBe(false);
+    sidecar.resolve({ content: JSON.stringify({ suppressedDocumentNouns: ['sealed letter'], storyReferences: [] }) });
+    await waitFor(() => f.sent.some((m: any) => m.type === 'vn_turn_lore_patch'));
+    const saved = f.data.get(turnPath('chat', 'assistant-1', 0)) as StoredTurnRecord;
+    expect(saved.plan.storyDocuments?.flatMap(d => d.sections).map(s => s.text).join(' ')).toContain('Meet me at dawn.');
+  } finally {
+    sidecar.resolve({ content: '{}' });
+    f.request({ type: 'vn_view', chatId: 'chat', open: false }, 'sidecar-readiness');
+  }
+});
 test('new plans capture reference ancestry and views retain only verified earlier source observations',async()=>{
  const f=generationFixture(),template=(await f.spindle.chat.getMessages('chat'))[0]!,messages=[{...template,id:'prior-ref',content:'Mira has silver hair.'}];let calls=0;
  f.spindle.chat.getMessages=async()=>messages;

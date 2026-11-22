@@ -5,6 +5,7 @@ import {
   ThoughtCabinetEntrySchema,
   StoryDocumentLedgerEntrySchema,
   StoryDNASetSchema,
+  storyLoreThreadId,
   createLocationId,
   createItemId,
   findMatchingLocation,
@@ -16,6 +17,29 @@ import {
 
 const pathFor = (chatId: string) => `chats/${encodeURIComponent(chatId).replace(/%/g, '_')}/story-dna.json`;
 const queues = new WeakMap<object, Map<string, Promise<unknown>>>();
+
+function phase1RollbackCopy(set: StoryDNASet): StoryDNASet | null {
+  const { loreEvents, loreHeads, hiddenLoreThreads, ...base } = set;
+  const needsCopy = loreEvents || loreHeads || hiddenLoreThreads ||
+    base.thoughtCabinet?.some(entry => entry.authored !== undefined) ||
+    Object.values(base.documents ?? {}).some(doc => doc.appearances || doc.sections.some(section => section.sourceTurn) ||
+      doc.observations?.some(observation => observation.sourceTurn)) ||
+    Object.values(base.npcBeliefs ?? {}).some(entries => entries.some(entry => entry.knowledgeStatus !== undefined));
+  if (!needsCopy) return null;
+  return {
+    ...base,
+    ...(base.thoughtCabinet ? { thoughtCabinet: base.thoughtCabinet.map(({ authored, ...entry }) => entry) } : {}),
+    ...(base.npcBeliefs ? { npcBeliefs: Object.fromEntries(Object.entries(base.npcBeliefs).map(([npc, entries]) =>
+      [npc, entries.map(({ knowledgeStatus, ...entry }) => entry)])) } : {}),
+    ...(base.documents ? { documents: Object.fromEntries(Object.entries(base.documents).map(([id, doc]) => {
+      const { appearances, sections, observations, ...entry } = doc;
+      return [id, {
+        ...entry, sections: sections.filter(section => !section.sourceTurn),
+        ...(observations ? { observations: observations.filter(observation => !observation.sourceTurn) } : {}),
+      }];
+    })) } : {}),
+  };
+}
 
 export async function loadStoryDNASet(spindle: SpindleAPI, chatId: string, userId?: string): Promise<StoryDNASet> {
   const storage = spindle.userStorage;
@@ -60,6 +84,12 @@ export async function mutateStoryDNASet(
       throw new Error('Story DNA update contains invalid fields. No changes were saved.');
     }
     const options = { indent: 2, ...(userId ? { userId } : {}) };
+    const rollback = phase1RollbackCopy(candidate.data);
+    if (rollback) {
+      // Older strict readers cannot open provenance fields. Save a compatible
+      // companion first so a failed backup cannot leave an unprotected upgrade.
+      await spindle.userStorage!.setJson(pathFor(chatId).replace(/\.json$/, '.phase1-backup.json'), rollback, options);
+    }
     await spindle.userStorage!.setJson(pathFor(chatId), candidate.data, options);
     return candidate.data;
   });
@@ -352,7 +382,8 @@ export async function saveStoryThread(
   return mutateStoryDNASet(spindle, chatId, userId, revision, (set) => {
     const existing = set.thoughtCabinet ?? [];
     const idx = existing.findIndex((t) => t.id === parsed.id);
-    const nextEntry: ThoughtCabinetEntry = { ...parsed, updatedAt: Date.now() };
+    const nextEntry: ThoughtCabinetEntry = { ...parsed, authored: true, updatedAt: Date.now() };
+    if (set.hiddenLoreThreads) set.hiddenLoreThreads = set.hiddenLoreThreads.filter(id => id !== storyLoreThreadId(parsed.title));
     if (idx >= 0) {
       existing[idx] = nextEntry;
     } else {
@@ -370,8 +401,10 @@ export async function deleteStoryThread(
   revision?: number
 ): Promise<StoryDNASet> {
   return mutateStoryDNASet(spindle, chatId, userId, revision, (set) => {
-    if (!set.thoughtCabinet?.length) return;
-    set.thoughtCabinet = set.thoughtCabinet.filter((t) => t.id !== threadId);
+    const thread = set.thoughtCabinet?.find(item => item.id === threadId);
+    const hidden = thread ? storyLoreThreadId(thread.title) : threadId.startsWith('lore:') ? threadId : undefined;
+    if (hidden) set.hiddenLoreThreads = [...new Set([...(set.hiddenLoreThreads ?? []), hidden])].slice(-96);
+    if (set.thoughtCabinet) set.thoughtCabinet = set.thoughtCabinet.filter(t => t.id !== threadId);
   });
 }
 

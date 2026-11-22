@@ -14,6 +14,11 @@ test('malformed optional proposals are nonfatal and bounded',()=>{
  expect(normalizeStoryReferences([null,reference],paragraphs)).toEqual([reference]);
  expect(normalizeStoryReferences(Array(200).fill(reference),paragraphs)).toHaveLength(1);
 });
+test('an appended invented clause cannot ground a reference', () => {
+  const invented = { kind: 'npc', name: 'Mira', paragraphIndex: 0, field: 'statedGoals',
+    value: 'steal the sapphire', evidence: 'Rain fell. Mira plans to steal the sapphire.' };
+  expect(normalizeStoryReferences([invented], [{ text: 'Rain fell.' }])).toEqual([]);
+});
 
 test('collects optional descriptive profiles for people, places and objects from exact visible quotes',()=>{
  const profiles = [

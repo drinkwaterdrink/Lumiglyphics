@@ -18883,6 +18883,12 @@ function tokenizeWithSpans(raw) {
   }
   return tokens;
 }
+function tokenizeContent(text) {
+  const norm = normalizeForGroundMatch(text);
+  const all = norm.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const filtered = all.filter((tok) => tok.length >= 2 && !GROUNDING_STOPWORDS.has(tok));
+  return filtered.length > 0 ? filtered : all;
+}
 function alignSpanInParagraph(paragraphText, needle, options = {}) {
   if (!paragraphText || !needle?.trim())
     return null;
@@ -18984,6 +18990,69 @@ function alignSpanInParagraph(paragraphText, needle, options = {}) {
   }
   return null;
 }
+function hasTokenOverlap(haystack, needle, minRatio = 0.8) {
+  const normHaystack = normalizeForGroundMatch(haystack);
+  const normNeedle = normalizeForGroundMatch(needle);
+  if (!normHaystack || !normNeedle)
+    return false;
+  if (normHaystack.includes(normNeedle))
+    return true;
+  const needleTokens = tokenizeContent(needle);
+  if (needleTokens.length === 0)
+    return false;
+  const hayTokenSet = new Set(normalizeForGroundMatch(haystack).match(/[\p{L}\p{N}]+/gu) ?? []);
+  let matched = 0;
+  for (const tok of needleTokens) {
+    if (hayTokenSet.has(tok) || normHaystack.includes(tok)) {
+      matched += 1;
+    }
+  }
+  return matched / needleTokens.length >= minRatio;
+}
+var NEGATION_CUES_REGEX = /\b(?:not|never|no|none|neither|nor|without|refused|denied|failed\s+to|didn['’]t|doesn['’]t|don['’]t|wasn['’]t|weren['’]t|won['’]t|wouldn['’]t|couldn['’]t|can['’]t|cannot|hasn['’]t|haven['’]t|hadn['’]t)\b/i;
+var DIRECTIONAL_ACTION_REGEX = /\b([A-Z][a-zA-Z'’\-]+)\b[^.!?]{0,40}?\b(handed|gave|gives|told|tells|promised|promises|killed|kills|attacked|attacks|stole|steals|sent|sends|owed|owes|betrayed|betrays|warned|warns|accused|accuses|forgave|forgives|struck|strikes)\b[^.!?]{0,40}?\b([A-Z][a-zA-Z'’\-]+)\b/;
+function bestMatchingClause(haystack, needle) {
+  const clauses = haystack.split(/(?<=[.!?;])\s+/).map((s) => s.trim()).filter(Boolean);
+  if (clauses.length <= 1)
+    return haystack;
+  const needleTokens = tokenizeContent(needle);
+  let best = clauses[0];
+  let bestScore = -1;
+  for (const clause of clauses) {
+    const lower = normalizeForGroundMatch(clause);
+    let score = 0;
+    for (const tok of needleTokens) {
+      if (lower.includes(tok))
+        score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = clause;
+    }
+  }
+  return best;
+}
+function isClaimGroundedInEvidence(haystack, needle, minRatio = 0.8) {
+  if (!hasTokenOverlap(haystack, needle, minRatio))
+    return false;
+  const clause = bestMatchingClause(haystack, needle);
+  const hayNegated = NEGATION_CUES_REGEX.test(clause);
+  const needleNegated = NEGATION_CUES_REGEX.test(needle);
+  if (hayNegated !== needleNegated)
+    return false;
+  const needleDir = DIRECTIONAL_ACTION_REGEX.exec(needle);
+  const hayDir = DIRECTIONAL_ACTION_REGEX.exec(clause);
+  if (needleDir && hayDir) {
+    const nSubj = needleDir[1].toLowerCase();
+    const nObj = needleDir[3].toLowerCase();
+    const hSubj = hayDir[1].toLowerCase();
+    const hObj = hayDir[3].toLowerCase();
+    if (nSubj !== nObj && nSubj === hObj && nObj === hSubj) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // src/shared/story-documents.ts
 var STORY_DOCUMENT_KINDS = [
@@ -19020,6 +19089,24 @@ var DocumentObservationSchema = exports_external.object({
   condition: exports_external.string().trim().min(1).max(120).optional(),
   evidence: exports_external.string().min(1).max(1200)
 }).strict();
+function groundDocumentObservation(observation, text) {
+  if (!text)
+    return null;
+  const span = alignSpanInParagraph(text, observation.evidence);
+  if (!span || span.matchType === "fuzzy" || span.text.length > 1200)
+    return null;
+  const grounded = (value) => Boolean(value && isClaimGroundedInEvidence(span.text, value, 1));
+  const { paragraphIndex, summary, visualDetails, material, condition } = observation;
+  const details = visualDetails?.filter(grounded);
+  return {
+    paragraphIndex,
+    evidence: span.text,
+    ...grounded(summary) ? { summary } : {},
+    ...details?.length ? { visualDetails: details } : {},
+    ...grounded(material) ? { material } : {},
+    ...grounded(condition) ? { condition } : {}
+  };
+}
 var StoryDocumentSectionSchema = exports_external.object({
   paragraphIndex: exports_external.number().int().nonnegative(),
   start: exports_external.number().int().nonnegative(),
@@ -19160,10 +19247,19 @@ function validateStoryDocuments(value, paragraphs) {
       characters += s.text.length;
       return true;
     });
-    const observations = (d.observations ?? []).filter((o) => o.paragraphIndex >= d.paragraphIndex && Boolean(paragraphs[o.paragraphIndex]?.text && alignSpanInParagraph(paragraphs[o.paragraphIndex].text, o.evidence) !== null));
+    const observations = (d.observations ?? []).flatMap((o) => {
+      const grounded = o.paragraphIndex >= d.paragraphIndex ? groundDocumentObservation(o, paragraphs[o.paragraphIndex]?.text) : null;
+      return grounded ? [grounded] : [];
+    });
     ids.add(d.id);
     names.add(d.name.toLowerCase());
-    result.push({ ...d, sections, ...observations.length ? { observations } : {} });
+    const { observations: _storedObservations, visualDetails, ...document2 } = d;
+    result.push({
+      ...document2,
+      sections,
+      ...visualDetails && isClaimGroundedInEvidence(introText, visualDetails, 1) ? { visualDetails } : {},
+      ...observations.length ? { observations } : {}
+    });
   }
   return result;
 }
@@ -19772,6 +19868,24 @@ function describePresentationAction(action, name = (id2) => id2) {
   }
 }
 
+// src/shared/turn-key.ts
+var identifier = exports_external.string().trim().min(1).max(256);
+var nonNegativeInteger = exports_external.number().int().nonnegative();
+var TurnKeySchema = exports_external.object({
+  chatId: identifier,
+  assistantMessageId: identifier,
+  swipeId: exports_external.union([identifier, nonNegativeInteger]).nullable().default(null),
+  sourceFingerprint: exports_external.string().trim().min(8).max(256),
+  revision: nonNegativeInteger
+}).strict();
+
+// src/shared/reading-position.ts
+var ReadingPositionSchema = exports_external.object({
+  version: exports_external.literal(1),
+  key: TurnKeySchema,
+  paragraphIndex: exports_external.number().int().min(0).max(1e5)
+}).strict();
+
 // src/shared/story-dna.ts
 var LocationSpatialAnchorsSchema = exports_external.object({
   lightSourceAxis: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
@@ -19823,6 +19937,7 @@ var ThoughtCabinetEntrySchema = exports_external.object({
   description: exports_external.string().trim().max(1500),
   status: exports_external.enum(["active", "developing", "resolved", "germinating", "internalized"]).catch("active").default("active"),
   linkedEntities: exports_external.array(exports_external.string().trim().max(160)).max(12).optional(),
+  authored: exports_external.boolean().optional(),
   seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
   updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
 }).strict();
@@ -19843,6 +19958,7 @@ var NpcBeliefSchema = exports_external.object({
   topic: exports_external.string().trim().min(1).max(120),
   belief: exports_external.string().trim().min(1).max(400),
   knowsSecret: exports_external.boolean().default(false),
+  knowledgeStatus: exports_external.enum(["knows", "suspects", "unaware"]).optional(),
   seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
   updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
 }).strict();
@@ -19852,8 +19968,10 @@ var StoryDocumentLedgerEntrySchema = exports_external.object({
   kind: exports_external.string().trim().min(1).max(60),
   aliases: exports_external.array(exports_external.string().trim().max(160)).max(16).default([]),
   visualDetails: exports_external.string().trim().max(800).optional(),
+  appearances: exports_external.array(exports_external.object({ key: TurnKeySchema, paragraphIndex: exports_external.number().int().nonnegative() }).strict()).max(64).optional(),
   observations: exports_external.array(exports_external.object({
     paragraphIndex: exports_external.number().int().nonnegative(),
+    sourceTurn: TurnKeySchema.optional(),
     summary: exports_external.string().trim().max(500).optional(),
     visualDetails: exports_external.array(exports_external.string().trim().max(160)).max(8).optional(),
     material: exports_external.string().trim().max(120).optional(),
@@ -19863,7 +19981,8 @@ var StoryDocumentLedgerEntrySchema = exports_external.object({
   sections: exports_external.array(exports_external.object({
     paragraphIndex: exports_external.number().int().nonnegative(),
     text: exports_external.string().min(1).max(6000),
-    messageId: exports_external.string().trim().max(160).optional()
+    messageId: exports_external.string().trim().max(160).optional(),
+    sourceTurn: TurnKeySchema.optional()
   }).strict()).max(64).default([]),
   customNotes: exports_external.string().trim().max(4000).optional(),
   sourceMessageIds: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
@@ -19877,6 +19996,27 @@ var StoryDocumentLedgerEntrySchema = exports_external.object({
   seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
   lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
 }).strict();
+var StoryLoreEventSchema = exports_external.object({
+  key: TurnKeySchema,
+  paragraphIndex: exports_external.number().int().nonnegative(),
+  npcBeliefs: exports_external.array(exports_external.object({
+    npc: exports_external.string().trim().min(1).max(120),
+    topic: exports_external.string().trim().min(1).max(120),
+    belief: exports_external.string().trim().min(1).max(400),
+    status: exports_external.enum(["knows", "suspects", "unaware"]).optional(),
+    paragraphIndex: exports_external.number().int().nonnegative().optional()
+  }).strict()).max(24),
+  threadUpdates: exports_external.array(exports_external.object({
+    title: exports_external.string().trim().min(1).max(160),
+    action: exports_external.enum(["open", "advance", "resolve"]),
+    summary: exports_external.string().trim().max(1500).optional(),
+    paragraphIndex: exports_external.number().int().nonnegative().optional()
+  }).strict()).max(24),
+  wardrobeDeltas: exports_external.array(exports_external.object({
+    character: exports_external.string().trim().min(1).max(120),
+    activeOutfit: exports_external.string().trim().min(1).max(320)
+  }).strict()).max(24)
+}).strict();
 var StoryDNASetSchema = exports_external.object({
   locations: exports_external.record(exports_external.string(), LocationDNASchema).default({}),
   items: exports_external.record(exports_external.string(), ItemDNASchema).default({}),
@@ -19888,10 +20028,22 @@ var StoryDNASetSchema = exports_external.object({
   thoughtCabinet: exports_external.array(ThoughtCabinetEntrySchema).max(40).optional(),
   chapterCodex: exports_external.array(ChapterCodexEntrySchema).max(40).optional(),
   npcBeliefs: exports_external.record(exports_external.string(), exports_external.array(NpcBeliefSchema).max(12)).optional(),
+  loreEvents: exports_external.array(StoryLoreEventSchema).max(96).optional(),
+  loreHeads: exports_external.array(TurnKeySchema).max(192).optional(),
+  hiddenLoreThreads: exports_external.array(exports_external.string().max(200)).max(96).optional(),
   deletedLocations: exports_external.record(exports_external.string(), LocationDNASchema).optional(),
   deletedItems: exports_external.record(exports_external.string(), ItemDNASchema).optional(),
   revision: exports_external.number().int().nonnegative().default(0)
 }).strict();
+function inferredSceneOutfits(set2) {
+  const outfits = new Map;
+  for (const event of set2.loreEvents ?? []) {
+    for (const { character, activeOutfit } of event.wardrobeDeltas) {
+      outfits.set(character.trim().toLowerCase(), activeOutfit);
+    }
+  }
+  return outfits;
+}
 function createLocationId(name) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "location";
 }
@@ -20307,7 +20459,8 @@ var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
     type: exports_external.literal("vn_story_dna"),
     action: exports_external.literal("list"),
     chatId: exports_external.string(),
-    requestId: exports_external.string().optional()
+    requestId: exports_external.string().optional(),
+    readingPosition: ReadingPositionSchema.optional()
   }),
   exports_external.object({
     type: exports_external.literal("vn_story_dna"),
@@ -22323,19 +22476,11 @@ function evaluateContextualSkillCheckDetailed(check2, vitals) {
   const clampedMod = Math.max(-10, Math.min(20, mod));
   return { check: { ...check2, modifier: clampedMod, rollMode }, sources };
 }
-
 // src/shared/contracts.ts
 var IdentifierSchema = exports_external.string().trim().min(1).max(256);
 var PropertyNameSchema = exports_external.string().trim().min(1).max(128);
 var TextSchema = exports_external.string().trim().min(1);
 var NonNegativeIntegerSchema = exports_external.number().int().nonnegative();
-var TurnKeySchema = exports_external.object({
-  chatId: IdentifierSchema,
-  assistantMessageId: IdentifierSchema,
-  swipeId: exports_external.union([IdentifierSchema, NonNegativeIntegerSchema]).nullable().default(null),
-  sourceFingerprint: exports_external.string().trim().min(8).max(256),
-  revision: NonNegativeIntegerSchema
-}).strict();
 var ParagraphSchema = exports_external.object({
   index: NonNegativeIntegerSchema,
   sourceIndex: NonNegativeIntegerSchema,
@@ -23840,13 +23985,6 @@ var OUTDOOR_WEATHER_AMBIENTS = new Set([
   "sandstorm",
   "aurora"
 ]);
-
-// src/shared/reading-position.ts
-var ReadingPositionSchema = exports_external.object({
-  version: exports_external.literal(1),
-  key: TurnKeySchema,
-  paragraphIndex: exports_external.number().int().min(0).max(1e5)
-}).strict();
 
 // src/frontend/host/reading-position.ts
 class LoadedReadingCursor {
@@ -34680,11 +34818,11 @@ class DossierCard {
               head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;";
               const strong = document.createElement("strong");
               strong.textContent = `${npc} · ${item.topic}`;
-              const rawState = item.knowsSecret === true || /\b(knows|aware|witnessed|saw)\b/i.test(item.belief) ? "knows" : /\b(suspect|wonder|doubt|clue|rumor)\b/i.test(item.belief) ? "suspects" : "unaware";
+              const rawState = item.knowledgeStatus ?? (item.knowsSecret ? "knows" : "unknown");
               const chip = document.createElement("span");
               chip.className = "secret-chip";
               chip.dataset.state = rawState;
-              chip.textContent = rawState === "knows" ? "Knows" : rawState === "suspects" ? "Suspects" : "Unaware";
+              chip.textContent = rawState === "knows" ? "Knows" : rawState === "suspects" ? "Suspects" : rawState === "unaware" ? "Unaware" : "Unconfirmed";
               head.append(strong, chip);
               const body2 = document.createElement("div");
               body2.style.cssText = "font-size:11.5px;line-height:1.4;color:var(--vn-shell-text,#f4f7ee);";
@@ -46843,7 +46981,9 @@ class VnStage {
   buildNpcSceneActionTools(charName) {
     return this.dossiers.buildNpcActionTools(charName);
   }
+  inferredOutfits = new Map;
   setStoryDna(storyDna) {
+    this.inferredOutfits = inferredSceneOutfits(storyDna);
     this.dossiers.setStoryDna(storyDna);
   }
   setStoryDnaRequester(fn) {
@@ -47054,9 +47194,11 @@ class VnStage {
     head.append(title, closeBtn);
     card.append(head);
     if (char) {
+      const authoredOutfit = char.locked || char.activeWardrobeKey || char.activeOutfit && !char.autoDiscovered;
+      const outfit = (authoredOutfit ? char.activeOutfit : this.inferredOutfits.get(name.toLowerCase()) ?? char.activeOutfit) || char.signatureOutfit;
       const summary = [
         char.demeanor ? char.demeanor : "",
-        char.activeOutfit || char.signatureOutfit ? `Wearing: ${char.activeOutfit || char.signatureOutfit}` : ""
+        outfit ? `Wearing: ${outfit}` : ""
       ].filter(Boolean).join(" · ");
       if (summary) {
         const sub = document.createElement("div");
@@ -47072,14 +47214,14 @@ class VnStage {
         lbl.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--vn-shell-muted,#94a3b8);";
         lbl.textContent = "Wardrobe:";
         row.append(lbl);
-        for (const [key, outfit] of wardrobeEntries.slice(0, 6)) {
+        for (const [key, outfit2] of wardrobeEntries.slice(0, 6)) {
           const btn = document.createElement("button");
           btn.type = "button";
-          const active = char.activeWardrobeKey === key || char.activeOutfit === outfit;
+          const active = char.activeWardrobeKey === key || char.activeOutfit === outfit2;
           btn.textContent = key;
           btn.style.cssText = `min-height:44px;padding:6px 12px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "var(--vn-shell-accent,rgba(110,231,183,0.75))" : "var(--vn-shell-border,rgba(255,255,255,0.18))"};background:${active ? "color-mix(in srgb,var(--vn-shell-accent,#6ee7b7) 18%,transparent)" : "var(--vn-shell-button,rgba(255,255,255,0.06))"};color:var(--vn-shell-text,#f8fafc);`;
           btn.addEventListener("click", () => {
-            const nextDna = { ...char, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
+            const nextDna = { ...char, activeWardrobeKey: key, activeOutfit: outfit2, lastUpdated: Date.now() };
             this.characterDnaLibrary[char.id] = nextDna;
             this.dnaSaveRequester?.(nextDna);
             this.closeSpeakerPeek();
@@ -60015,7 +60157,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.12-beta.185";
+var LUMIGLYPHICS_VERSION = "0.2.13-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -71463,12 +71605,19 @@ function setupVisualNovelFrontend(baseContext) {
   const loadedReadingCursor = new LoadedReadingCursor;
   let savedReadingPosition = null;
   let readingPositionTimer = null;
+  let latestStoryDnaRequestId = null;
+  const pendingStoryDnaWrites = new Set;
   function saveCursor(paragraphIndex, immediate = false) {
     if (stage.isReadingUserParagraph())
       return;
     const position = loadedReadingCursor.position(paragraphIndex);
     if (!position)
       return;
+    if (!immediate) {
+      latestStoryDnaRequestId = null;
+      if (savedReadingPosition && position.paragraphIndex < savedReadingPosition.paragraphIndex)
+        clearStoryLore();
+    }
     savedReadingPosition = position;
     if (readingPositionTimer)
       clearTimeout(readingPositionTimer);
@@ -71478,6 +71627,8 @@ function setupVisualNovelFrontend(baseContext) {
       if (destroyed)
         return;
       ctx.sendToBackend({ type: "vn_reading_position", position });
+      if (!immediate)
+        refreshStoryLore();
     };
     if (immediate)
       send();
@@ -71973,8 +72124,23 @@ function setupVisualNovelFrontend(baseContext) {
       stage.setStoryDnaError(checked.error.issues[0]?.message ?? "Invalid location or item DNA field.");
       return;
     }
+    if (body2.action === "list")
+      latestStoryDnaRequestId = requestId;
+    else
+      pendingStoryDnaWrites.add(requestId);
     ctx.sendToBackend(checked.data);
   };
+  function clearStoryLore() {
+    latestStoryDnaRequestId = null;
+    stage.setStoryDna({ locations: {}, items: {}, revision: 0 });
+  }
+  function refreshStoryLore() {
+    if (!active)
+      return;
+    const position = loadedReadingCursor.position(stage.getState().currentParagraphIndex);
+    if (position)
+      sendStoryDna({ action: "list", readingPosition: position });
+  }
   const characterFolio = new CharacterFolio({
     onSaveDNA: (dna, revision) => sendDna({ action: "save", dna, revision }),
     onAutoFillDNA: (characterName, characterId, fields2) => sendDna({ action: "propose", characterName, characterId, ...fields2 ? { fields: fields2 } : {} }),
@@ -72296,6 +72462,8 @@ function setupVisualNovelFrontend(baseContext) {
     stage.focus();
   }
   function deactivate() {
+    pendingStoryDnaWrites.clear();
+    clearStoryLore();
     if (turn) {
       invalidatedReferenceTurn = referenceTurnToken(turn);
       turn = withoutReferenceHistory(turn);
@@ -72442,8 +72610,11 @@ function setupVisualNovelFrontend(baseContext) {
     }
     characterFolio.setContext(next.chatId);
     if (dnaChangedThisTurn && next?.chatId) {
+      if (readingPositionTimer)
+        clearTimeout(readingPositionTimer);
+      readingPositionTimer = null;
       sendDna({ action: "list" });
-      sendStoryDna({ action: "list" });
+      clearStoryLore();
     }
     imageLibrary.setContext(next, stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
@@ -72480,6 +72651,8 @@ function setupVisualNovelFrontend(baseContext) {
       syncMusicChoices(next, decision.paragraphIndex);
       syncAudioForParagraph(next, decision.paragraphIndex, false);
       loadedReadingCursor.load(next);
+      if (!latestStoryDnaRequestId)
+        refreshStoryLore();
       if (imageLibrary.isOpen())
         syncReadingHistory();
       syncSpeechCursor(next, decision.paragraphIndex);
@@ -72513,6 +72686,7 @@ function setupVisualNovelFrontend(baseContext) {
     if (revised)
       stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
+    refreshStoryLore();
     if (imageLibrary.isOpen())
       syncReadingHistory();
     stage.workspace.setResume(resume);
@@ -72653,12 +72827,17 @@ function setupVisualNovelFrontend(baseContext) {
       return;
     }
     if (type === "vn_story_dna" && message.type === "vn_story_dna") {
-      if (message.chatId === chatId())
+      if (message.chatId !== chatId() || !message.requestId)
+        return;
+      if (message.requestId === latestStoryDnaRequestId)
         stage.setStoryDna(message.storyDna);
+      else if (pendingStoryDnaWrites.delete(message.requestId))
+        refreshStoryLore();
       return;
     }
     if (type === "vn_error" && message.type === "vn_error" && message.operation === "vn_story_dna") {
-      if (!message.chatId || message.chatId === chatId())
+      const accepted = !message.requestId || message.requestId === latestStoryDnaRequestId || pendingStoryDnaWrites.delete(message.requestId);
+      if (accepted && (!message.chatId || message.chatId === chatId()))
         stage.setStoryDnaError(message.error);
       return;
     }
@@ -72818,7 +72997,7 @@ function setupVisualNovelFrontend(baseContext) {
       return;
     }
     if (type === "vn_turn_lore_patch" && message.type === "vn_turn_lore_patch") {
-      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint)
+      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint || turn.revision !== message.revision)
         return;
       if (invalidatedReferenceTurn === referenceTurnToken(turn) && message.referenceHistory !== undefined)
         return;
@@ -72832,6 +73011,7 @@ function setupVisualNovelFrontend(baseContext) {
         presentation: message.presentation,
         referenceHistory: message.referenceHistory
       });
+      refreshStoryLore();
       return;
     }
     if (type === "vn_document_image" && message.type === "vn_document_image") {
@@ -73003,6 +73183,8 @@ function setupVisualNovelFrontend(baseContext) {
     characterFolio.setContext(null);
     dnaRequests.clear();
     dnaTurnToken = "";
+    pendingStoryDnaWrites.clear();
+    clearStoryLore();
     dnaChangedThisTurn = false;
     documentArtRequests.clear();
     preparationActive = false;

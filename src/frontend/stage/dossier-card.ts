@@ -1954,15 +1954,11 @@ export class DossierCard {
               head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;';
               const strong = document.createElement('strong');
               strong.textContent = `${npc} · ${item.topic}`;
-              const rawState = (item as { knowsSecret?: boolean }).knowsSecret === true || /\b(knows|aware|witnessed|saw)\b/i.test(item.belief)
-                ? 'knows'
-                : /\b(suspect|wonder|doubt|clue|rumor)\b/i.test(item.belief)
-                  ? 'suspects'
-                  : 'unaware';
+              const rawState = item.knowledgeStatus ?? (item.knowsSecret ? 'knows' : 'unknown');
               const chip = document.createElement('span');
               chip.className = 'secret-chip';
               chip.dataset.state = rawState;
-              chip.textContent = rawState === 'knows' ? 'Knows' : rawState === 'suspects' ? 'Suspects' : 'Unaware';
+              chip.textContent = rawState === 'knows' ? 'Knows' : rawState === 'suspects' ? 'Suspects' : rawState === 'unaware' ? 'Unaware' : 'Unconfirmed';
               head.append(strong, chip);
 
               const body = document.createElement('div');

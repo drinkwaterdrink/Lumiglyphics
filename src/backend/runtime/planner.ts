@@ -86,6 +86,10 @@ import { buildRpgStaticRules, buildRpgTurnSnapshot, ChoiceRequirementsSchema, ev
 
 import { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, PlannerSceneSchema, PlannerCueSchema, PlannerChoiceSchema, PlannerCharacterSchema, PlannerSpeakerSchema, PlannerOutputSchema, type HintMessage, readGameHints, gameHintsForTurn, FIXED_CAMERA, stableHash, id, isAttireReset, BOUNDARY_REASONS, normalizeBoundaryReason, asBoolean } from "./planner/schemas.js";
 import { loadStoryDNASet } from "./story-dna-store.js";
+import { filterStoryDnaForActiveBranch } from "./story-dna-projection.js";
+import { inferredSceneOutfits } from "../../shared/story-dna.js";
+import { findCharacterDNA } from "../../shared/character-dna.js";
+import { loadCharacterDNALibrary } from "./character-dna-store.js";
 import type { StoryDNASet } from "../../shared/story-dna.js";
 export { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, gameHintsForTurn };
 
@@ -148,6 +152,7 @@ export type PlanTurnInput = {
   previousContinuity: TurnPlan["terminalContinuity"] | null;
   previousRpgState?: RpgState | null;
   recentMessages: Array<Pick<ChatMessageDTO, "name" | "content" | "is_user">>;
+  loreBranch?: ReadonlySet<string>;
   config: VisualNovelConfig;
   singleCharacter: SingleCharacterState;
   characterAppearance: CharacterAppearanceMap;
@@ -939,7 +944,7 @@ export function buildOutboundDramaticBrief(params: {
     const beliefLines: string[] = [];
     for (const [npc, entries] of Object.entries(params.storyDNASet.npcBeliefs ?? {})) {
       if (castSet.size > 0 && !castSet.has(npc.trim().toLowerCase())) continue;
-      const publicEntries = entries.filter((e) => !e.knowsSecret).slice(-2);
+      const publicEntries = entries.filter((e) => !e.knowsSecret && e.knowledgeStatus !== "unaware").slice(-2);
       if (publicEntries.length > 0) {
         beliefLines.push(`${npc} (${publicEntries.map((e) => `${e.topic}: ${e.belief.slice(0, 80)}`).join(", ")})`);
       }
@@ -1048,7 +1053,7 @@ async function requestPlannerOutput(
                 ? Object.fromEntries(
                     Object.entries(storyDNASet.npcBeliefs).map(([npc, items]) => [
                       npc,
-                      items.map((b) => ({
+                      items.filter(b => b.knowledgeStatus !== "unaware").map((b) => ({
                         fact: b.topic ? `${b.topic}: ${b.belief}` : b.belief,
                         knowsSecret: b.knowsSecret,
                       })),
@@ -2110,9 +2115,21 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
 
   let loadedStoryDnaSet: StoryDNASet | null = null;
   try {
-    const storyDNASet = storyDNAResult;
+    const storyDNASet = storyDNAResult
+      ? filterStoryDnaForActiveBranch(storyDNAResult, input.loreBranch ?? new Set())
+      : null;
     if (storyDNASet) {
       loadedStoryDnaSet = storyDNASet;
+      const inferredOutfits = inferredSceneOutfits(storyDNASet);
+      if (inferredOutfits.size) {
+        const library = await loadCharacterDNALibrary(spindle, input.chatId, input.userId).catch(() => null);
+        const outfitHints = library ? [...inferredOutfits].filter(([name]) => {
+          const dna = findCharacterDNA(library.characters, name);
+          return !dna?.locked && !dna?.activeWardrobeKey && !(dna?.activeOutfit && !dna.autoDiscovered);
+        }).slice(-8) : [];
+        if (outfitHints.length) visualContext.plannerContext +=
+          `\nPrior branch attire (scene continuity, superseded by current visible prose): ${JSON.stringify(outfitHints)}`;
+      }
       const activeLocName = (narrative.detectedSceneMetadata?.location || input.previousScene?.environment.location || '').trim().toLowerCase();
       const matchedLocation = activeLocName
         ? Object.values(storyDNASet.locations).find((loc) =>
@@ -2869,7 +2886,16 @@ export interface SidecarWardrobeDelta {
   activeOutfit: string;
 }
 
+const SIDECAR_CHANNELS = ["storyReferences", "storyDocuments", "suppressedDocumentNouns", "npcBeliefs", "threadUpdates", "wardrobeDeltas"] as const;
+type SidecarChannel = (typeof SIDECAR_CHANNELS)[number];
+type SidecarChannelStatus = "disabled" | "unavailable" | "invalid" | "partial" | "valid";
+
+function sidecarChannelStatuses(status: SidecarChannelStatus): Record<SidecarChannel, SidecarChannelStatus> {
+  return Object.fromEntries(SIDECAR_CHANNELS.map(key => [key, status])) as Record<SidecarChannel, SidecarChannelStatus>;
+}
+
 export interface SidecarCuratorResult {
+  channels: Record<SidecarChannel, SidecarChannelStatus>;
   storyReferences: ReturnType<typeof normalizeStoryReferences>;
   storyDocuments: ReturnType<typeof normalizeStoryDocuments>;
   sidecarSucceeded: boolean;
@@ -2889,7 +2915,8 @@ function parseSidecarNpcBeliefs(raw: unknown): SidecarNpcBelief[] {
     const npc = typeof rec.npc === "string" ? rec.npc.trim().slice(0, 120) : "";
     const topic = typeof rec.topic === "string" ? rec.topic.trim().slice(0, 120) : "";
     const belief = typeof rec.belief === "string" ? rec.belief.trim().slice(0, 400) : "";
-    const status = rec.status === "knows" || rec.status === "suspects" || rec.status === "unaware" ? rec.status : "unaware";
+    const status = rec.status;
+    if (status !== "knows" && status !== "suspects" && status !== "unaware") continue;
     if (npc && topic && belief) out.push({ npc, topic, belief, status });
   }
   return out;
@@ -2903,7 +2930,8 @@ function parseSidecarThreadUpdates(raw: unknown): SidecarThreadUpdate[] {
     if (!item || typeof item !== "object") continue;
     const rec = item as Record<string, unknown>;
     const title = typeof rec.title === "string" ? rec.title.trim().slice(0, 160) : "";
-    const action = rec.action === "open" || rec.action === "advance" || rec.action === "resolve" ? rec.action : "advance";
+    const action = rec.action;
+    if (action !== "open" && action !== "advance" && action !== "resolve") continue;
     const summary = typeof rec.summary === "string" ? rec.summary.trim().slice(0, 400) : undefined;
     if (title) out.push({ title, action, ...(summary ? { summary } : {}) });
   }
@@ -2941,10 +2969,11 @@ export async function extractTurnLoreAsync(
     signal?: AbortSignal;
   },
 ): Promise<SidecarCuratorResult> {
-  const emptyResult = (docs: ReturnType<typeof normalizeStoryDocuments>): SidecarCuratorResult => ({
+  const emptyResult = (docs: ReturnType<typeof normalizeStoryDocuments>, status: SidecarChannelStatus): SidecarCuratorResult => ({
     storyReferences: [],
     storyDocuments: docs,
     sidecarSucceeded: false,
+    channels: sidecarChannelStatuses(status),
     suppressedDocumentNouns: [],
     npcBeliefs: [],
     threadUpdates: [],
@@ -2952,10 +2981,21 @@ export async function extractTurnLoreAsync(
   });
   const strict = params.config.strictDocumentSensing !== false;
   if (!params.paragraphs.length || (!params.config.collectEntityReferences && !params.config.tooltips.enabled)) {
-    return emptyResult([]);
+    return emptyResult([], "disabled");
   }
   throwIfAborted(params.signal);
-  const connection = await resolveSidecarConnection(spindle, params.config, params.userId);
+  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const fallbackDocs = strict
+    ? filterStrictStoryDocuments(rawSensedDocs, { ...(params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {}) })
+    : rawSensedDocs;
+  let connection: ResolvedPlannerConnection | undefined | null;
+  try {
+    connection = await resolveSidecarConnection(spindle, params.config, params.userId);
+  } catch {
+    throwIfAborted(params.signal);
+    return emptyResult(fallbackDocs, "unavailable");
+  }
+  throwIfAborted(params.signal);
   const paragraphText = params.paragraphs.map((p) => `[${p.index}] ${p.text}`).join("\n");
   const contextLines: string[] = [];
   const hintLocation = params.structuredHints?.location || params.previousLocation || undefined;
@@ -2985,38 +3025,39 @@ export async function extractTurnLoreAsync(
   const maxTokens = Math.min(12000, 4000 + params.paragraphs.length * 300);
   const parameters = structuredJsonParametersFor(connection, maxTokens, params.config.parserParameters);
 
-  const response = await spindle.generate.raw({
-    type: "raw",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-    ...(connection
-      ? { provider: connection.provider, model: connection.model, connection_id: connection.id }
-      : {}),
-    parameters,
-    reasoning: { source: "off" },
-    ...(params.signal ? { signal: params.signal } : {}),
-    ...(params.userId ? { userId: params.userId } : {}),
-  });
-  throwIfAborted(params.signal);
-
-  const rawContent = extractResponseContent(response);
-  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
-  const fallbackDocs = strict
-    ? filterStrictStoryDocuments(rawSensedDocs, { ...(params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {}) })
-    : rawSensedDocs;
+  let rawContent: unknown;
+  try {
+    const response = await spindle.generate.raw({
+      type: "raw",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      ...(connection
+        ? { provider: connection.provider, model: connection.model, connection_id: connection.id }
+        : {}),
+      parameters,
+      reasoning: { source: "off" },
+      ...(params.signal ? { signal: params.signal } : {}),
+      ...(params.userId ? { userId: params.userId } : {}),
+    });
+    throwIfAborted(params.signal);
+    rawContent = extractResponseContent(response);
+  } catch {
+    throwIfAborted(params.signal);
+    return emptyResult(fallbackDocs, "unavailable");
+  }
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
-    return emptyResult(fallbackDocs);
+    return emptyResult(fallbackDocs, "invalid");
   }
   let parsed: unknown;
   try {
     parsed = jsonObject(rawContent);
   } catch {
-    return emptyResult(fallbackDocs);
+    return emptyResult(fallbackDocs, "invalid");
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return emptyResult(fallbackDocs);
+    return emptyResult(fallbackDocs, "invalid");
   }
   const rec = parsed as Record<string, unknown>;
   const scenarioRef = params.scenarioReferenceName ? characterAppearanceKey(params.scenarioReferenceName) : "";
@@ -3040,14 +3081,24 @@ export async function extractTurnLoreAsync(
         }),
       )
     : mergeStoryDocuments(llmDocs, rawSensedDocs);
+  const npcBeliefs = parseSidecarNpcBeliefs(rec.npcBeliefs);
+  const threadUpdates = parseSidecarThreadUpdates(rec.threadUpdates);
+  const wardrobeDeltas = parseSidecarWardrobeDeltas(rec.wardrobeDeltas);
+  const acceptedCounts: Record<SidecarChannel, number> = {
+    storyReferences: storyReferences.length, storyDocuments: llmDocs.length,
+    suppressedDocumentNouns: suppressedDocumentNouns.length, npcBeliefs: npcBeliefs.length,
+    threadUpdates: threadUpdates.length, wardrobeDeltas: wardrobeDeltas.length,
+  };
+  const channels = sidecarChannelStatuses("unavailable");
+  for (const key of SIDECAR_CHANNELS) {
+    const raw = rec[key];
+    if (raw === undefined) continue;
+    channels[key] = !Array.isArray(raw) || (raw.length > 0 && acceptedCounts[key] === 0)
+      ? "invalid" : acceptedCounts[key] < raw.length ? "partial" : "valid";
+  }
   return {
-    storyReferences,
-    storyDocuments,
-    sidecarSucceeded: true,
-    suppressedDocumentNouns,
-    npcBeliefs: parseSidecarNpcBeliefs(rec.npcBeliefs),
-    threadUpdates: parseSidecarThreadUpdates(rec.threadUpdates),
-    wardrobeDeltas: parseSidecarWardrobeDeltas(rec.wardrobeDeltas),
+    storyReferences, storyDocuments, channels, suppressedDocumentNouns, npcBeliefs, threadUpdates, wardrobeDeltas,
+    sidecarSucceeded: Object.values(channels).some(status => status === "valid" || status === "partial"),
   };
 }
 

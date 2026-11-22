@@ -19894,6 +19894,24 @@ var init_grounding = __esm(() => {
 });
 
 // src/shared/story-documents.ts
+function groundDocumentObservation(observation, text) {
+  if (!text)
+    return null;
+  const span = alignSpanInParagraph(text, observation.evidence);
+  if (!span || span.matchType === "fuzzy" || span.text.length > 1200)
+    return null;
+  const grounded = (value) => Boolean(value && isClaimGroundedInEvidence(span.text, value, 1));
+  const { paragraphIndex, summary, visualDetails, material, condition } = observation;
+  const details = visualDetails?.filter(grounded);
+  return {
+    paragraphIndex,
+    evidence: span.text,
+    ...grounded(summary) ? { summary } : {},
+    ...details?.length ? { visualDetails: details } : {},
+    ...grounded(material) ? { material } : {},
+    ...grounded(condition) ? { condition } : {}
+  };
+}
 function isIdiomaticDocumentMention(paragraphText, start, end) {
   const winStart = Math.max(0, start - 28);
   const winEnd = Math.min(paragraphText.length, end + 28);
@@ -20072,17 +20090,17 @@ function normalizeStoryDocuments(value, paragraphs, trace) {
             trace.droppedSections += 1;
           continue;
         }
-        const normEvid = normalizeForGroundMatch(s.evidence);
         const evidSpan = alignSpanInParagraph(text, s.evidence);
-        if (!evidSpan) {
+        if (!evidSpan || evidSpan.matchType === "fuzzy") {
           if (trace)
             trace.droppedSections += 1;
           continue;
         }
+        const normEvid = normalizeForGroundMatch(evidSpan.text);
         const multiDocSameParagraph = s.paragraphIndex > doc2.paragraphIndex && (docsPerParagraph.get(s.paragraphIndex) ?? 0) > 1;
         const mentionsDocAlias = aliases.some((a) => a.length >= 2 && normEvid.includes(a));
         if ((s.paragraphIndex === doc2.paragraphIndex || multiDocSameParagraph) && !mentionsDocAlias) {
-          const hasReadingCue = /\b(?:reads?|says?|printed|written|inscribed|scrawled|displays?|shows?)\b|^>/i.test(s.evidence);
+          const hasReadingCue = /\b(?:reads?|says?|printed|written|inscribed|scrawled|displays?|shows?)\b|^>/i.test(evidSpan.text);
           if (!(s.paragraphIndex === doc2.paragraphIndex && !multiDocSameParagraph && hasReadingCue)) {
             if (trace)
               trace.droppedSections += 1;
@@ -20094,7 +20112,7 @@ function normalizeStoryDocuments(value, paragraphs, trace) {
         const insideSpan = alignSpanInParagraph(evidenceWindow, s.text, {
           claimedSpans: claimed.map((c) => ({ start: c.start - evidSpan.start, end: c.end - evidSpan.start }))
         });
-        if (!insideSpan) {
+        if (!insideSpan || insideSpan.matchType === "fuzzy") {
           if (trace)
             trace.droppedSections += 1;
           continue;
@@ -20124,18 +20142,21 @@ function normalizeStoryDocuments(value, paragraphs, trace) {
             trace.droppedObservations += 1;
           continue;
         }
-        const text = paragraphs[o.data.paragraphIndex]?.text;
-        if (!text || o.data.paragraphIndex < doc2.paragraphIndex || alignSpanInParagraph(text, o.data.evidence) === null) {
+        const grounded = o.data.paragraphIndex < doc2.paragraphIndex ? null : groundDocumentObservation(o.data, paragraphs[o.data.paragraphIndex]?.text);
+        if (!grounded) {
           if (trace)
             trace.droppedObservations += 1;
           continue;
         }
-        obsList.push(o.data);
+        obsList.push(grounded);
       }
     }
     passages.sort((a, b) => a.paragraphIndex - b.paragraphIndex || a.start - b.start);
+    const { visualDetails, ...identity } = doc2;
+    const intro = paragraphs[doc2.paragraphIndex]?.text;
     result.push({
-      ...doc2,
+      ...identity,
+      ...visualDetails && intro && isClaimGroundedInEvidence(intro, visualDetails, 1) ? { visualDetails } : {},
       id: stableDocumentId(doc2.kind, doc2.name, usedIds),
       sections: passages,
       ...obsList.length ? { observations: obsList } : {}
@@ -20174,10 +20195,19 @@ function validateStoryDocuments(value, paragraphs) {
       characters += s.text.length;
       return true;
     });
-    const observations = (d.observations ?? []).filter((o) => o.paragraphIndex >= d.paragraphIndex && Boolean(paragraphs[o.paragraphIndex]?.text && alignSpanInParagraph(paragraphs[o.paragraphIndex].text, o.evidence) !== null));
+    const observations = (d.observations ?? []).flatMap((o) => {
+      const grounded = o.paragraphIndex >= d.paragraphIndex ? groundDocumentObservation(o, paragraphs[o.paragraphIndex]?.text) : null;
+      return grounded ? [grounded] : [];
+    });
     ids.add(d.id);
     names.add(d.name.toLowerCase());
-    result.push({ ...d, sections, ...observations.length ? { observations } : {} });
+    const { observations: _storedObservations, visualDetails, ...document } = d;
+    result.push({
+      ...document,
+      sections,
+      ...visualDetails && isClaimGroundedInEvidence(introText, visualDetails, 1) ? { visualDetails } : {},
+      ...observations.length ? { observations } : {}
+    });
   }
   return result;
 }
@@ -20519,7 +20549,7 @@ function filterStrictStoryDocuments(docs, options = {}) {
     const lowerName = doc2.name.trim().toLowerCase();
     if (!lowerName)
       continue;
-    if (suppressed.has(lowerName) || doc2.aliases?.some((a) => suppressed.has(a.trim().toLowerCase()))) {
+    if (!doc2.sections.length && !doc2.observations?.some((o) => o.summary || o.visualDetails?.length || o.material || o.condition) && (suppressed.has(lowerName) || doc2.aliases?.some((a) => suppressed.has(a.trim().toLowerCase())))) {
       continue;
     }
     const normalized = {
@@ -20766,7 +20796,46 @@ var init_story_documents = __esm(() => {
   ]);
 });
 
+// src/shared/turn-key.ts
+var identifier, nonNegativeInteger, TurnKeySchema;
+var init_turn_key = __esm(() => {
+  init_zod();
+  identifier = exports_external.string().trim().min(1).max(256);
+  nonNegativeInteger = exports_external.number().int().nonnegative();
+  TurnKeySchema = exports_external.object({
+    chatId: identifier,
+    assistantMessageId: identifier,
+    swipeId: exports_external.union([identifier, nonNegativeInteger]).nullable().default(null),
+    sourceFingerprint: exports_external.string().trim().min(8).max(256),
+    revision: nonNegativeInteger
+  }).strict();
+});
+
+// src/shared/reading-position.ts
+var ReadingPositionSchema;
+var init_reading_position = __esm(() => {
+  init_zod();
+  init_turn_key();
+  ReadingPositionSchema = exports_external.object({
+    version: exports_external.literal(1),
+    key: TurnKeySchema,
+    paragraphIndex: exports_external.number().int().min(0).max(1e5)
+  }).strict();
+});
+
 // src/shared/story-dna.ts
+function storyLoreThreadId(title) {
+  return `lore:${title.trim().toLowerCase()}`;
+}
+function inferredSceneOutfits(set2) {
+  const outfits = new Map;
+  for (const event of set2.loreEvents ?? []) {
+    for (const { character, activeOutfit } of event.wardrobeDeltas) {
+      outfits.set(character.trim().toLowerCase(), activeOutfit);
+    }
+  }
+  return outfits;
+}
 function createLocationId(name) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "location";
 }
@@ -21059,9 +21128,11 @@ function scrubStoryDNASwipes(set2, activeMessageSwipes) {
     revision: (set2.revision ?? 0) + 1
   });
 }
-var LocationSpatialAnchorsSchema, LocationDNASchema, ItemDNASchema, ThoughtCabinetEntrySchema, ChapterCodexEntrySchema, NpcBeliefSchema, StoryDocumentLedgerEntrySchema, StoryDNASetSchema, GENERIC_ALIAS_WORDS, TRAILING_CONTAINER_SUFFIXES, BOUNDARY_SHORT_STOPWORDS, PERSONAL_HONORIFIC_RE, StoryDnaRequestSchema;
+var LocationSpatialAnchorsSchema, LocationDNASchema, ItemDNASchema, ThoughtCabinetEntrySchema, ChapterCodexEntrySchema, NpcBeliefSchema, StoryDocumentLedgerEntrySchema, StoryLoreEventSchema, StoryDNASetSchema, GENERIC_ALIAS_WORDS, TRAILING_CONTAINER_SUFFIXES, BOUNDARY_SHORT_STOPWORDS, PERSONAL_HONORIFIC_RE, StoryDnaRequestSchema;
 var init_story_dna = __esm(() => {
   init_zod();
+  init_turn_key();
+  init_reading_position();
   LocationSpatialAnchorsSchema = exports_external.object({
     lightSourceAxis: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
     windowOrPortalSide: exports_external.enum(["left", "right", "center-back", "none"]).optional(),
@@ -21112,6 +21183,7 @@ var init_story_dna = __esm(() => {
     description: exports_external.string().trim().max(1500),
     status: exports_external.enum(["active", "developing", "resolved", "germinating", "internalized"]).catch("active").default("active"),
     linkedEntities: exports_external.array(exports_external.string().trim().max(160)).max(12).optional(),
+    authored: exports_external.boolean().optional(),
     seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
     updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
   }).strict();
@@ -21132,6 +21204,7 @@ var init_story_dna = __esm(() => {
     topic: exports_external.string().trim().min(1).max(120),
     belief: exports_external.string().trim().min(1).max(400),
     knowsSecret: exports_external.boolean().default(false),
+    knowledgeStatus: exports_external.enum(["knows", "suspects", "unaware"]).optional(),
     seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
     updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
   }).strict();
@@ -21141,8 +21214,10 @@ var init_story_dna = __esm(() => {
     kind: exports_external.string().trim().min(1).max(60),
     aliases: exports_external.array(exports_external.string().trim().max(160)).max(16).default([]),
     visualDetails: exports_external.string().trim().max(800).optional(),
+    appearances: exports_external.array(exports_external.object({ key: TurnKeySchema, paragraphIndex: exports_external.number().int().nonnegative() }).strict()).max(64).optional(),
     observations: exports_external.array(exports_external.object({
       paragraphIndex: exports_external.number().int().nonnegative(),
+      sourceTurn: TurnKeySchema.optional(),
       summary: exports_external.string().trim().max(500).optional(),
       visualDetails: exports_external.array(exports_external.string().trim().max(160)).max(8).optional(),
       material: exports_external.string().trim().max(120).optional(),
@@ -21152,7 +21227,8 @@ var init_story_dna = __esm(() => {
     sections: exports_external.array(exports_external.object({
       paragraphIndex: exports_external.number().int().nonnegative(),
       text: exports_external.string().min(1).max(6000),
-      messageId: exports_external.string().trim().max(160).optional()
+      messageId: exports_external.string().trim().max(160).optional(),
+      sourceTurn: TurnKeySchema.optional()
     }).strict()).max(64).default([]),
     customNotes: exports_external.string().trim().max(4000).optional(),
     sourceMessageIds: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
@@ -21166,6 +21242,27 @@ var init_story_dna = __esm(() => {
     seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
     lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
   }).strict();
+  StoryLoreEventSchema = exports_external.object({
+    key: TurnKeySchema,
+    paragraphIndex: exports_external.number().int().nonnegative(),
+    npcBeliefs: exports_external.array(exports_external.object({
+      npc: exports_external.string().trim().min(1).max(120),
+      topic: exports_external.string().trim().min(1).max(120),
+      belief: exports_external.string().trim().min(1).max(400),
+      status: exports_external.enum(["knows", "suspects", "unaware"]).optional(),
+      paragraphIndex: exports_external.number().int().nonnegative().optional()
+    }).strict()).max(24),
+    threadUpdates: exports_external.array(exports_external.object({
+      title: exports_external.string().trim().min(1).max(160),
+      action: exports_external.enum(["open", "advance", "resolve"]),
+      summary: exports_external.string().trim().max(1500).optional(),
+      paragraphIndex: exports_external.number().int().nonnegative().optional()
+    }).strict()).max(24),
+    wardrobeDeltas: exports_external.array(exports_external.object({
+      character: exports_external.string().trim().min(1).max(120),
+      activeOutfit: exports_external.string().trim().min(1).max(320)
+    }).strict()).max(24)
+  }).strict();
   StoryDNASetSchema = exports_external.object({
     locations: exports_external.record(exports_external.string(), LocationDNASchema).default({}),
     items: exports_external.record(exports_external.string(), ItemDNASchema).default({}),
@@ -21177,6 +21274,9 @@ var init_story_dna = __esm(() => {
     thoughtCabinet: exports_external.array(ThoughtCabinetEntrySchema).max(40).optional(),
     chapterCodex: exports_external.array(ChapterCodexEntrySchema).max(40).optional(),
     npcBeliefs: exports_external.record(exports_external.string(), exports_external.array(NpcBeliefSchema).max(12)).optional(),
+    loreEvents: exports_external.array(StoryLoreEventSchema).max(96).optional(),
+    loreHeads: exports_external.array(TurnKeySchema).max(192).optional(),
+    hiddenLoreThreads: exports_external.array(exports_external.string().max(200)).max(96).optional(),
     deletedLocations: exports_external.record(exports_external.string(), LocationDNASchema).optional(),
     deletedItems: exports_external.record(exports_external.string(), ItemDNASchema).optional(),
     revision: exports_external.number().int().nonnegative().default(0)
@@ -21368,7 +21468,8 @@ var init_story_dna = __esm(() => {
       type: exports_external.literal("vn_story_dna"),
       action: exports_external.literal("list"),
       chatId: exports_external.string(),
-      requestId: exports_external.string().optional()
+      requestId: exports_external.string().optional(),
+      readingPosition: ReadingPositionSchema.optional()
     }),
     exports_external.object({
       type: exports_external.literal("vn_story_dna"),
@@ -21689,15 +21790,14 @@ function normalizeStoryReferences(value, paragraphs, options = {}) {
       continue;
     }
     const normPara = normalizeForGroundMatch(paragraph);
-    const normEvid = normalizeForGroundMatch(r.evidence);
-    const evidGrounded = Boolean(normEvid && (normPara.includes(normEvid) || normEvid.includes(normPara) || alignSpanInParagraph(paragraph, r.evidence) !== null));
-    if (!evidGrounded) {
+    const span = alignSpanInParagraph(paragraph, r.evidence);
+    if (!span || span.matchType === "fuzzy" || span.text.length > 1200) {
       if (trace)
         trace.ungroundedEvidence += 1;
       continue;
     }
     const candidates = collectCandidateNames(r.name);
-    let nameGrounded = matchesAnyCandidateInText(normPara, candidates) || matchesAnyCandidateInText(normEvid, candidates);
+    let nameGrounded = matchesAnyCandidateInText(normPara, candidates);
     if (!nameGrounded) {
       const targetSourceIndex = options.sourceIndexes?.[r.paragraphIndex];
       const speaker = r.kind === "npc" ? options.paragraphSpeakers?.[r.paragraphIndex]?.trim().toLowerCase() : undefined;
@@ -21725,17 +21825,18 @@ function normalizeStoryReferences(value, paragraphs, options = {}) {
         trace.ungroundedName += 1;
       continue;
     }
-    const valGrounded = isClaimGroundedInEvidence(r.evidence, r.value, 0.8) || isClaimGroundedInEvidence(paragraph, r.value, 0.8);
+    const valGrounded = isClaimGroundedInEvidence(span.text, r.value, 0.8);
     if (!valGrounded) {
       if (trace)
         trace.ungroundedValue += 1;
       continue;
     }
-    const key = JSON.stringify(r);
+    const grounded = { ...r, evidence: span.text };
+    const key = JSON.stringify(grounded);
     if (seen.has(key))
       continue;
     seen.add(key);
-    result.push(r);
+    result.push(grounded);
     if (trace)
       trace.accepted += 1;
     if (result.length === 32)
@@ -24352,7 +24453,7 @@ var init_rpg_state = __esm(() => {
 });
 
 // src/shared/contracts.ts
-var IdentifierSchema, PropertyNameSchema, TextSchema, NonNegativeIntegerSchema, TurnKeySchema, ParagraphSchema, ChoiceSourceSchema, ChoiceSchema, SubjectCategorySchema, CharacterContinuitySchema, ContinuityStateSchema, CharacterContinuityPatchSchema, ContinuityDeltaSchema, IndexedContinuityDeltaSchema, WorldAtmosphereSnapshotSchema, SceneAtmosphereEntrySchema, SceneEnvironmentSchema, CameraLockSchema, AmbientEffectSchema, SceneStateSchema, SceneBoundaryReasonSchema, SceneBoundaryProposalSchema, StageEffectSchema, PlannerShotHintSchema, VisualCueKindSchema, VisualCueSchema, AssetJobStatusSchema, AssetJobPrioritySchema, TimestampSchema, AssetJobSchema, PlanningStatusSchema, AudioCueSchema, EffectCueSchema, MAX_CACHE_CUES_PER_TURN = 16, TurnPlanSchema;
+var IdentifierSchema, PropertyNameSchema, TextSchema, NonNegativeIntegerSchema, ParagraphSchema, ChoiceSourceSchema, ChoiceSchema, SubjectCategorySchema, CharacterContinuitySchema, ContinuityStateSchema, CharacterContinuityPatchSchema, ContinuityDeltaSchema, IndexedContinuityDeltaSchema, WorldAtmosphereSnapshotSchema, SceneAtmosphereEntrySchema, SceneEnvironmentSchema, CameraLockSchema, AmbientEffectSchema, SceneStateSchema, SceneBoundaryReasonSchema, SceneBoundaryProposalSchema, StageEffectSchema, PlannerShotHintSchema, VisualCueKindSchema, VisualCueSchema, AssetJobStatusSchema, AssetJobPrioritySchema, TimestampSchema, AssetJobSchema, PlanningStatusSchema, AudioCueSchema, EffectCueSchema, MAX_CACHE_CUES_PER_TURN = 16, TurnPlanSchema;
 var init_contracts = __esm(() => {
   init_presentation_rules();
   init_story_documents();
@@ -24364,17 +24465,12 @@ var init_contracts = __esm(() => {
   init_image_templates();
   init_image_shot_spec();
   init_rpg_state();
+  init_turn_key();
+  init_turn_key();
   IdentifierSchema = exports_external.string().trim().min(1).max(256);
   PropertyNameSchema = exports_external.string().trim().min(1).max(128);
   TextSchema = exports_external.string().trim().min(1);
   NonNegativeIntegerSchema = exports_external.number().int().nonnegative();
-  TurnKeySchema = exports_external.object({
-    chatId: IdentifierSchema,
-    assistantMessageId: IdentifierSchema,
-    swipeId: exports_external.union([IdentifierSchema, NonNegativeIntegerSchema]).nullable().default(null),
-    sourceFingerprint: exports_external.string().trim().min(8).max(256),
-    revision: NonNegativeIntegerSchema
-  }).strict();
   ParagraphSchema = exports_external.object({
     index: NonNegativeIntegerSchema,
     sourceIndex: NonNegativeIntegerSchema,
@@ -35212,6 +35308,165 @@ var init_presentation_timeline = __esm(() => {
   init_presentation_entities();
 });
 
+// src/backend/runtime/story-dna-projection.ts
+function sameLoreSource(left, right) {
+  if (!left || !right)
+    return left === right;
+  return left.chatId === right.chatId && left.assistantMessageId === right.assistantMessageId && sourceSwipeTag(left) === sourceSwipeTag(right) && left.sourceFingerprint === right.sourceFingerprint && left.revision === right.revision;
+}
+function sourceSwipeTag(source) {
+  return swipeTurnTag(source.assistantMessageId, Number(source.swipeId ?? 0) || 0);
+}
+function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
+  const branch = [...activeTags];
+  const cursorTag = reader ? sourceSwipeTag(reader.key) : undefined;
+  if (cursorTag) {
+    const at = branch.indexOf(cursorTag);
+    activeTags = new Set(at < 0 ? [] : branch.slice(0, at + 1));
+  }
+  const hasBranch = activeTags.size > 0;
+  const heads = new Map((set2.loreHeads ?? []).map((key) => [sourceSwipeTag(key), key]));
+  const hidden = new Set(set2.hiddenLoreThreads);
+  const isVisible = (key, paragraphIndex) => {
+    const tag = sourceSwipeTag(key);
+    const head = heads.get(tag);
+    return activeTags.has(tag) && (!head || sameLoreSource(head, key)) && (!reader || key.chatId === reader.key.chatId && (key.assistantMessageId !== reader.key.assistantMessageId || sameLoreSource(key, reader.key) && paragraphIndex <= reader.paragraphIndex));
+  };
+  const locations = Object.create(null);
+  const belongsToBranch = (entry) => (!reader || hasBranch || !entry.autoDiscovered || entry.locked) && isStoryEntryActiveOnBranch(entry, activeTags);
+  for (const [id4, loc] of Object.entries(set2.locations)) {
+    if (belongsToBranch(loc))
+      locations[id4] = loc;
+  }
+  const documentKinds = new Map(Object.values(set2.documents ?? {}).map((doc2) => [createItemId(doc2.name), doc2.kind]));
+  const items = Object.create(null);
+  for (const [id4, item] of Object.entries(set2.items)) {
+    if (!belongsToBranch(item))
+      continue;
+    if (item.autoDiscovered && !item.locked && documentKinds.get(id4) === item.itemType && item.itemType) {
+      const { loreText: _oldTranscript, materials: _oldMaterials, ...prop } = item;
+      items[id4] = { ...prop, description: `${item.itemType}: ${item.name}` };
+    } else
+      items[id4] = item;
+  }
+  let documents;
+  if (set2.documents) {
+    documents = Object.create(null);
+    for (const [id4, doc2] of Object.entries(set2.documents)) {
+      if (!belongsToBranch(doc2) && !doc2.customNotes)
+        continue;
+      const visible = (entry2) => entry2.sourceTurn ? isVisible(entry2.sourceTurn, entry2.paragraphIndex) : !doc2.autoDiscovered;
+      const { observations, visualDetails, ...entry } = doc2;
+      const visibleObservations = observations?.filter(visible);
+      const details = doc2.autoDiscovered ? visibleObservations?.flatMap((o) => o.visualDetails ?? []).join(", ").slice(0, 800) : visualDetails;
+      const sections = doc2.sections.filter(visible);
+      const visibleAppearances = doc2.appearances?.filter((appearance) => isVisible(appearance.key, appearance.paragraphIndex));
+      if (doc2.autoDiscovered && doc2.appearances?.length && !visibleAppearances?.length && !doc2.customNotes)
+        continue;
+      if (doc2.autoDiscovered && !doc2.appearances?.length && !sections.length && !visibleObservations?.length && !doc2.customNotes && (doc2.sections.some((section) => section.sourceTurn) || observations?.some((observation) => observation.sourceTurn)))
+        continue;
+      documents[id4] = {
+        ...entry,
+        ...visibleAppearances ? { appearances: visibleAppearances } : {},
+        sections,
+        ...visibleObservations?.length ? { observations: visibleObservations } : {},
+        ...details ? { visualDetails: details } : {}
+      };
+    }
+  }
+  const visibleDocumentItemIds = new Set(Object.values(documents ?? {}).filter((doc2) => !doc2.appearances || doc2.appearances.length > 0).map((doc2) => createItemId(doc2.name)));
+  for (const [id4, prop] of Object.entries(items)) {
+    if (prop.autoDiscovered && !prop.locked && documentKinds.get(id4) === prop.itemType && prop.itemType && !visibleDocumentItemIds.has(id4))
+      delete items[id4];
+  }
+  const thoughtCabinet = (set2.thoughtCabinet ?? []).filter((entry) => (entry.authored || !hidden.has(storyLoreThreadId(entry.title))) && (entry.authored || !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)))).map((entry) => ({ ...entry }));
+  const chapterCodex = set2.chapterCodex?.filter((entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)));
+  const npcBeliefs = Object.create(null);
+  if (set2.npcBeliefs) {
+    for (const [npcKey, beliefs] of Object.entries(set2.npcBeliefs)) {
+      const kept = beliefs.filter((b) => !b.seenInSwipes?.length || b.seenInSwipes.some((t) => activeTags.has(t)));
+      if (kept.length > 0)
+        npcBeliefs[npcKey] = kept;
+    }
+  }
+  const bySwipe = new Map;
+  for (const event of set2.loreEvents ?? []) {
+    const tag = sourceSwipeTag(event.key);
+    if (!isVisible(event.key, 0))
+      continue;
+    const previous = bySwipe.get(tag);
+    if (!previous || previous.key.revision <= event.key.revision)
+      bySwipe.set(tag, event);
+  }
+  const loreEvents = [...activeTags].flatMap((tag) => {
+    const event = bySwipe.get(tag);
+    if (!event)
+      return [];
+    const at = (entry) => isVisible(event.key, entry.paragraphIndex ?? event.paragraphIndex);
+    return [{
+      ...event,
+      npcBeliefs: event.npcBeliefs.filter(at),
+      threadUpdates: event.threadUpdates.filter(at),
+      wardrobeDeltas: isVisible(event.key, event.paragraphIndex) ? event.wardrobeDeltas : []
+    }];
+  });
+  for (const event of loreEvents) {
+    for (const { npc, topic, belief, status } of event.npcBeliefs) {
+      const npcKey = Object.keys(npcBeliefs).find((name) => name.toLowerCase() === npc.toLowerCase()) ?? npc;
+      const previous = (npcBeliefs[npcKey] ?? []).filter((item) => item.topic.toLowerCase() !== topic.toLowerCase());
+      npcBeliefs[npcKey] = [...previous, {
+        topic,
+        belief,
+        ...status !== undefined ? { knowledgeStatus: status } : {},
+        knowsSecret: status === "knows",
+        updatedAt: 0,
+        seenInSwipes: [sourceSwipeTag(event.key)]
+      }].slice(-12);
+    }
+    for (const { title, action, summary } of event.threadUpdates) {
+      const id4 = storyLoreThreadId(title);
+      if (hidden.has(id4))
+        continue;
+      const existing = thoughtCabinet.find((entry) => entry.title.toLowerCase() === title.toLowerCase());
+      if (existing) {
+        if (existing.authored || !existing.seenInSwipes?.length)
+          continue;
+        if (action === "resolve")
+          existing.status = "resolved";
+        else if (action === "advance" && existing.status !== "resolved")
+          existing.status = "internalized";
+        if (summary)
+          existing.description = summary;
+      } else if (action !== "resolve") {
+        thoughtCabinet.push({
+          id: id4,
+          title,
+          category: "fact",
+          description: summary || title,
+          status: action === "advance" ? "internalized" : "germinating",
+          updatedAt: 0,
+          seenInSwipes: [sourceSwipeTag(event.key)]
+        });
+      }
+    }
+  }
+  const { loreHeads: _loreHeads, hiddenLoreThreads: _hiddenThreads, ...view } = set2;
+  return {
+    ...view,
+    locations,
+    items,
+    ...documents !== undefined ? { documents } : {},
+    thoughtCabinet: thoughtCabinet.slice(-40),
+    ...chapterCodex !== undefined ? { chapterCodex } : {},
+    npcBeliefs,
+    ...set2.loreEvents ? { loreEvents } : {}
+  };
+}
+var init_story_dna_projection = __esm(() => {
+  init_character_dna();
+  init_story_dna();
+});
+
 // src/backend/runtime/connections.ts
 function isSystemOneProfile(connection) {
   const provider = text(connection.provider).toLowerCase();
@@ -35628,48 +35883,6 @@ function isSignificantStoryItem(name, contextText) {
   }
   return false;
 }
-function filterStoryDnaForActiveBranch(set2, activeTags) {
-  if (!activeTags || activeTags.size === 0)
-    return set2;
-  const locations = Object.create(null);
-  for (const [id4, loc] of Object.entries(set2.locations)) {
-    if (isStoryEntryActiveOnBranch(loc, activeTags))
-      locations[id4] = loc;
-  }
-  const items = Object.create(null);
-  for (const [id4, item] of Object.entries(set2.items)) {
-    if (isStoryEntryActiveOnBranch(item, activeTags))
-      items[id4] = item;
-  }
-  let documents;
-  if (set2.documents) {
-    documents = Object.create(null);
-    for (const [id4, doc2] of Object.entries(set2.documents)) {
-      if (isStoryEntryActiveOnBranch(doc2, activeTags))
-        documents[id4] = doc2;
-    }
-  }
-  const thoughtCabinet = set2.thoughtCabinet?.filter((entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)));
-  const chapterCodex = set2.chapterCodex?.filter((entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)));
-  let npcBeliefs;
-  if (set2.npcBeliefs) {
-    npcBeliefs = Object.create(null);
-    for (const [npcKey, beliefs] of Object.entries(set2.npcBeliefs)) {
-      const kept = beliefs.filter((b) => !b.seenInSwipes?.length || b.seenInSwipes.some((t) => activeTags.has(t)));
-      if (kept.length > 0)
-        npcBeliefs[npcKey] = kept;
-    }
-  }
-  return {
-    ...set2,
-    locations,
-    items,
-    ...documents !== undefined ? { documents } : {},
-    ...thoughtCabinet !== undefined ? { thoughtCabinet } : {},
-    ...chapterCodex !== undefined ? { chapterCodex } : {},
-    ...npcBeliefs !== undefined ? { npcBeliefs } : {}
-  };
-}
 function recordSwipeTag(entry, swipeTag) {
   if (!entry.autoDiscovered || !swipeTag)
     return false;
@@ -35699,6 +35912,18 @@ function linkLocationEdge(a, b) {
 function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
   let changed = false;
   let skippedNames = 0;
+  const parsedTurn = TurnKeySchema.safeParse(plan.key);
+  const sourceTurn = parsedTurn.success ? parsedTurn.data : undefined;
+  const inferredThreadUpdates = [];
+  const referenceBeliefs = [];
+  if (sourceTurn && swipeTag) {
+    const heads = set2.loreHeads ?? [];
+    const head = heads.find((key) => swipeTurnTag(key.assistantMessageId, Number(key.swipeId ?? 0)) === swipeTag);
+    if (!sameLoreSource(head, sourceTurn)) {
+      set2.loreHeads = [...heads.filter((key) => key !== head), sourceTurn].slice(-192);
+      changed = true;
+    }
+  }
   let lastLoc = prevLocationName ? findMatchingLocation(set2.locations, prevLocationName) : undefined;
   for (const scene of plan.scenes) {
     const locName = scene.environment.location?.trim();
@@ -35944,15 +36169,9 @@ ${line2}`;
     }
   };
   for (const doc2 of plan.storyDocuments ?? []) {
-    const body2 = doc2.sections.map((s) => s.text.trim()).filter(Boolean).join(`
-`);
-    const obsSummary = (doc2.observations ?? []).map((o) => o.summary?.trim()).filter(Boolean).join("; ");
-    const materials = (doc2.observations ?? []).map((o) => o.material?.trim()).filter(Boolean).join(", ");
     upsertItem(doc2.name, {
       itemType: doc2.kind,
-      description: doc2.visualDetails || obsSummary || body2 || `${doc2.kind}: ${doc2.name}`,
-      ...materials ? { materials } : {},
-      ...body2 || obsSummary ? { loreText: body2 || obsSummary } : {},
+      description: `${doc2.kind}: ${doc2.name}`,
       ...doc2.aliases ? { aliases: doc2.aliases } : {}
     });
     const docLedger = set2.documents ??= {};
@@ -35972,6 +36191,7 @@ ${line2}`;
         ...doc2.observations?.length ? {
           observations: doc2.observations.slice(0, 32).map((o) => ({
             paragraphIndex: o.paragraphIndex,
+            ...sourceTurn ? { sourceTurn } : {},
             ...o.summary ? { summary: o.summary.slice(0, 500) } : {},
             ...o.visualDetails ? { visualDetails: o.visualDetails.slice(0, 8) } : {},
             ...o.material ? { material: o.material.slice(0, 120) } : {},
@@ -35982,7 +36202,8 @@ ${line2}`;
         sections: doc2.sections.slice(0, 64).map((s) => ({
           paragraphIndex: s.paragraphIndex,
           text: s.text,
-          ...msgId ? { messageId: msgId } : {}
+          ...msgId ? { messageId: msgId } : {},
+          ...sourceTurn ? { sourceTurn } : {}
         })),
         ...msgId ? { sourceMessageIds: [msgId] } : {},
         autoDiscovered: true,
@@ -36019,10 +36240,11 @@ ${line2}`;
       if (doc2.observations?.length) {
         existingEntry.observations = existingEntry.observations ?? [];
         for (const obs of doc2.observations) {
-          const dup = existingEntry.observations.some((o) => o.evidence.slice(0, 80).toLowerCase() === obs.evidence.slice(0, 80).toLowerCase());
+          const dup = existingEntry.observations.some((o) => sameLoreSource(o.sourceTurn, sourceTurn) && o.paragraphIndex === obs.paragraphIndex && o.evidence === obs.evidence);
           if (!dup && existingEntry.observations.length < 32) {
             existingEntry.observations.push({
               paragraphIndex: obs.paragraphIndex,
+              ...sourceTurn ? { sourceTurn } : {},
               ...obs.summary ? { summary: obs.summary.slice(0, 500) } : {},
               ...obs.visualDetails ? { visualDetails: obs.visualDetails.slice(0, 8) } : {},
               ...obs.material ? { material: obs.material.slice(0, 120) } : {},
@@ -36034,17 +36256,22 @@ ${line2}`;
         }
       }
       for (const sec of doc2.sections) {
-        const dup = existingEntry.sections.some((s) => (s.messageId ?? "") === (msgId ?? "") && s.paragraphIndex === sec.paragraphIndex && s.text.trim().toLowerCase() === sec.text.trim().toLowerCase());
+        const dup = existingEntry.sections.some((s) => sameLoreSource(s.sourceTurn, sourceTurn) && (s.messageId ?? "") === (msgId ?? "") && s.paragraphIndex === sec.paragraphIndex && s.text === sec.text);
         if (!dup && existingEntry.sections.length < 64) {
           existingEntry.sections = [...existingEntry.sections, {
             paragraphIndex: sec.paragraphIndex,
             text: sec.text,
-            ...msgId ? { messageId: msgId } : {}
+            ...msgId ? { messageId: msgId } : {},
+            ...sourceTurn ? { sourceTurn } : {}
           }];
           changed = true;
         }
       }
       existingEntry.lastUpdated = Date.now();
+    }
+    if (sourceTurn && !existingEntry.appearances?.some((entry) => sameLoreSource(entry.key, sourceTurn) && entry.paragraphIndex === doc2.paragraphIndex)) {
+      existingEntry.appearances = [...existingEntry.appearances ?? [], { key: sourceTurn, paragraphIndex: doc2.paragraphIndex }].slice(-64);
+      changed = true;
     }
   }
   for (const ref of plan.storyReferences ?? []) {
@@ -36100,7 +36327,7 @@ ${line2}`;
     const explicitlyResolved = (plan.resolvedThreads ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
     const RESOLUTION_VERBS = /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/i;
     for (const entry of ledger) {
-      if (entry.status === "resolved")
+      if (entry.authored || entry.status === "resolved")
         continue;
       const keywords = entry.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
       const minKw = Math.min(2, keywords.length);
@@ -36122,12 +36349,11 @@ ${line2}`;
         const hits = keywords.filter((kw) => pText.includes(kw)).length;
         return hits >= minKw;
       });
-      if (threadExplicitlyResolved || questResolved || sameParagraphResolved) {
-        entry.status = "resolved";
-        entry.updatedAt = Date.now();
-        changed = true;
-      } else if (entry.status === "germinating" && mentioned) {
-        entry.status = "internalized";
+      const action = threadExplicitlyResolved || questResolved || sameParagraphResolved ? "resolve" : entry.status === "germinating" && mentioned ? "advance" : null;
+      if (action && sourceTurn)
+        inferredThreadUpdates.push({ title: entry.title, action });
+      else if (action) {
+        entry.status = action === "resolve" ? "resolved" : "internalized";
         entry.updatedAt = Date.now();
         changed = true;
       }
@@ -36141,7 +36367,9 @@ ${line2}`;
         continue;
       if (ref.kind === "npc" && (ref.field === "statedGoals" || ref.field === "relationships" || ref.field === "condition")) {
         const npcKey = ref.name.trim().slice(0, 120);
-        if (npcKey) {
+        if (npcKey && sourceTurn) {
+          referenceBeliefs.push({ npc: npcKey, topic: ref.field, belief: cleanVal.slice(0, 400), paragraphIndex: ref.paragraphIndex });
+        } else if (npcKey) {
           const list = [...nextBeliefs[npcKey] ?? []];
           const topic = ref.field;
           const existingBelief = list.find((b) => b.topic === topic && b.belief.toLowerCase() === cleanVal.slice(0, 400).toLowerCase());
@@ -36161,12 +36389,20 @@ ${line2}`;
       if (ref.field !== "significance" && ref.field !== "statedGoals" && ref.field !== "customs" && ref.field !== "risks")
         continue;
       const title = `${ref.name}: ${cleanVal.split(/[.;!?]/)[0]?.trim() || cleanVal}`.slice(0, 160);
+      if (sourceTurn) {
+        inferredThreadUpdates.push({ title, action: "open", summary: (ref.evidence?.trim() || cleanVal).slice(0, 1500), paragraphIndex: ref.paragraphIndex });
+        continue;
+      }
       const existingEntry = ledger.find((e) => e.title.toLowerCase() === title.toLowerCase());
       if (existingEntry) {
-        if (existingEntry.status === "germinating") {
-          existingEntry.status = "internalized";
-          existingEntry.updatedAt = Date.now();
-          changed = true;
+        if (existingEntry.status === "germinating" && !existingEntry.authored && !existingEntry.seenInSwipes?.includes(swipeTag)) {
+          if (sourceTurn)
+            inferredThreadUpdates.push({ title: existingEntry.title, action: "advance" });
+          else {
+            existingEntry.status = "internalized";
+            existingEntry.updatedAt = Date.now();
+            changed = true;
+          }
         }
         continue;
       }
@@ -36190,79 +36426,51 @@ ${line2}`;
       });
       changed = true;
     }
-    for (const belief of options?.sidecar?.npcBeliefs ?? []) {
-      const npcKey = belief.npc.trim().slice(0, 120);
-      const topic = belief.topic.trim().slice(0, 120);
-      const text2 = belief.belief.trim().slice(0, 400);
-      if (!npcKey || !topic || !text2)
-        continue;
-      const list = [...nextBeliefs[npcKey] ?? []];
-      const knowsSecret = belief.status === "knows";
-      const existingIdx = list.findIndex((b) => b.topic.toLowerCase() === topic.toLowerCase() && b.belief.toLowerCase() === text2.toLowerCase());
-      const existingItem = existingIdx >= 0 ? list[existingIdx] : undefined;
-      if (existingItem) {
-        if (existingItem.knowsSecret !== knowsSecret) {
-          list[existingIdx] = { ...existingItem, knowsSecret, updatedAt: Date.now() };
-          nextBeliefs[npcKey] = list;
-          changed = true;
-        }
-      } else {
-        list.push({
-          topic,
-          belief: text2,
-          knowsSecret,
-          seenInSwipes: swipeTag ? [swipeTag] : [],
-          updatedAt: Date.now()
-        });
-        nextBeliefs[npcKey] = list.slice(-12);
-        changed = true;
-      }
-    }
-    for (const thread of options?.sidecar?.threadUpdates ?? []) {
-      const title = thread.title.trim().slice(0, 160);
-      if (!title)
-        continue;
-      const lowerTitle = title.toLowerCase();
-      const match = ledger.find((e) => e.title.toLowerCase() === lowerTitle || e.title.toLowerCase().includes(lowerTitle));
-      if (match) {
-        if (thread.action === "resolve" && match.status !== "resolved") {
-          match.status = "resolved";
-          match.updatedAt = Date.now();
-          changed = true;
-        } else if (thread.action === "advance") {
-          if (match.status === "germinating")
-            match.status = "internalized";
-          if (thread.summary?.trim())
-            match.description = thread.summary.trim().slice(0, 1500);
-          match.updatedAt = Date.now();
-          changed = true;
-        }
-      } else if (thread.action === "open" || thread.action === "advance") {
-        let seq = 1;
-        const baseTcId = `tc-${createItemId(title)}`;
-        let entryId = `${baseTcId}-${seq}`.slice(0, 250);
-        while (seenLedgerIds.has(entryId)) {
-          seq += 1;
-          entryId = `${baseTcId}-${seq}`.slice(0, 250);
-        }
-        seenLedgerIds.add(entryId);
-        ledger.push({
-          id: entryId,
-          title,
-          category: "clue",
-          description: (thread.summary?.trim() || title).slice(0, 1500),
-          status: thread.action === "advance" ? "internalized" : "germinating",
-          seenInSwipes: swipeTag ? [swipeTag] : [],
-          updatedAt: Date.now()
-        });
-        changed = true;
-      }
-    }
     if (Object.keys(nextBeliefs).length > 0) {
       set2.npcBeliefs = nextBeliefs;
     }
     if (changed) {
       set2.thoughtCabinet = ledger.slice(-40);
+    }
+  }
+  if (sourceTurn) {
+    const sidecar = options?.sidecar;
+    const events = set2.loreEvents ?? [];
+    const existing = events.find((entry) => sameLoreSource(entry.key, sourceTurn));
+    const threads = new Map;
+    for (const entry of [...inferredThreadUpdates, ...existing?.threadUpdates ?? [], ...sidecar?.threadUpdates ?? []]) {
+      threads.set(entry.title.trim().toLowerCase(), entry);
+    }
+    const outfitChanges = new Map;
+    const addOutfit = (name, outfit) => {
+      const character2 = name?.trim().slice(0, 120);
+      const activeOutfit = outfit?.trim().slice(0, 320);
+      if (character2 && activeOutfit && !isGenericAttire(activeOutfit)) {
+        outfitChanges.set(character2.toLowerCase(), { character: character2, activeOutfit });
+      }
+    };
+    for (const scene of plan.scenes)
+      addOutfit(scene.character || scene.cast?.[0], scene.attire);
+    for (const cue of plan.visualCues)
+      addOutfit(cue.character, cue.attire);
+    for (const delta of [...existing?.wardrobeDeltas ?? [], ...sidecar?.wardrobeDeltas ?? []])
+      addOutfit(delta.character, delta.activeOutfit);
+    const event = StoryLoreEventSchema.safeParse({
+      key: sourceTurn,
+      paragraphIndex: Math.max(0, (plan.paragraphs?.length ?? 1) - 1),
+      npcBeliefs: options?.mindLedgerEnabled === false ? [] : [
+        ...referenceBeliefs,
+        ...sidecar?.npcBeliefs ?? existing?.npcBeliefs.filter((entry) => entry.paragraphIndex === undefined) ?? []
+      ].slice(-24),
+      threadUpdates: options?.mindLedgerEnabled === false ? [] : [...threads.values()].slice(-24),
+      wardrobeDeltas: [...outfitChanges.values()].slice(-24)
+    });
+    if (event.success && (event.data.npcBeliefs.length || event.data.threadUpdates.length || event.data.wardrobeDeltas.length)) {
+      const next = event.data;
+      if (JSON.stringify(existing) !== JSON.stringify(next)) {
+        set2.loreEvents = [...events.filter((entry) => !sameLoreSource(entry.key, next.key)), next].slice(-96);
+        changed = true;
+      }
     }
   }
   if (skippedNames > 0)
@@ -36509,7 +36717,11 @@ async function autofillItemDNA(spindle2, params) {
 var MUNDANE_ITEM_WORDS, COMMON_MUNDANE_MODIFIERS, SIGNIFICANCE_HINT_RE, LocationAutofillOutputSchema, ItemAutofillOutputSchema;
 var init_story_dna_harvester = __esm(() => {
   init_zod();
+  init_contracts();
+  init_story_dna_projection();
+  init_story_dna_projection();
   init_card_role();
+  init_character_dna();
   init_story_dna();
   init_storage();
   init_simtracker();
@@ -38863,18 +39075,6 @@ var init_cast_art2 = __esm(() => {
   init_storage();
   init_scene_image_cache();
   runtimes = new WeakMap;
-});
-
-// src/shared/reading-position.ts
-var ReadingPositionSchema;
-var init_reading_position = __esm(() => {
-  init_zod();
-  init_contracts();
-  ReadingPositionSchema = exports_external.object({
-    version: exports_external.literal(1),
-    key: TurnKeySchema,
-    paragraphIndex: exports_external.number().int().min(0).max(1e5)
-  }).strict();
 });
 
 // src/shared/reference-history.ts
@@ -45985,6 +46185,25 @@ var init_schemas3 = __esm(() => {
 });
 
 // src/backend/runtime/story-dna-store.ts
+function phase1RollbackCopy(set2) {
+  const { loreEvents, loreHeads, hiddenLoreThreads, ...base } = set2;
+  const needsCopy = loreEvents || loreHeads || hiddenLoreThreads || base.thoughtCabinet?.some((entry) => entry.authored !== undefined) || Object.values(base.documents ?? {}).some((doc2) => doc2.appearances || doc2.sections.some((section) => section.sourceTurn) || doc2.observations?.some((observation) => observation.sourceTurn)) || Object.values(base.npcBeliefs ?? {}).some((entries) => entries.some((entry) => entry.knowledgeStatus !== undefined));
+  if (!needsCopy)
+    return null;
+  return {
+    ...base,
+    ...base.thoughtCabinet ? { thoughtCabinet: base.thoughtCabinet.map(({ authored, ...entry }) => entry) } : {},
+    ...base.npcBeliefs ? { npcBeliefs: Object.fromEntries(Object.entries(base.npcBeliefs).map(([npc, entries]) => [npc, entries.map(({ knowledgeStatus, ...entry }) => entry)])) } : {},
+    ...base.documents ? { documents: Object.fromEntries(Object.entries(base.documents).map(([id7, doc2]) => {
+      const { appearances, sections, observations, ...entry } = doc2;
+      return [id7, {
+        ...entry,
+        sections: sections.filter((section) => !section.sourceTurn),
+        ...observations ? { observations: observations.filter((observation) => !observation.sourceTurn) } : {}
+      }];
+    })) } : {}
+  };
+}
 async function loadStoryDNASet(spindle2, chatId, userId) {
   const storage = spindle2.userStorage;
   const path2 = pathFor2(chatId);
@@ -46022,6 +46241,10 @@ async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mut
       throw new Error("Story DNA update contains invalid fields. No changes were saved.");
     }
     const options2 = { indent: 2, ...userId ? { userId } : {} };
+    const rollback = phase1RollbackCopy(candidate.data);
+    if (rollback) {
+      await spindle2.userStorage.setJson(pathFor2(chatId).replace(/\.json$/, ".phase1-backup.json"), rollback, options2);
+    }
     await spindle2.userStorage.setJson(pathFor2(chatId), candidate.data, options2);
     return candidate.data;
   });
@@ -46220,7 +46443,9 @@ async function saveStoryThread(spindle2, chatId, thread, userId, revision) {
   return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
     const existing = set2.thoughtCabinet ?? [];
     const idx = existing.findIndex((t) => t.id === parsed.id);
-    const nextEntry = { ...parsed, updatedAt: Date.now() };
+    const nextEntry = { ...parsed, authored: true, updatedAt: Date.now() };
+    if (set2.hiddenLoreThreads)
+      set2.hiddenLoreThreads = set2.hiddenLoreThreads.filter((id7) => id7 !== storyLoreThreadId(parsed.title));
     if (idx >= 0) {
       existing[idx] = nextEntry;
     } else {
@@ -46231,9 +46456,12 @@ async function saveStoryThread(spindle2, chatId, thread, userId, revision) {
 }
 async function deleteStoryThread(spindle2, chatId, threadId, userId, revision) {
   return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
-    if (!set2.thoughtCabinet?.length)
-      return;
-    set2.thoughtCabinet = set2.thoughtCabinet.filter((t) => t.id !== threadId);
+    const thread = set2.thoughtCabinet?.find((item) => item.id === threadId);
+    const hidden = thread ? storyLoreThreadId(thread.title) : threadId.startsWith("lore:") ? threadId : undefined;
+    if (hidden)
+      set2.hiddenLoreThreads = [...new Set([...set2.hiddenLoreThreads ?? [], hidden])].slice(-96);
+    if (set2.thoughtCabinet)
+      set2.thoughtCabinet = set2.thoughtCabinet.filter((t) => t.id !== threadId);
   });
 }
 async function saveDocumentTranscriptNote(spindle2, chatId, params, userId, revision) {
@@ -46968,7 +47196,7 @@ function buildOutboundDramaticBrief(params) {
     for (const [npc, entries] of Object.entries(params.storyDNASet.npcBeliefs ?? {})) {
       if (castSet.size > 0 && !castSet.has(npc.trim().toLowerCase()))
         continue;
-      const publicEntries = entries.filter((e) => !e.knowsSecret).slice(-2);
+      const publicEntries = entries.filter((e) => !e.knowsSecret && e.knowledgeStatus !== "unaware").slice(-2);
       if (publicEntries.length > 0) {
         beliefLines.push(`${npc} (${publicEntries.map((e) => `${e.topic}: ${e.belief.slice(0, 80)}`).join(", ")})`);
       }
@@ -47042,7 +47270,7 @@ async function requestPlannerOutput(spindle2, input2, paragraphText, visualConte
               thoughtCabinet: storyDNASet?.thoughtCabinet,
               npcBeliefs: storyDNASet?.npcBeliefs ? Object.fromEntries(Object.entries(storyDNASet.npcBeliefs).map(([npc, items]) => [
                 npc,
-                items.map((b) => ({
+                items.filter((b) => b.knowledgeStatus !== "unaware").map((b) => ({
                   fact: b.topic ? `${b.topic}: ${b.belief}` : b.belief,
                   knowsSecret: b.knowsSecret
                 }))
@@ -47880,9 +48108,20 @@ Detected scene header: ${parts.join(" | ")}. Ensure your environment reflects th
   }
   let loadedStoryDnaSet = null;
   try {
-    const storyDNASet = storyDNAResult;
+    const storyDNASet = storyDNAResult ? filterStoryDnaForActiveBranch(storyDNAResult, input2.loreBranch ?? new Set) : null;
     if (storyDNASet) {
       loadedStoryDnaSet = storyDNASet;
+      const inferredOutfits = inferredSceneOutfits(storyDNASet);
+      if (inferredOutfits.size) {
+        const library = await loadCharacterDNALibrary(spindle2, input2.chatId, input2.userId).catch(() => null);
+        const outfitHints = library ? [...inferredOutfits].filter(([name]) => {
+          const dna = findCharacterDNA(library.characters, name);
+          return !dna?.locked && !dna?.activeWardrobeKey && !(dna?.activeOutfit && !dna.autoDiscovered);
+        }).slice(-8) : [];
+        if (outfitHints.length)
+          visualContext.plannerContext += `
+Prior branch attire (scene continuity, superseded by current visible prose): ${JSON.stringify(outfitHints)}`;
+      }
       const activeLocName = (narrative.detectedSceneMetadata?.location || input2.previousScene?.environment.location || "").trim().toLowerCase();
       const matchedLocation = activeLocName ? Object.values(storyDNASet.locations).find((loc) => loc.name.trim().toLowerCase() === activeLocName || loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)) : undefined;
       if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
@@ -48558,6 +48797,9 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     usage: input2.usage ?? createReplyUsage()
   };
 }
+function sidecarChannelStatuses(status) {
+  return Object.fromEntries(SIDECAR_CHANNELS.map((key) => [key, status]));
+}
 function parseSidecarNpcBeliefs(raw) {
   if (!Array.isArray(raw))
     return [];
@@ -48571,7 +48813,9 @@ function parseSidecarNpcBeliefs(raw) {
     const npc = typeof rec.npc === "string" ? rec.npc.trim().slice(0, 120) : "";
     const topic = typeof rec.topic === "string" ? rec.topic.trim().slice(0, 120) : "";
     const belief = typeof rec.belief === "string" ? rec.belief.trim().slice(0, 400) : "";
-    const status = rec.status === "knows" || rec.status === "suspects" || rec.status === "unaware" ? rec.status : "unaware";
+    const status = rec.status;
+    if (status !== "knows" && status !== "suspects" && status !== "unaware")
+      continue;
     if (npc && topic && belief)
       out.push({ npc, topic, belief, status });
   }
@@ -48588,7 +48832,9 @@ function parseSidecarThreadUpdates(raw) {
       continue;
     const rec = item;
     const title = typeof rec.title === "string" ? rec.title.trim().slice(0, 160) : "";
-    const action = rec.action === "open" || rec.action === "advance" || rec.action === "resolve" ? rec.action : "advance";
+    const action = rec.action;
+    if (action !== "open" && action !== "advance" && action !== "resolve")
+      continue;
     const summary = typeof rec.summary === "string" ? rec.summary.trim().slice(0, 400) : undefined;
     if (title)
       out.push({ title, action, ...summary ? { summary } : {} });
@@ -48613,10 +48859,11 @@ function parseSidecarWardrobeDeltas(raw) {
   return out;
 }
 async function extractTurnLoreAsync(spindle2, params) {
-  const emptyResult = (docs) => ({
+  const emptyResult = (docs, status) => ({
     storyReferences: [],
     storyDocuments: docs,
     sidecarSucceeded: false,
+    channels: sidecarChannelStatuses(status),
     suppressedDocumentNouns: [],
     npcBeliefs: [],
     threadUpdates: [],
@@ -48624,10 +48871,19 @@ async function extractTurnLoreAsync(spindle2, params) {
   });
   const strict = params.config.strictDocumentSensing !== false;
   if (!params.paragraphs.length || !params.config.collectEntityReferences && !params.config.tooltips.enabled) {
-    return emptyResult([]);
+    return emptyResult([], "disabled");
   }
   throwIfAborted(params.signal);
-  const connection = await resolveSidecarConnection(spindle2, params.config, params.userId);
+  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const fallbackDocs = strict ? filterStrictStoryDocuments(rawSensedDocs, { ...params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {} }) : rawSensedDocs;
+  let connection;
+  try {
+    connection = await resolveSidecarConnection(spindle2, params.config, params.userId);
+  } catch {
+    throwIfAborted(params.signal);
+    return emptyResult(fallbackDocs, "unavailable");
+  }
+  throwIfAborted(params.signal);
   const paragraphText = params.paragraphs.map((p) => `[${p.index}] ${p.text}`).join(`
 `);
   const contextLines = [];
@@ -48662,33 +48918,37 @@ ${paragraphText}` : paragraphText;
 `);
   const maxTokens = Math.min(12000, 4000 + params.paragraphs.length * 300);
   const parameters = structuredJsonParametersFor(connection, maxTokens, params.config.parserParameters);
-  const response = await spindle2.generate.raw({
-    type: "raw",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage }
-    ],
-    ...connection ? { provider: connection.provider, model: connection.model, connection_id: connection.id } : {},
-    parameters,
-    reasoning: { source: "off" },
-    ...params.signal ? { signal: params.signal } : {},
-    ...params.userId ? { userId: params.userId } : {}
-  });
-  throwIfAborted(params.signal);
-  const rawContent = extractResponseContent(response);
-  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
-  const fallbackDocs = strict ? filterStrictStoryDocuments(rawSensedDocs, { ...params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {} }) : rawSensedDocs;
+  let rawContent;
+  try {
+    const response = await spindle2.generate.raw({
+      type: "raw",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage }
+      ],
+      ...connection ? { provider: connection.provider, model: connection.model, connection_id: connection.id } : {},
+      parameters,
+      reasoning: { source: "off" },
+      ...params.signal ? { signal: params.signal } : {},
+      ...params.userId ? { userId: params.userId } : {}
+    });
+    throwIfAborted(params.signal);
+    rawContent = extractResponseContent(response);
+  } catch {
+    throwIfAborted(params.signal);
+    return emptyResult(fallbackDocs, "unavailable");
+  }
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
-    return emptyResult(fallbackDocs);
+    return emptyResult(fallbackDocs, "invalid");
   }
   let parsed;
   try {
     parsed = jsonObject(rawContent);
   } catch {
-    return emptyResult(fallbackDocs);
+    return emptyResult(fallbackDocs, "invalid");
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return emptyResult(fallbackDocs);
+    return emptyResult(fallbackDocs, "invalid");
   }
   const rec = parsed;
   const scenarioRef = params.scenarioReferenceName ? characterAppearanceKey(params.scenarioReferenceName) : "";
@@ -48703,14 +48963,33 @@ ${paragraphText}` : paragraphText;
     ...params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {},
     suppressedNouns: suppressedDocumentNouns
   })) : mergeStoryDocuments(llmDocs, rawSensedDocs);
+  const npcBeliefs = parseSidecarNpcBeliefs(rec.npcBeliefs);
+  const threadUpdates = parseSidecarThreadUpdates(rec.threadUpdates);
+  const wardrobeDeltas = parseSidecarWardrobeDeltas(rec.wardrobeDeltas);
+  const acceptedCounts = {
+    storyReferences: storyReferences.length,
+    storyDocuments: llmDocs.length,
+    suppressedDocumentNouns: suppressedDocumentNouns.length,
+    npcBeliefs: npcBeliefs.length,
+    threadUpdates: threadUpdates.length,
+    wardrobeDeltas: wardrobeDeltas.length
+  };
+  const channels = sidecarChannelStatuses("unavailable");
+  for (const key of SIDECAR_CHANNELS) {
+    const raw = rec[key];
+    if (raw === undefined)
+      continue;
+    channels[key] = !Array.isArray(raw) || raw.length > 0 && acceptedCounts[key] === 0 ? "invalid" : acceptedCounts[key] < raw.length ? "partial" : "valid";
+  }
   return {
     storyReferences,
     storyDocuments,
-    sidecarSucceeded: true,
+    channels,
     suppressedDocumentNouns,
-    npcBeliefs: parseSidecarNpcBeliefs(rec.npcBeliefs),
-    threadUpdates: parseSidecarThreadUpdates(rec.threadUpdates),
-    wardrobeDeltas: parseSidecarWardrobeDeltas(rec.wardrobeDeltas)
+    npcBeliefs,
+    threadUpdates,
+    wardrobeDeltas,
+    sidecarSucceeded: Object.values(channels).some((status) => status === "valid" || status === "partial")
   };
 }
 function buildWorldAtmosphereTimeline(params) {
@@ -48785,7 +49064,7 @@ function buildWorldAtmosphereTimeline(params) {
 function fingerprintForMessage(message) {
   return stableHash(`${message.id}\x00${message.swipe_id}\x00${message.content}`);
 }
-var FALLBACK_LOCATIONS, EXPLICIT_CLEAR_VALUES, EFFECT_KEYS, AMBIENT_KEYS, FALLBACK_DESCRIPTIONS, GENERIC_BASE_PROMPTS, STOP_WORDS3, FLUFF_WORDS, STATE_CHANGE_MARKERS, STATE_MODIFIERS;
+var FALLBACK_LOCATIONS, EXPLICIT_CLEAR_VALUES, EFFECT_KEYS, AMBIENT_KEYS, FALLBACK_DESCRIPTIONS, GENERIC_BASE_PROMPTS, STOP_WORDS3, FLUFF_WORDS, STATE_CHANGE_MARKERS, STATE_MODIFIERS, SIDECAR_CHANNELS;
 var init_planner = __esm(() => {
   init_json_repair();
   init_json_repair();
@@ -48822,6 +49101,10 @@ var init_planner = __esm(() => {
   init_rpg_state();
   init_schemas3();
   init_story_dna_store();
+  init_story_dna_projection();
+  init_story_dna();
+  init_character_dna();
+  init_character_dna_store();
   FALLBACK_LOCATIONS = new Set([
     "the current setting",
     "current setting",
@@ -48967,6 +49250,7 @@ var init_planner = __esm(() => {
     "an",
     "the"
   ]);
+  SIDECAR_CHANNELS = ["storyReferences", "storyDocuments", "suppressedDocumentNouns", "npcBeliefs", "threadUpdates", "wardrobeDeltas"];
 });
 
 // src/backend/runtime/context-providers/lumibooks.ts
@@ -58521,12 +58805,22 @@ async function generateItemPropArtwork(params) {
 }
 
 // src/backend/runtime/story-dna-workflow.ts
+init_storage();
+init_story_dna_projection();
 init_story_dna_harvester();
 async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
   const request = StoryDnaRequestSchema.parse(rawRequest);
   const reply = async (storyDna) => {
     const msgs = typeof spindle2.chat?.getMessages === "function" ? await spindle2.chat.getMessages(request.chatId).catch(() => []) : [];
-    const filtered = filterStoryDnaForActiveBranch(storyDna, activeBranchSwipeTags(msgs));
+    const position = request.action === "list" && request.readingPosition ? request.readingPosition : await loadReadingPosition(spindle2, request.chatId, userId);
+    const branch = activeBranchSwipeTags(msgs);
+    if (position) {
+      const key = position.key;
+      const record4 = key.chatId === request.chatId ? await loadTurnRecord(spindle2, turnPath(request.chatId, key.assistantMessageId, key.swipeId), userId).catch(() => null) : null;
+      if (!record4 || !sameLoreSource(record4.plan.key, key))
+        branch.clear();
+    }
+    const filtered = filterStoryDnaForActiveBranch(storyDna, branch, position ?? undefined);
     spindle2.sendToFrontend({
       type: "vn_story_dna",
       chatId: request.chatId,
@@ -60038,7 +60332,12 @@ function scheduleSplitHorizonLore(spindle2, params) {
       if (spindle2.userStorage) {
         try {
           const existingDna = await loadStoryDNASet(spindle2, params.chatId, params.userId);
-          const titles = Object.values(existingDna.documents ?? {}).map((d) => d.name).filter(Boolean);
+          const scopedDna = filterStoryDnaForActiveBranch(existingDna, activeBranchSwipeTags(params.messages), {
+            version: 1,
+            key: params.turnKey,
+            paragraphIndex: Math.max(0, paragraphs.length - 1)
+          });
+          const titles = Object.values(scopedDna.documents ?? {}).map((d) => d.name).filter(Boolean);
           if (titles.length > 0)
             openDocumentTitles = titles.slice(-16);
         } catch {}
@@ -60066,7 +60365,10 @@ function scheduleSplitHorizonLore(spindle2, params) {
       });
       if (!isCurrent())
         return;
-      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && !lore.sidecarSucceeded)
+      if (config2.debugLogging) {
+        spindle2.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name, status]) => `${name}=${status}`).join(", ")}`);
+      }
+      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && lore.suppressedDocumentNouns.length === 0)
         return;
       let previousDocIds = new Set;
       const updated = await mutateActiveTurnRecord(spindle2, params.chatId, params.path, params.userId, (current) => {
@@ -60080,7 +60382,9 @@ function scheduleSplitHorizonLore(spindle2, params) {
             mergedRefs.push(ref);
           }
         }
-        const mergedDocs = lore.sidecarSucceeded && config2.strictDocumentSensing !== false ? lore.storyDocuments : lore.storyDocuments.length > 0 || current.plan.storyDocuments?.length ? mergeStoryDocuments(lore.storyDocuments, current.plan.storyDocuments ?? []) : undefined;
+        const previous = validateStoryDocuments(current.plan.storyDocuments, strippedParagraphs);
+        const retained = config2.strictDocumentSensing !== false && lore.suppressedDocumentNouns.length ? filterStrictStoryDocuments(previous, { suppressedNouns: lore.suppressedDocumentNouns, fromSidecarLlm: true }) : previous;
+        const mergedDocs = lore.storyDocuments.length > 0 || current.plan.storyDocuments !== undefined ? mergeStoryDocuments(lore.storyDocuments, retained) : undefined;
         return {
           ...current,
           plan: {
@@ -60095,34 +60399,20 @@ function scheduleSplitHorizonLore(spindle2, params) {
       if (spindle2.userStorage) {
         try {
           const swipeTag = swipeTurnTag(params.turnKey.assistantMessageId, Number(params.turnKey.swipeId ?? 0) || 0);
-          const nextStoryDna = await mutateStoryDNASet(spindle2, params.chatId, params.userId, undefined, (set2) => {
+          await mutateStoryDNASet(spindle2, params.chatId, params.userId, undefined, (set2) => {
+            if (!isCurrent())
+              throw new Error("Sidecar turn was superseded before Story DNA could be saved.");
             harvestTurnStoryDNA(updated.plan, set2, swipeTag, params.prevLocationName, {
               mindLedgerEnabled: config2.mindLedgerEnabled,
               chapterCodexEnabled: config2.chapterCodexEnabled,
               onSkippedNames: (count2) => spindle2.log.warn(`Story DNA skipped ${count2} invalid inferred names.`),
               sidecar: {
                 npcBeliefs: lore.npcBeliefs,
-                threadUpdates: lore.threadUpdates
+                threadUpdates: lore.threadUpdates,
+                wardrobeDeltas: lore.wardrobeDeltas
               }
             });
           });
-          if (lore.wardrobeDeltas.length > 0) {
-            await mutateCharacterDnaLibrary(spindle2, params.chatId, params.userId, undefined, (lib) => {
-              let libChanged = false;
-              for (const delta of lore.wardrobeDeltas) {
-                const existingChar = findCharacterDNA(lib.characters, delta.character);
-                if (existingChar && !existingChar.locked && delta.activeOutfit.trim()) {
-                  existingChar.activeOutfit = delta.activeOutfit.trim();
-                  libChanged = true;
-                }
-              }
-              return libChanged;
-            });
-          }
-          if (isCurrent()) {
-            const filtered = filterStoryDnaForActiveBranch(nextStoryDna, activeBranchSwipeTags(params.messages));
-            spindle2.sendToFrontend({ type: "vn_story_dna", chatId: params.chatId, storyDna: filtered }, params.userId);
-          }
         } catch {}
       }
       if (!isCurrent())
@@ -61256,6 +61546,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
       previousContinuity: replacesGreeting ? null : isReswipeOrReplan ? priorTurnRecord ? priorTurnRecord.plan.terminalContinuity : options3?.retry && existing ? existing.plan.initialContinuity : null : chatState.terminalContinuity,
       previousRpgState: previousTurnRecord?.plan.rpgState ?? null,
       splitHorizonLore: true,
+      loreBranch: activeBranchSwipeTags(messages.slice(0, Math.max(0, messages.findIndex((entry) => entry.id === message.id)))),
       recentMessages,
       config: config2,
       singleCharacter,
@@ -61477,20 +61768,6 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
         const nextLocationName = result.plan.scenes.at(-1)?.environment.location ?? null;
         const locationChanged = Boolean(prevLocationName && nextLocationName && prevLocationName.trim().toLowerCase() !== nextLocationName.trim().toLowerCase());
         if (turnCastNames.size > 0 || locationChanged || isReswipeOrReplan) {
-          const turnAttires = new Map;
-          for (const scene of record5.plan.scenes) {
-            const charKey = (scene.character || scene.cast?.[0] || "").trim().toLowerCase();
-            if (charKey && scene.attire && !isGenericAttire(scene.attire)) {
-              turnAttires.set(charKey, scene.attire.trim().slice(0, 600));
-            }
-          }
-          for (const cue of record5.plan.visualCues) {
-            const sceneForBeat = record5.plan.scenes.find((s) => s.sceneId === cue.sceneId);
-            const charKey = (cue.character || sceneForBeat?.character || "").trim().toLowerCase();
-            if (charKey && cue.attire && !isGenericAttire(cue.attire)) {
-              turnAttires.set(charKey, cue.attire.trim().slice(0, 600));
-            }
-          }
           await mutateCharacterDnaLibrary(spindle2, chatId, userId, undefined, (l) => {
             if (locationChanged) {
               for (const char of Object.values(l.characters)) {
@@ -61508,18 +61785,12 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
               if (l.deleted?.[name] || findCharacterDNA(l.deleted ?? {}, name))
                 continue;
               const existingChar = findCharacterDNA(l.characters, name);
-              const inferredAttire = turnAttires.get(name.toLowerCase());
               if (!existingChar) {
                 const dna = createEmptyCharacterDNA(name);
                 dna.autoDiscovered = true;
                 dna.seenInSwipes = [swipeTag];
-                if (inferredAttire)
-                  dna.activeOutfit = inferredAttire;
                 l.characters[dna.id] = dna;
               } else {
-                if (!existingChar.locked && inferredAttire) {
-                  existingChar.activeOutfit = inferredAttire;
-                }
                 if (existingChar.autoDiscovered) {
                   const seen = existingChar.seenInSwipes ?? [];
                   if (!seen.includes(swipeTag)) {
@@ -61535,6 +61806,9 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
           });
         }
         await mutateStoryDNASet(spindle2, chatId, userId, undefined, (set2) => {
+          if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) {
+            throw new Error("A newer reply superseded the Story DNA harvest.");
+          }
           harvestTurnStoryDNA(record5.plan, set2, swipeTag, prevLocationName, {
             mindLedgerEnabled: config2.mindLedgerEnabled,
             chapterCodexEnabled: config2.chapterCodexEnabled,
@@ -62023,6 +62297,7 @@ async function replanCurrentTurn(spindle2, request, userId) {
         previousContinuity: old.plan.initialContinuity,
         previousRpgState: config2.rpgMode !== "off" ? replanPriorRecord?.plan.rpgState ?? null : null,
         splitHorizonLore: true,
+        loreBranch: activeBranchSwipeTags(messages.slice(0, Math.max(0, messages.findIndex((entry) => entry.id === latest.id)))),
         recentMessages,
         config: config2,
         singleCharacter,
@@ -62097,6 +62372,21 @@ async function replanCurrentTurn(spindle2, request, userId) {
         return;
       activeTurnKeys.set(key, plan.key);
       spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
+      const committed = () => !operation.controller.signal.aborted && views.isOpen(userId, action.chatId) && (intakeEpochs.get(key) ?? 0) === epoch && compareTurnKeys(activeTurnKeys.get(key) ?? null, plan.key).accepted;
+      if (spindle2.userStorage) {
+        try {
+          await mutateStoryDNASet(spindle2, action.chatId, userId, undefined, (set2) => {
+            if (!committed())
+              throw new Error("A newer reply superseded the replanned lore.");
+            harvestTurnStoryDNA(plan, set2, swipeTurnTag(latest.id, action.swipeId), null, {
+              mindLedgerEnabled: config2.mindLedgerEnabled,
+              chapterCodexEnabled: config2.chapterCodexEnabled
+            });
+          });
+        } catch {}
+      }
+      if (!committed())
+        return;
       scheduleSplitHorizonLore(spindle2, {
         ...userId ? { userId } : {},
         chatId: action.chatId,

@@ -6,7 +6,99 @@ import {
   harvestTurnStoryDNA,
   isSignificantStoryItem,
 } from './story-dna-harvester.js';
-import { findMatchingLocation, type StoryDNASet } from '../../shared/story-dna.js';
+import { findMatchingLocation, inferredSceneOutfits, StoryDNASetSchema, type StoryDNASet } from '../../shared/story-dna.js';
+import type { TurnPlan } from '../../shared/contracts.js';
+
+test('turn lore survives reload and follows swipe, exact revision and reveal cursor', () => {
+  const set: StoryDNASet = { locations: {}, items: {}, revision: 0 };
+  function add(message: string, swipeId: number, status: 'knows' | 'suspects' | 'unaware', action: 'open' | 'resolve', outfit: string) {
+    const key = { chatId: 'chat', assistantMessageId: message, swipeId, sourceFingerprint: `fingerprint-${message}-${swipeId}`, revision: 1 };
+    const plan = { key, paragraphs: [{ text: 'Intro' }, { text: 'Reveal' }], scenes: [], visualCues: [] } as unknown as TurnPlan;
+    harvestTurnStoryDNA(plan, set, `${message}::${swipeId}`, null, { sidecar: {
+      npcBeliefs: [{ npc: 'Mira', topic: 'The key', belief: 'The key is under the clock', status }],
+      threadUpdates: [{ title: 'Meet at dawn', action }],
+      wardrobeDeltas: [{ character: 'Mira', activeOutfit: outfit }],
+    } });
+    return key;
+  }
+  add('prior', 0, 'suspects', 'open', 'linen cloak');
+  const a = add('latest', 0, 'knows', 'resolve', 'silver coat');
+  const b = add('latest', 1, 'unaware', 'open', 'blue cloak');
+  add('latest', 1, 'unaware', 'open', 'blue cloak');
+  const loaded = StoryDNASetSchema.parse(JSON.parse(JSON.stringify(set)));
+  expect(loaded.loreEvents).toHaveLength(3);
+  const first = filterStoryDnaForActiveBranch(loaded, new Set(['prior::0', 'latest::0']), { version: 1, key: a, paragraphIndex: 1 });
+  expect(first.npcBeliefs?.Mira?.[0]?.knowledgeStatus).toBe('knows');
+  expect(first.thoughtCabinet?.[0]?.status).toBe('resolved');
+  expect(inferredSceneOutfits(first).get('mira')).toBe('silver coat');
+  const branch = new Set(['prior::0', 'latest::1']);
+  const other = filterStoryDnaForActiveBranch(loaded, branch, { version: 1, key: b, paragraphIndex: 1 });
+  expect(other.npcBeliefs?.Mira?.[0]?.knowledgeStatus).toBe('unaware');
+  expect(other.thoughtCabinet?.[0]?.status).toBe('germinating');
+  expect(inferredSceneOutfits(other).get('mira')).toBe('blue cloak');
+  for (const position of [{ version: 1 as const, key: b, paragraphIndex: 0 },
+    { version: 1 as const, key: { ...b, revision: 2 }, paragraphIndex: 1 }]) {
+    const rewind = filterStoryDnaForActiveBranch(loaded, branch, position);
+    expect(rewind.npcBeliefs?.Mira?.[0]?.knowledgeStatus).toBe('suspects');
+    expect(inferredSceneOutfits(rewind).get('mira')).toBe('linen cloak');
+  }
+  expect(loaded.npcBeliefs?.Mira).toBeUndefined();
+});
+
+test('late reference facts and document item titles remain hidden before their paragraph', () => {
+  const key = { chatId: 'chat', assistantMessageId: 'm1', swipeId: 0, sourceFingerprint: 'fingerprint-1', revision: 0 };
+  const set: StoryDNASet = { locations: {}, items: {}, revision: 0 };
+  harvestTurnStoryDNA({
+    key, paragraphs: [{ text: 'Mira waits.' }, { text: 'Mira wants to go home. She opens the sealed letter.' }],
+    scenes: [], visualCues: [], storyDocuments: [{ id: 'letter', name: 'sealed letter', kind: 'letter', paragraphIndex: 1, sections: [] }],
+    storyReferences: [{ name: 'Mira', kind: 'npc', field: 'statedGoals', value: 'go home', evidence: 'Mira wants to go home.', paragraphIndex: 1 }],
+  } as unknown as TurnPlan, set, 'm1::0');
+  const branch = new Set(['m1::0']);
+  const before = filterStoryDnaForActiveBranch(set, branch, { version: 1, key, paragraphIndex: 0 });
+  expect(before.items['sealed-letter']).toBeUndefined();
+  expect(before.npcBeliefs?.Mira).toBeUndefined();
+  expect(before.thoughtCabinet).toEqual([]);
+  const after = filterStoryDnaForActiveBranch(set, branch, { version: 1, key, paragraphIndex: 1 });
+  expect(after.items['sealed-letter']).toBeDefined();
+  expect(after.npcBeliefs?.Mira?.[0]?.belief).toBe('go home');
+  expect(after.thoughtCabinet?.[0]?.title).toBe('Mira: go home');
+});
+
+test('the document ledger projects transcripts and observations by source swipe', () => {
+  const set: StoryDNASet = { locations: {}, items: {}, revision: 0 };
+  function plan(swipeId: number, quote: string): TurnPlan {
+    return { key: { chatId: 'chat', assistantMessageId: 'm1', swipeId, sourceFingerprint: 'document-' + swipeId, revision: 0 },
+      paragraphs: [], scenes: [], visualCues: [], storyDocuments: [{ id: 'letter', name: 'Sealed letter', kind: 'letter', paragraphIndex: 0,
+        sections: [{ paragraphIndex: 0, start: 0, end: quote.length, text: quote }],
+        observations: [{ paragraphIndex: 0, summary: quote, evidence: quote }],
+      }],
+    } as unknown as TurnPlan;
+  }
+  const a = plan(0, 'Bring copper.');
+  harvestTurnStoryDNA(a, set, 'm1::0');
+  harvestTurnStoryDNA(plan(1, 'Bring silver.'), set, 'm1::1');
+  harvestTurnStoryDNA(a, set, 'm1::0');
+  const doc = set.documents?.letter;
+  expect(doc?.sections).toHaveLength(2);
+  expect(doc?.observations).toHaveLength(2);
+  doc!.customNotes = 'Remember my appointment.';
+  for (const [tag, quote] of [['m1::0', 'Bring copper.'], ['m1::1', 'Bring silver.']] as const) {
+    const visible = filterStoryDnaForActiveBranch(set, new Set([tag])).documents?.letter;
+    expect(visible?.sections.map(section => section.text)).toEqual([quote]);
+    expect(visible?.observations?.map(observation => observation.summary)).toEqual([quote]);
+    expect(visible?.customNotes).toBe('Remember my appointment.');
+  }
+  expect(doc?.sections).toHaveLength(2);
+  const unknown = filterStoryDnaForActiveBranch(set, new Set()).documents?.letter;
+  expect(unknown?.sections ?? []).toEqual([]);
+  expect(unknown?.observations).toBeUndefined();
+  const revised = { ...a, key: { ...a.key, revision: 1 }, storyDocuments: [] };
+  harvestTurnStoryDNA(revised, set, 'm1::0');
+  const afterEdit = filterStoryDnaForActiveBranch(set, new Set(['m1::0', 'later::0'])).documents?.letter;
+  expect(afterEdit?.sections).toEqual([]);
+  expect(afterEdit?.customNotes).toBe('Remember my appointment.');
+  expect(doc?.sections).toHaveLength(2);
+});
 
 test('handleStoryDnaRequest > lists, saves location/item, and deletes', async () => {
   const store = new Map<string, unknown>();
