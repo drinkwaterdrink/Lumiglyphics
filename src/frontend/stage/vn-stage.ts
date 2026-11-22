@@ -11,6 +11,7 @@ import type {NarrativePreview} from '../../shared/preparation-preview.js';
 import type {ReferenceHistory} from '../../shared/reference-history.js';
 import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
+import { extractSceneRimTint } from "./chromatic-rim.js";
 import { FullscreenLightbox } from "./fullscreen-lightbox.js";
 import { createScenePostcardPopover, renderWorldAtmosphereStrip } from "./world-strip.js";
 import { atmosphereForPosition } from "../../shared/scene-atmosphere.js";
@@ -191,6 +192,7 @@ export class VnStage {
   private bondBannerTimer: ReturnType<typeof setTimeout> | null = null;
   private scenePostcardEl: HTMLElement | null = null;
   private scenePostcardCleanup: (() => void) | null = null;
+  private paragraphArtStates = new Map<number, "ready" | "generating" | "none">();
   private readonly predecodedUrls = new Set<string>();
   private readonly statusStack: HTMLElement;
   private readonly emptyState: HTMLElement;
@@ -721,7 +723,7 @@ export class VnStage {
       ].filter(Boolean).join(" · ");
       if (summary) {
         const sub = document.createElement("div");
-        sub.style.cssText = "font-size:11px;color:#cbd5e1;line-height:1.4;";
+        sub.style.cssText = "font-size:11px;color:var(--vn-shell-muted,#cbd5e1);line-height:1.4;";
         sub.textContent = summary;
         card.append(sub);
       }
@@ -730,7 +732,7 @@ export class VnStage {
         const row = document.createElement("div");
         row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
         const lbl = document.createElement("span");
-        lbl.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;";
+        lbl.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--vn-shell-muted,#94a3b8);";
         lbl.textContent = "Wardrobe:";
         row.append(lbl);
         for (const [key, outfit] of wardrobeEntries.slice(0, 6)) {
@@ -738,7 +740,7 @@ export class VnStage {
           btn.type = "button";
           const active = char.activeWardrobeKey === key || char.activeOutfit === outfit;
           btn.textContent = key;
-          btn.style.cssText = `min-height:44px;padding:6px 12px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
+          btn.style.cssText = `min-height:44px;padding:6px 12px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "var(--vn-shell-accent,rgba(110,231,183,0.75))" : "var(--vn-shell-border,rgba(255,255,255,0.18))"};background:${active ? "color-mix(in srgb,var(--vn-shell-accent,#6ee7b7) 18%,transparent)" : "var(--vn-shell-button,rgba(255,255,255,0.06))"};color:var(--vn-shell-text,#f8fafc);`;
           btn.addEventListener("click", () => {
             const nextDna: CharacterDNA = { ...char, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
             this.characterDnaLibrary[char.id] = nextDna;
@@ -751,6 +753,32 @@ export class VnStage {
         card.append(row);
       }
     }
+
+    const quickRow = document.createElement("div");
+    quickRow.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
+    const draftIntoComposer = (snippet: string) => {
+      const input = this.themeRoot.querySelector<HTMLInputElement>("[data-vn-inline-message]");
+      if (input) {
+        input.value = snippet;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.focus?.();
+      }
+      this.closeSpeakerPeek();
+    };
+    const askBtn = document.createElement("button");
+    askBtn.type = "button";
+    askBtn.dataset.vnQuickAsk = "";
+    askBtn.textContent = `Ask ${name}`;
+    askBtn.style.cssText = "min-height:44px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:650;cursor:pointer;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.18));background:var(--vn-shell-button,rgba(255,255,255,0.08));color:var(--vn-shell-text,#f8fafc);";
+    askBtn.addEventListener("click", () => draftIntoComposer(`${name}, `));
+    const examBtn = document.createElement("button");
+    examBtn.type = "button";
+    examBtn.dataset.vnQuickExamine = "";
+    examBtn.textContent = "Examine";
+    examBtn.style.cssText = "min-height:44px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:650;cursor:pointer;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.18));background:var(--vn-shell-button,rgba(255,255,255,0.08));color:var(--vn-shell-text,#f8fafc);";
+    examBtn.addEventListener("click", () => draftIntoComposer(`*looks closely at ${name}* `));
+    quickRow.append(askBtn, examBtn);
+    card.append(quickRow);
 
     if (this.folioOpenCallback) {
       const openBtn = document.createElement("button");
@@ -1543,7 +1571,30 @@ export class VnStage {
     const readyImage: VnSceneImage = loadedUrl === image.url ? image : { ...image, url: loadedUrl };
     const wasCurrent = !this.state.pendingImage || this.state.pendingImage.requestId === image.requestId;
     this.dispatch({ type: "image-ready", requestId: image.requestId, image: readyImage });
+    this.updateChromaticRim();
     return wasCurrent;
+  }
+
+  setParagraphArtStates(states: Record<number, "ready" | "generating" | "none">): void {
+    this.paragraphArtStates.clear();
+    for (const [key, val] of Object.entries(states)) {
+      const idx = Number(key);
+      if (Number.isInteger(idx) && idx >= 0) this.paragraphArtStates.set(idx, val);
+    }
+    this.renderScrubber();
+  }
+
+  private updateChromaticRim(): void {
+    const enabled = this.readerPreferences?.adaptiveTint !== false && this.effectIntensity !== "off";
+    const tint = enabled ? extractSceneRimTint(this.activeImageEl) : null;
+    const shell = this.root.closest<HTMLElement>("[data-vn-shell]");
+    if (tint) {
+      if (typeof this.root.style.setProperty === "function") this.root.style.setProperty("--vn-scene-rim-tint", tint);
+      if (shell && typeof shell.style.setProperty === "function") shell.style.setProperty("--vn-scene-rim-tint", tint);
+    } else {
+      if (typeof this.root.style.removeProperty === "function") this.root.style.removeProperty("--vn-scene-rim-tint");
+      if (shell && typeof shell.style.removeProperty === "function") shell.style.removeProperty("--vn-scene-rim-tint");
+    }
   }
 
   destroy(): void {
@@ -2591,9 +2642,12 @@ export class VnStage {
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
       btn.dataset.vnScrubIndex = String(idx);
+      const artState = this.paragraphArtStates.get(idx) ?? "none";
+      btn.dataset.artState = artState;
       if (isRead && p && (p.cue || p.effect || p.ambient !== undefined)) btn.dataset.hasCue = "true";
       btn.disabled = !isRead;
-      const label = `Paragraph ${idx + 1} of ${count}${isRead&&p?.speaker ? ` (${p.speaker})` : ""}`;
+      const artSuffix = artState === "ready" ? " · Art ready" : artState === "generating" ? " · Generating art" : "";
+      const label = `Paragraph ${idx + 1} of ${count}${isRead&&p?.speaker ? ` (${p.speaker})` : ""}${artSuffix}`;
       btn.setAttribute("aria-label", label);
       btn.title = label;
       if (isActive) btn.setAttribute("aria-current", "step");
@@ -2834,9 +2888,26 @@ export class VnStage {
       if (!speaker) {
         avatarEl.hidden = true;
         avatarEl.replaceChildren();
+        delete avatarEl.dataset.resonance;
       } else {
         const avatarUrl = this.dossiers.speakerAvatarUrl(speaker);
         avatarEl.hidden = false;
+        avatarEl.setAttribute("role", "button");
+        avatarEl.tabIndex = 0;
+        avatarEl.setAttribute("aria-haspopup", "dialog");
+        avatarEl.setAttribute("aria-label", `Inspect ${speaker}`);
+        avatarEl.dataset.resonance = this.speakerResonance(speaker);
+        avatarEl.onclick = (event) => {
+          event.stopPropagation();
+          this.toggleSpeakerPeek();
+        };
+        avatarEl.onkeydown = (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            this.toggleSpeakerPeek();
+          }
+        };
         avatarEl.replaceChildren();
         if (avatarUrl) {
           const img = document.createElement("img");
@@ -3223,12 +3294,37 @@ export class VnStage {
     }
   }
 
+  private speakerResonance(speaker: string): "warmth" | "trust" | "tension" | "neutral" {
+    const key = speaker.trim().toLowerCase();
+    const affinity = this.bondSnapshots.get(key);
+    if (affinity === undefined) return "neutral";
+    if (affinity <= -20) return "tension";
+    if (affinity >= 60) return "warmth";
+    if (affinity >= 25) return "trust";
+    return "neutral";
+  }
+
   private applyVirtualCameraMotion(text: string, hasSpeaker: boolean, explicitEffect?: StageEffect | null): void {
     if (this.readerPreferences?.virtualCameraEnabled === false || this.effectIntensity === "off" || this.isSkipping) {
       delete this.activeImageEl.dataset.vnCameraMotion;
+      delete this.scene.dataset.vnKenBurns;
       return;
     }
+    const fit = this.scene.dataset.vnImageFit;
     const lower = text.toLowerCase();
+    if (fit !== "contain") {
+      if (/\b(wide|panoramic|skyline|horizon|hallway|courtyard|establishing)\b/.test(lower)) {
+        this.scene.dataset.vnKenBurns = "establishing";
+      } else if (hasSpeaker && text.length < 180) {
+        this.scene.dataset.vnKenBurns = "close_up";
+      } else if (hasSpeaker) {
+        this.scene.dataset.vnKenBurns = "over_shoulder";
+      } else {
+        this.scene.dataset.vnKenBurns = "drift";
+      }
+    } else {
+      delete this.scene.dataset.vnKenBurns;
+    }
     if (explicitEffect || /\b(explodes?|shatters?|lunges?|strikes?|slashes?|screams?|crashes?)\b/.test(lower)) {
       this.activeImageEl.dataset.vnCameraMotion = "push-in";
     } else if (hasSpeaker) {

@@ -26673,10 +26673,28 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
 }
 
 [data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn {
-  color: var(--aperture-accent, #c4b5fd) !important;
-  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent), transparent 72%) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, rgba(255, 255, 255, 0.12)) !important;
-  box-shadow: 0 0 14px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+  color: var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) !important;
+  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 24%, transparent), transparent 72%) !important;
+  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 38%, rgba(255, 255, 255, 0.12)) !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 22%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-vn-reader-header] [data-action="studio-toggle"][data-attention-count]::before {
+  content: attr(data-attention-count);
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--aperture-accent, #dcebad);
+  color: var(--aperture-accent-contrast, #0f172a);
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
 [data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn svg {
@@ -27410,12 +27428,12 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 :where([data-vn-root]) [data-vn-dialogue] {
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
+  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 28%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
   border-radius: min(var(--vn-shell-radius, 20px), 22px);
   background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 14, 22, var(--caption-opacity, 0.84))));
   -webkit-backdrop-filter: blur(var(--caption-blur, 18px));
   backdrop-filter: blur(var(--caption-blur, 18px));
-  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 color-mix(in srgb, var(--vn-scene-rim-tint, #ffffff) 32%, rgba(255, 255, 255, 0.22));
 }
 
 /* Draggable Top Resize Grip — narrow centered handle so it never blocks top-right Play/Hide tools */
@@ -27474,21 +27492,42 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 
 .speaker-avatar,
 [data-vn-speaker-avatar] {
+  position: relative !important;
   width: 32px !important;
   height: 32px !important;
   min-width: 32px !important;
   min-height: 32px !important;
   border-radius: 50% !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   flex: none !important;
   display: inline-grid !important;
   place-items: center !important;
+  cursor: pointer !important;
   background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 18%, var(--vn-shell-panel, rgba(15, 23, 42, 0.85))) !important;
   border: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, var(--vn-shell-border-strong, rgba(255, 255, 255, 0.45))) !important;
   box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent) !important;
   color: var(--aperture-accent, #c4b5fd) !important;
   font-size: 13px !important;
   font-weight: 750 !important;
+}
+
+[data-vn-speaker-avatar]::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+[data-vn-speaker-avatar][data-resonance="warmth"] {
+  border-color: #f472b6 !important;
+  box-shadow: 0 0 14px rgba(244, 114, 182, 0.48) !important;
+}
+[data-vn-speaker-avatar][data-resonance="trust"] {
+  border-color: #34d399 !important;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.42) !important;
+}
+[data-vn-speaker-avatar][data-resonance="tension"] {
+  border-color: #f87171 !important;
+  box-shadow: 0 0 14px rgba(248, 113, 113, 0.48) !important;
 }
 
 [data-vn-speaker-avatar][hidden] {
@@ -27498,6 +27537,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 [data-vn-speaker-avatar] img {
   width: 100% !important;
   height: 100% !important;
+  border-radius: 50% !important;
   object-fit: cover !important;
   object-position: center 20% !important;
   display: block !important;
@@ -27898,7 +27938,62 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 [data-vn-scrubber] [data-vn-scrub-dot].active {
-  box-shadow: 0 0 12px var(--vn-atmosphere-glow, var(--aperture-accent, #8ae9b3)) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--vn-scene-rim-tint, var(--vn-atmosphere-glow, var(--aperture-accent, #8ae9b3))) 70%, transparent) !important;
+}
+
+[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="ready"]::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #dcebad)) 75%, transparent);
+  pointer-events: none;
+}
+
+[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="generating"] {
+  animation: vn-art-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes vn-art-shimmer {
+  0%, 100% { opacity: 0.45; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+/* #1 Subtle Ken Burns Camera Parallax (GPU transform-only, disabled under reduced-motion) */
+@keyframes vn-kb-drift {
+  0% { transform: translate3d(0%, 0%, 0) scale(1); }
+  50% { transform: translate3d(-1.1%, -0.8%, 0) scale(1.035); }
+  100% { transform: translate3d(0%, 0%, 0) scale(1); }
+}
+@keyframes vn-kb-establish {
+  0% { transform: translate3d(-1.4%, 0%, 0) scale(1.02); }
+  50% { transform: translate3d(1.4%, -0.6%, 0) scale(1.04); }
+  100% { transform: translate3d(-1.4%, 0%, 0) scale(1.02); }
+}
+@keyframes vn-kb-closeup {
+  0% { transform: translate3d(0%, 0.4%, 0) scale(1); }
+  50% { transform: translate3d(0%, -0.8%, 0) scale(1.045); }
+  100% { transform: translate3d(0%, 0.4%, 0) scale(1); }
+}
+@keyframes vn-kb-shoulder {
+  0% { transform: translate3d(0.9%, 0%, 0) scale(1.015); }
+  50% { transform: translate3d(-0.9%, -0.5%, 0) scale(1.038); }
+  100% { transform: translate3d(0.9%, 0%, 0) scale(1.015); }
+}
+[data-vn-scene][data-vn-ken-burns="drift"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-drift 22s ease-in-out infinite;
+}
+[data-vn-scene][data-vn-ken-burns="establishing"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-establish 24s ease-in-out infinite;
+}
+[data-vn-scene][data-vn-ken-burns="close_up"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-closeup 18s ease-in-out infinite;
+}
+[data-vn-scene][data-vn-ken-burns="over_shoulder"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-shoulder 20s ease-in-out infinite;
+}
+[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
+  animation: none !important;
 }
 
 [data-vn-show-text]:not([hidden]),
@@ -29883,6 +29978,7 @@ class ReaderWorkspace {
           <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">06</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
           <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
           <button type="button" data-action="cast-toggle" class="aperture-link" style="min-height:44px"><span class="number">08</span><span>Toggle cast portraits</span>${APERTURE_ICONS.cast}</button>
+          <button type="button" data-action="quick-tuner" class="aperture-link" style="min-height:44px"><span class="number">09</span><span>Quick Look &amp; Audio</span>${APERTURE_ICONS.settings}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
         <div class="aperture-foot"><span data-aperture-chapter>CURRENT SCENE</span><span>EVERY DETAIL HAS A PLACE</span></div>
@@ -30026,6 +30122,12 @@ class ReaderWorkspace {
         this.shell.dispatchEvent(new CustomEvent("lumiglyphics:cast-toggle", { bubbles: true }));
         return;
       }
+      const tunerBtn = event.target instanceof Element ? event.target.closest('[data-action="quick-tuner"]') : null;
+      if (tunerBtn) {
+        this.toggleAperture(false);
+        this.shell.dispatchEvent(new CustomEvent("lumiglyphics:quick-tuner", { bubbles: true, detail: { opener: openMenuBtn } }));
+        return;
+      }
       const link = event.target instanceof Element ? event.target.closest("[data-aperture-route]") : null;
       if (!link)
         return;
@@ -30062,6 +30164,36 @@ class ReaderWorkspace {
     window.visualViewport?.addEventListener("resize", this.onViewportResize, { signal });
     window.visualViewport?.addEventListener("scroll", this.onViewportResize, { signal });
     window.addEventListener("resize", this.onViewportResize, { signal });
+    const settingsBtn = this.nav.querySelector('[data-reader-destination="settings"]');
+    if (settingsBtn) {
+      let pressTimer = null;
+      let longPressed = false;
+      const clearPress = () => {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+      };
+      signal.addEventListener("abort", clearPress, { once: true });
+      settingsBtn.addEventListener("pointerdown", () => {
+        clearPress();
+        longPressed = false;
+        pressTimer = setTimeout(() => {
+          pressTimer = null;
+          longPressed = true;
+          this.shell.dispatchEvent(new CustomEvent("lumiglyphics:quick-tuner", { bubbles: true, detail: { opener: settingsBtn } }));
+        }, 450);
+      }, { signal });
+      settingsBtn.addEventListener("pointerup", clearPress, { signal });
+      settingsBtn.addEventListener("pointercancel", clearPress, { signal });
+      settingsBtn.addEventListener("click", (e) => {
+        if (longPressed) {
+          longPressed = false;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, { capture: true, signal });
+    }
     this.syncViewport();
     this.syncReader();
   }
@@ -30318,6 +30450,13 @@ class ReaderWorkspace {
     badge.hidden = count2 <= 0;
     badge.textContent = String(count2);
     badge.setAttribute("aria-label", `${count2} pictures need review`);
+    const studioBtn = this.header.querySelector('[data-action="studio-toggle"]');
+    if (studioBtn) {
+      if (count2 > 0)
+        studioBtn.dataset.attentionCount = String(count2);
+      else
+        delete studioBtn.dataset.attentionCount;
+    }
     const button = this.nav.querySelector('[data-reader-destination="artwork"]');
     if (count2 > 0)
       button.setAttribute("aria-description", `${count2} picture${count2 === 1 ? "" : "s"} need${count2 === 1 ? "s" : ""} review`);
@@ -36267,6 +36406,69 @@ class StageDossiers {
   }
 }
 
+// src/frontend/stage/chromatic-rim.ts
+function clampRimRgb(r, g, b) {
+  const cr = Math.max(0, Math.min(255, Math.round(r)));
+  const cg = Math.max(0, Math.min(255, Math.round(g)));
+  const cb = Math.max(0, Math.min(255, Math.round(b)));
+  const max = Math.max(cr, cg, cb) / 255;
+  const min = Math.min(cr, cg, cb) / 255;
+  const l = (max + min) / 2;
+  const avg = (cr + cg + cb) / 3;
+  const satMix = max - min > 0.58 ? 0.65 : 1;
+  let mr = avg + (cr - avg) * satMix;
+  let mg = avg + (cg - avg) * satMix;
+  let mb = avg + (cb - avg) * satMix;
+  if (l < 0.36) {
+    const lift = (0.36 - l) * 255;
+    mr = Math.min(255, mr + lift);
+    mg = Math.min(255, mg + lift);
+    mb = Math.min(255, mb + lift);
+  } else if (l > 0.72) {
+    const scale = 0.72 / Math.max(0.01, l);
+    mr *= scale;
+    mg *= scale;
+    mb *= scale;
+  }
+  return `rgb(${Math.round(Math.max(0, Math.min(255, mr)))}, ${Math.round(Math.max(0, Math.min(255, mg)))}, ${Math.round(Math.max(0, Math.min(255, mb)))})`;
+}
+function extractSceneRimTint(img) {
+  if (!img || typeof document === "undefined")
+    return null;
+  const w = img.naturalWidth || img.width || 0;
+  const h = img.naturalHeight || img.height || 0;
+  if (w <= 0 || h <= 0)
+    return null;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext("2d");
+    if (!ctx)
+      return null;
+    ctx.drawImage(img, 0, 0, 16, 16);
+    const data = ctx.getImageData(0, 0, 16, 16).data;
+    let rSum = 0;
+    let gSum = 0;
+    let bSum = 0;
+    let count2 = 0;
+    for (let i = 0;i < data.length; i += 4) {
+      const a = data[i + 3] ?? 0;
+      if (a < 32)
+        continue;
+      rSum += data[i] ?? 0;
+      gSum += data[i + 1] ?? 0;
+      bSum += data[i + 2] ?? 0;
+      count2 += 1;
+    }
+    if (count2 === 0)
+      return null;
+    return clampRimRgb(rSum / count2, gSum / count2, bSum / count2);
+  } catch {
+    return null;
+  }
+}
+
 // src/frontend/stage/world-strip.ts
 var WEATHER_GLYPHS = {
   storm: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.2 10.5H3.5a2.5 2.5 0 0 1-.2-5 3.6 3.6 0 0 1 6.9-.9A2.6 2.6 0 0 1 12.6 10.5h-.9"/><path d="M8.5 8.5 6.8 11.5h2.2l-1.5 3"/></svg>',
@@ -36838,7 +37040,8 @@ var DEFAULT_READER_PREFERENCES = {
   smartBeatSegmentation: true,
   readabilityScrim: true,
   virtualCameraEnabled: true,
-  confidantCutInsEnabled: true
+  confidantCutInsEnabled: true,
+  adaptiveTint: true
 };
 function normalizeReaderPreferences(value) {
   const input2 = value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -36863,7 +37066,8 @@ function normalizeReaderPreferences(value) {
     smartBeatSegmentation: input2.smartBeatSegmentation !== undefined ? input2.smartBeatSegmentation === true : DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true,
     readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true,
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
-    confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true
+    confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true,
+    adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true
   };
 }
 var MOBILE_SHEET_DETENTS = { compact: 48, reading: 142, expandedRatio: 0.65 };
@@ -46166,6 +46370,7 @@ class VnStage {
   bondBannerTimer = null;
   scenePostcardEl = null;
   scenePostcardCleanup = null;
+  paragraphArtStates = new Map;
   predecodedUrls = new Set;
   statusStack;
   emptyState;
@@ -46721,7 +46926,7 @@ class VnStage {
       ].filter(Boolean).join(" · ");
       if (summary) {
         const sub = document.createElement("div");
-        sub.style.cssText = "font-size:11px;color:#cbd5e1;line-height:1.4;";
+        sub.style.cssText = "font-size:11px;color:var(--vn-shell-muted,#cbd5e1);line-height:1.4;";
         sub.textContent = summary;
         card.append(sub);
       }
@@ -46730,7 +46935,7 @@ class VnStage {
         const row = document.createElement("div");
         row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
         const lbl = document.createElement("span");
-        lbl.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;";
+        lbl.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--vn-shell-muted,#94a3b8);";
         lbl.textContent = "Wardrobe:";
         row.append(lbl);
         for (const [key, outfit] of wardrobeEntries.slice(0, 6)) {
@@ -46738,7 +46943,7 @@ class VnStage {
           btn.type = "button";
           const active = char.activeWardrobeKey === key || char.activeOutfit === outfit;
           btn.textContent = key;
-          btn.style.cssText = `min-height:44px;padding:6px 12px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
+          btn.style.cssText = `min-height:44px;padding:6px 12px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "var(--vn-shell-accent,rgba(110,231,183,0.75))" : "var(--vn-shell-border,rgba(255,255,255,0.18))"};background:${active ? "color-mix(in srgb,var(--vn-shell-accent,#6ee7b7) 18%,transparent)" : "var(--vn-shell-button,rgba(255,255,255,0.06))"};color:var(--vn-shell-text,#f8fafc);`;
           btn.addEventListener("click", () => {
             const nextDna = { ...char, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
             this.characterDnaLibrary[char.id] = nextDna;
@@ -46751,6 +46956,31 @@ class VnStage {
         card.append(row);
       }
     }
+    const quickRow = document.createElement("div");
+    quickRow.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
+    const draftIntoComposer = (snippet) => {
+      const input2 = this.themeRoot.querySelector("[data-vn-inline-message]");
+      if (input2) {
+        input2.value = snippet;
+        input2.dispatchEvent(new Event("input", { bubbles: true }));
+        input2.focus?.();
+      }
+      this.closeSpeakerPeek();
+    };
+    const askBtn = document.createElement("button");
+    askBtn.type = "button";
+    askBtn.dataset.vnQuickAsk = "";
+    askBtn.textContent = `Ask ${name}`;
+    askBtn.style.cssText = "min-height:44px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:650;cursor:pointer;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.18));background:var(--vn-shell-button,rgba(255,255,255,0.08));color:var(--vn-shell-text,#f8fafc);";
+    askBtn.addEventListener("click", () => draftIntoComposer(`${name}, `));
+    const examBtn = document.createElement("button");
+    examBtn.type = "button";
+    examBtn.dataset.vnQuickExamine = "";
+    examBtn.textContent = "Examine";
+    examBtn.style.cssText = "min-height:44px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:650;cursor:pointer;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.18));background:var(--vn-shell-button,rgba(255,255,255,0.08));color:var(--vn-shell-text,#f8fafc);";
+    examBtn.addEventListener("click", () => draftIntoComposer(`*looks closely at ${name}* `));
+    quickRow.append(askBtn, examBtn);
+    card.append(quickRow);
     if (this.folioOpenCallback) {
       const openBtn = document.createElement("button");
       openBtn.type = "button";
@@ -47546,7 +47776,33 @@ class VnStage {
     const readyImage = loadedUrl === image.url ? image : { ...image, url: loadedUrl };
     const wasCurrent = !this.state.pendingImage || this.state.pendingImage.requestId === image.requestId;
     this.dispatch({ type: "image-ready", requestId: image.requestId, image: readyImage });
+    this.updateChromaticRim();
     return wasCurrent;
+  }
+  setParagraphArtStates(states) {
+    this.paragraphArtStates.clear();
+    for (const [key, val] of Object.entries(states)) {
+      const idx = Number(key);
+      if (Number.isInteger(idx) && idx >= 0)
+        this.paragraphArtStates.set(idx, val);
+    }
+    this.renderScrubber();
+  }
+  updateChromaticRim() {
+    const enabled = this.readerPreferences?.adaptiveTint !== false && this.effectIntensity !== "off";
+    const tint = enabled ? extractSceneRimTint(this.activeImageEl) : null;
+    const shell = this.root.closest("[data-vn-shell]");
+    if (tint) {
+      if (typeof this.root.style.setProperty === "function")
+        this.root.style.setProperty("--vn-scene-rim-tint", tint);
+      if (shell && typeof shell.style.setProperty === "function")
+        shell.style.setProperty("--vn-scene-rim-tint", tint);
+    } else {
+      if (typeof this.root.style.removeProperty === "function")
+        this.root.style.removeProperty("--vn-scene-rim-tint");
+      if (shell && typeof shell.style.removeProperty === "function")
+        shell.style.removeProperty("--vn-scene-rim-tint");
+    }
   }
   destroy() {
     this.speechReadAlong.clear();
@@ -48623,10 +48879,13 @@ class VnStage {
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
       btn.dataset.vnScrubIndex = String(idx);
+      const artState = this.paragraphArtStates.get(idx) ?? "none";
+      btn.dataset.artState = artState;
       if (isRead && p && (p.cue || p.effect || p.ambient !== undefined))
         btn.dataset.hasCue = "true";
       btn.disabled = !isRead;
-      const label = `Paragraph ${idx + 1} of ${count2}${isRead && p?.speaker ? ` (${p.speaker})` : ""}`;
+      const artSuffix = artState === "ready" ? " · Art ready" : artState === "generating" ? " · Generating art" : "";
+      const label = `Paragraph ${idx + 1} of ${count2}${isRead && p?.speaker ? ` (${p.speaker})` : ""}${artSuffix}`;
       btn.setAttribute("aria-label", label);
       btn.title = label;
       if (isActive)
@@ -48854,9 +49113,26 @@ class VnStage {
       if (!speaker) {
         avatarEl.hidden = true;
         avatarEl.replaceChildren();
+        delete avatarEl.dataset.resonance;
       } else {
         const avatarUrl = this.dossiers.speakerAvatarUrl(speaker);
         avatarEl.hidden = false;
+        avatarEl.setAttribute("role", "button");
+        avatarEl.tabIndex = 0;
+        avatarEl.setAttribute("aria-haspopup", "dialog");
+        avatarEl.setAttribute("aria-label", `Inspect ${speaker}`);
+        avatarEl.dataset.resonance = this.speakerResonance(speaker);
+        avatarEl.onclick = (event) => {
+          event.stopPropagation();
+          this.toggleSpeakerPeek();
+        };
+        avatarEl.onkeydown = (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            this.toggleSpeakerPeek();
+          }
+        };
         avatarEl.replaceChildren();
         if (avatarUrl) {
           const img = document.createElement("img");
@@ -49257,12 +49533,40 @@ class VnStage {
       this.startTypewriter(formatted);
     }
   }
+  speakerResonance(speaker) {
+    const key = speaker.trim().toLowerCase();
+    const affinity = this.bondSnapshots.get(key);
+    if (affinity === undefined)
+      return "neutral";
+    if (affinity <= -20)
+      return "tension";
+    if (affinity >= 60)
+      return "warmth";
+    if (affinity >= 25)
+      return "trust";
+    return "neutral";
+  }
   applyVirtualCameraMotion(text, hasSpeaker, explicitEffect) {
     if (this.readerPreferences?.virtualCameraEnabled === false || this.effectIntensity === "off" || this.isSkipping) {
       delete this.activeImageEl.dataset.vnCameraMotion;
+      delete this.scene.dataset.vnKenBurns;
       return;
     }
+    const fit = this.scene.dataset.vnImageFit;
     const lower = text.toLowerCase();
+    if (fit !== "contain") {
+      if (/\b(wide|panoramic|skyline|horizon|hallway|courtyard|establishing)\b/.test(lower)) {
+        this.scene.dataset.vnKenBurns = "establishing";
+      } else if (hasSpeaker && text.length < 180) {
+        this.scene.dataset.vnKenBurns = "close_up";
+      } else if (hasSpeaker) {
+        this.scene.dataset.vnKenBurns = "over_shoulder";
+      } else {
+        this.scene.dataset.vnKenBurns = "drift";
+      }
+    } else {
+      delete this.scene.dataset.vnKenBurns;
+    }
     if (explicitEffect || /\b(explodes?|shatters?|lunges?|strikes?|slashes?|screams?|crashes?)\b/.test(lower)) {
       this.activeImageEl.dataset.vnCameraMotion = "push-in";
     } else if (hasSpeaker) {
@@ -50483,6 +50787,373 @@ class AudioEngine {
     }, intervalMs);
   }
 }
+// src/frontend/stage/quick-tuner.ts
+var PRESET_SHORT_LABELS = {
+  lumiverse: "Lumiverse",
+  "golden-hour": "Golden Hour",
+  "boxed-console": "Boxed",
+  "paper-novel": "Paper Novel",
+  "midnight-noir": "Noir",
+  "yamaku-classic": "Yamaku",
+  "literature-club": "Literature",
+  "astral-glass": "Astral Glass",
+  "neon-rain": "Neon Rain",
+  "obsidian-reliquary": "Obsidian"
+};
+var TUNER_CSS = `
+${VN_SHELL_PRESET_TOKENS_CSS}
+:host {
+  position: absolute;
+  inset: 0;
+  z-index: 92;
+  pointer-events: none;
+  font: 13px/1.4 var(--vn-shell-family, system-ui, -apple-system, sans-serif);
+  color: var(--vn-shell-text, #f4f7ee);
+}
+:host(:not([data-open="true"])) {
+  display: none !important;
+}
+.tuner-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px 12px calc(74px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+.tuner-sheet {
+  width: min(460px, 100%);
+  max-height: 72dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: min(var(--vn-shell-radius, 18px), 20px);
+  border: 1px solid var(--vn-shell-border-strong, var(--vn-shell-border, rgba(255, 255, 255, 0.22)));
+  background: var(--vn-shell-surface-gradient, var(--vn-shell-panel, rgba(14, 20, 26, 0.96)));
+  box-shadow: var(--vn-shell-shadow, 0 18px 46px rgba(0, 0, 0, 0.6));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tuner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tuner-title {
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vn-shell-accent, #dcebad);
+}
+.tuner-close {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.16));
+  background: var(--vn-shell-button, rgba(255, 255, 255, 0.08));
+  color: var(--vn-shell-text, #f4f7ee);
+  font-size: 18px;
+  cursor: pointer;
+}
+.tuner-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tuner-pill {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.18));
+  background: var(--vn-shell-field, rgba(255, 255, 255, 0.06));
+  color: var(--vn-shell-text, #f4f7ee);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tuner-pill[aria-pressed="true"] {
+  background: var(--vn-shell-accent, #dcebad);
+  color: var(--vn-shell-accent-contrast, #0d1f17);
+  border-color: transparent;
+  font-weight: 750;
+}
+.tuner-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tuner-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tuner-field-val {
+  color: var(--vn-shell-accent, #dcebad);
+  font-variant-numeric: tabular-nums;
+}
+input[type="range"] {
+  width: 100%;
+  min-height: 36px;
+  accent-color: var(--vn-shell-accent, #dcebad);
+}
+.tuner-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tuner-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--vn-shell-accent, #dcebad);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+`;
+
+class QuickTunerDrawer {
+  options;
+  host;
+  shadow;
+  closeBtn;
+  presetButtons = new Map;
+  opacityInput;
+  opacityVal;
+  textScaleInput;
+  textScaleVal;
+  ambientInput;
+  ambientVal;
+  ttsInput;
+  ttsVal;
+  rimCheckbox;
+  openState = false;
+  opener = null;
+  config = null;
+  constructor(options) {
+    this.options = options;
+    this.host = document.createElement("div");
+    this.host.dataset.vnQuickTuner = "";
+    this.host.dataset.open = "false";
+    this.host.style.display = "none";
+    this.shadow = this.host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = TUNER_CSS;
+    const backdrop = document.createElement("div");
+    backdrop.className = "tuner-backdrop";
+    backdrop.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (event.target === backdrop)
+        this.close();
+    });
+    const sheet = document.createElement("div");
+    sheet.className = "tuner-sheet";
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+    sheet.setAttribute("aria-label", "Quick Look and Audio Tuner");
+    sheet.addEventListener("click", (event) => event.stopPropagation());
+    sheet.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+      }
+    });
+    const head = document.createElement("div");
+    head.className = "tuner-head";
+    const title = document.createElement("span");
+    title.className = "tuner-title";
+    title.textContent = "Quick Look & Audio";
+    this.closeBtn = document.createElement("button");
+    this.closeBtn.type = "button";
+    this.closeBtn.className = "tuner-close";
+    this.closeBtn.setAttribute("aria-label", "Close Quick Tuner");
+    this.closeBtn.textContent = "×";
+    this.closeBtn.addEventListener("click", () => this.close());
+    head.append(title, this.closeBtn);
+    const presetsWrap = document.createElement("div");
+    presetsWrap.className = "tuner-presets";
+    presetsWrap.setAttribute("role", "group");
+    presetsWrap.setAttribute("aria-label", "Theme preset");
+    for (const id6 of THEME_PRESET_IDS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tuner-pill";
+      btn.dataset.tunerPreset = id6;
+      btn.textContent = PRESET_SHORT_LABELS[id6];
+      btn.setAttribute("aria-pressed", "false");
+      btn.addEventListener("click", () => {
+        if (!this.config)
+          return;
+        this.config = { ...this.config, themePreset: id6 };
+        this.syncUi();
+        this.options.onPatch({ themePreset: id6 });
+      });
+      this.presetButtons.set(id6, btn);
+      presetsWrap.appendChild(btn);
+    }
+    const makeRange = (labelText, min, max, step, name) => {
+      const wrap = document.createElement("label");
+      wrap.className = "tuner-field";
+      const row = document.createElement("div");
+      row.className = "tuner-field-row";
+      const lbl = document.createElement("span");
+      lbl.textContent = labelText;
+      const val = document.createElement("span");
+      val.className = "tuner-field-val";
+      row.append(lbl, val);
+      const input2 = document.createElement("input");
+      input2.type = "range";
+      input2.min = String(min);
+      input2.max = String(max);
+      input2.step = String(step);
+      input2.dataset.tunerRange = name;
+      wrap.append(row, input2);
+      return { wrap, input: input2, val };
+    };
+    const op = makeRange("Glass Opacity", 0.25, 1, 0.05, "opacity");
+    this.opacityInput = op.input;
+    this.opacityVal = op.val;
+    this.opacityInput.addEventListener("input", () => {
+      if (!this.config)
+        return;
+      const v = Number(this.opacityInput.value);
+      this.opacityVal.textContent = `${Math.round(v * 100)}%`;
+      const nextPrefs = normalizeReaderPreferences({ ...this.config.readerPreferences, backgroundOpacity: v });
+      this.config = { ...this.config, readerPreferences: nextPrefs };
+      this.options.onPatch({ readerPreferences: nextPrefs });
+    });
+    const ts = makeRange("Text Scale", 0.85, 1.35, 0.05, "textScale");
+    this.textScaleInput = ts.input;
+    this.textScaleVal = ts.val;
+    this.textScaleInput.addEventListener("input", () => {
+      if (!this.config)
+        return;
+      const v = Number(this.textScaleInput.value);
+      this.textScaleVal.textContent = `${Math.round(v * 100)}%`;
+      this.config = { ...this.config, textScale: v };
+      this.options.onPatch({ textScale: v });
+    });
+    const amb = makeRange("Ambience Volume", 0, 1, 0.05, "ambientVolume");
+    this.ambientInput = amb.input;
+    this.ambientVal = amb.val;
+    this.ambientInput.addEventListener("input", () => {
+      if (!this.config)
+        return;
+      const v = Number(this.ambientInput.value);
+      this.ambientVal.textContent = `${Math.round(v * 100)}%`;
+      this.config = { ...this.config, ambientVolume: v };
+      this.options.onPatch({ ambientVolume: v });
+    });
+    const tts = makeRange("TTS Volume", 0, 1, 0.05, "ttsVolume");
+    this.ttsInput = tts.input;
+    this.ttsVal = tts.val;
+    this.ttsInput.addEventListener("input", () => {
+      if (!this.config)
+        return;
+      const v = Number(this.ttsInput.value);
+      this.ttsVal.textContent = `${Math.round(v * 100)}%`;
+      const nextSpeech = { ...this.config.speech, volume: v };
+      this.config = { ...this.config, speech: nextSpeech };
+      this.options.onPatch({ speech: nextSpeech });
+    });
+    const rimLabel = document.createElement("label");
+    rimLabel.className = "tuner-toggle";
+    const rimText = document.createElement("span");
+    rimText.textContent = "Chromatic Rim (adaptive glass tint)";
+    this.rimCheckbox = document.createElement("input");
+    this.rimCheckbox.type = "checkbox";
+    this.rimCheckbox.dataset.tunerRim = "";
+    this.rimCheckbox.addEventListener("change", () => {
+      if (!this.config)
+        return;
+      const nextPrefs = normalizeReaderPreferences({ ...this.config.readerPreferences, adaptiveTint: this.rimCheckbox.checked });
+      this.config = { ...this.config, readerPreferences: nextPrefs };
+      this.options.onPatch({ readerPreferences: nextPrefs });
+    });
+    rimLabel.append(rimText, this.rimCheckbox);
+    sheet.append(head, presetsWrap, op.wrap, ts.wrap, amb.wrap, tts.wrap, rimLabel);
+    backdrop.appendChild(sheet);
+    this.shadow.append(style, backdrop);
+    options.mount.appendChild(this.host);
+  }
+  setConfig(config2) {
+    this.config = config2;
+    if (config2) {
+      this.host.dataset.vnPreset = config2.themePreset;
+      this.syncUi();
+    }
+  }
+  isOpen() {
+    return this.openState;
+  }
+  getShadowRoot() {
+    return this.shadow;
+  }
+  open(opener) {
+    this.opener = opener ?? null;
+    this.openState = true;
+    this.host.dataset.open = "true";
+    this.host.style.display = "block";
+    this.syncUi();
+    this.closeBtn.focus?.({ preventScroll: true });
+  }
+  close(restoreFocus = true) {
+    if (!this.openState)
+      return;
+    this.openState = false;
+    this.host.dataset.open = "false";
+    this.host.style.display = "none";
+    if (restoreFocus) {
+      this.opener?.focus?.({ preventScroll: true });
+    }
+    this.opener = null;
+  }
+  destroy() {
+    this.host.remove();
+  }
+  syncUi() {
+    const cfg = this.config;
+    if (!cfg)
+      return;
+    this.host.dataset.vnPreset = cfg.themePreset;
+    for (const [id6, btn] of this.presetButtons.entries()) {
+      btn.setAttribute("aria-pressed", id6 === cfg.themePreset ? "true" : "false");
+    }
+    const opacity = cfg.readerPreferences.backgroundOpacity ?? 0.9;
+    this.opacityInput.value = String(opacity);
+    this.opacityVal.textContent = `${Math.round(opacity * 100)}%`;
+    this.textScaleInput.value = String(cfg.textScale);
+    this.textScaleVal.textContent = `${Math.round(cfg.textScale * 100)}%`;
+    this.ambientInput.value = String(cfg.ambientVolume);
+    this.ambientVal.textContent = `${Math.round(cfg.ambientVolume * 100)}%`;
+    const ttsVol = cfg.speech?.volume ?? 1;
+    this.ttsInput.value = String(ttsVol);
+    this.ttsVal.textContent = `${Math.round(ttsVol * 100)}%`;
+    this.rimCheckbox.checked = cfg.readerPreferences.adaptiveTint !== false;
+  }
+}
+
 // src/shared/master-system-prompts.ts
 var MASTER_SCENE_PLANNER_PROMPT = `You are the Master Narrative Director and Scene Staging Engine for a visual novel presentation.
 Your mission is to read the story reply, structure its narrative flow into visual novel beats, orchestrate camera framings, assign audio cues, trigger stage effects, and schedule visual illustrations.
@@ -58890,7 +59561,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.182";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.183";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -70360,6 +71031,7 @@ function setupVisualNovelFrontend(baseContext) {
   });
   let speech;
   let speechDock;
+  let quickTuner;
   const isSpeechHoldingAuto = () => {
     if (!speech)
       return false;
@@ -70403,6 +71075,20 @@ function setupVisualNovelFrontend(baseContext) {
       manualMusicTrack = null;
     stage.workspace.setMusicTracks(tracks, manualMusicTrack);
     return changed;
+  }
+  function paragraphArtStatesForTurn(activeTurn) {
+    const out = {};
+    for (const asset of activeTurn.assets ?? []) {
+      const idx = asset.paragraphIndex;
+      if (!Number.isInteger(idx) || idx < 0)
+        continue;
+      if ((asset.status === "browser_ready" || asset.status === "generated") && asset.imageUrl) {
+        out[idx] = "ready";
+      } else if ((asset.status === "queued" || asset.status === "generating") && out[idx] !== "ready") {
+        out[idx] = "generating";
+      }
+    }
+    return out;
   }
   function syncAudioForParagraph(activeTurn, paragraphIndex, playSfx = true) {
     audioEngine.setBgmAttenuation(musicAttenuationForParagraph(activeTurn, paragraphIndex));
@@ -70572,6 +71258,28 @@ function setupVisualNovelFrontend(baseContext) {
     }
   });
   let panelCapture = null;
+  quickTuner = new QuickTunerDrawer({
+    mount: stage.panelMount,
+    onPatch: (patch) => {
+      const current = configRef.current;
+      if (current) {
+        const next = { ...current, ...patch };
+        configRef.current = next;
+        applyVisualConfigToStage(stage, next);
+        audioEngine.setAmbientVolume(next.ambientVolume);
+        audioEngine.setBuiltInAudioEnabled(next.builtInAudioEnabled);
+        if (patch.speech)
+          speech?.setSettings(next.speech);
+      }
+      ctx.sendToBackend({ type: "vn_set_config", patch, chatId: chatId() });
+    }
+  });
+  const onQuickTunerEvent = (event) => {
+    const opener = event.detail?.opener ?? null;
+    quickTuner.setConfig(configRef.current);
+    quickTuner.open(opener);
+  };
+  stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
   speechDock = new SpeechDock({
     mount: stage.panelMount,
     onPlay: () => {
@@ -71297,6 +72005,7 @@ function setupVisualNovelFrontend(baseContext) {
     stage.showReaderText();
     stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
     stage.setAssetProgress(computeAssetProgress(next, retryQueue, localPictureOperations));
+    stage.setParagraphArtStates?.(paragraphArtStatesForTurn(next));
     stage.workspace.setAttention(computeReviewAttention(next, localPictureOperations));
     if (revised)
       stage.restoreReplyDraft(draft);
@@ -71532,6 +72241,7 @@ function setupVisualNovelFrontend(baseContext) {
       speechDock.setEnabled(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current);
+      quickTuner.setConfig(configRef.current);
       if (configRef.current?.autoEnter && !active)
         activate();
       if (bootPending) {
@@ -71587,6 +72297,7 @@ function setupVisualNovelFrontend(baseContext) {
       speechDock.setEnabled(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current, message.requestId);
+      quickTuner.setConfig(configRef.current);
       settingsPanel?.setSaveStatus?.({ kind: "saved" }, message.requestId);
       return;
     }
@@ -71869,6 +72580,7 @@ function setupVisualNovelFrontend(baseContext) {
     document.removeEventListener("visibilitychange", onVisibilityChanged);
     speech.dispose();
     speechDock.destroy();
+    quickTuner.destroy();
     speechSettings?.destroy();
     settingsPanel?.destroy();
     imageStudio.destroy();

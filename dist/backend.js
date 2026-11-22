@@ -38906,7 +38906,8 @@ function normalizeReaderPreferences(value) {
     smartBeatSegmentation: input2.smartBeatSegmentation !== undefined ? input2.smartBeatSegmentation === true : DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true,
     readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true,
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
-    confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true
+    confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true,
+    adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true
   };
 }
 var READER_DIALOGUE_STYLES, DEFAULT_READER_PREFERENCES;
@@ -38929,7 +38930,8 @@ var init_reader_preferences = __esm(() => {
     smartBeatSegmentation: true,
     readabilityScrim: true,
     virtualCameraEnabled: true,
-    confidantCutInsEnabled: true
+    confidantCutInsEnabled: true,
+    adaptiveTint: true
   };
 });
 

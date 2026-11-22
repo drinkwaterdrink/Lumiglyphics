@@ -30,6 +30,7 @@ export type ReaderPreferences = {
   readabilityScrim?: boolean | undefined;
   virtualCameraEnabled?: boolean | undefined;
   confidantCutInsEnabled?: boolean | undefined;
+  adaptiveTint?: boolean | undefined;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false,
@@ -43,6 +44,7 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   readabilityScrim: true,
   virtualCameraEnabled: true,
   confidantCutInsEnabled: true,
+  adaptiveTint: true,
 };
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -69,6 +71,7 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     readabilityScrim: input.readabilityScrim !== undefined ? input.readabilityScrim === true : (DEFAULT_READER_PREFERENCES.readabilityScrim ?? true),
     virtualCameraEnabled: input.virtualCameraEnabled !== undefined ? input.virtualCameraEnabled === true : (DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true),
     confidantCutInsEnabled: input.confidantCutInsEnabled !== undefined ? input.confidantCutInsEnabled === true : (DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true),
+    adaptiveTint: input.adaptiveTint !== undefined ? input.adaptiveTint === true : (DEFAULT_READER_PREFERENCES.adaptiveTint ?? true),
   };
 }
 export const MOBILE_SHEET_DETENTS = { compact: 48, reading: 142, expandedRatio: 0.65 } as const;

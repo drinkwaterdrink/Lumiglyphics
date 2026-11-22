@@ -832,10 +832,28 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
 }
 
 [data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn {
-  color: var(--aperture-accent, #c4b5fd) !important;
-  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent), transparent 72%) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, rgba(255, 255, 255, 0.12)) !important;
-  box-shadow: 0 0 14px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+  color: var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) !important;
+  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 24%, transparent), transparent 72%) !important;
+  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 38%, rgba(255, 255, 255, 0.12)) !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 22%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-vn-reader-header] [data-action="studio-toggle"][data-attention-count]::before {
+  content: attr(data-attention-count);
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--aperture-accent, #dcebad);
+  color: var(--aperture-accent-contrast, #0f172a);
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
 [data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn svg {

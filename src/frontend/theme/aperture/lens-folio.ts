@@ -266,12 +266,12 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 :where([data-vn-root]) [data-vn-dialogue] {
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
+  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #c4b5fd)) 28%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
   border-radius: min(var(--vn-shell-radius, 20px), 22px);
   background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 14, 22, var(--caption-opacity, 0.84))));
   -webkit-backdrop-filter: blur(var(--caption-blur, 18px));
   backdrop-filter: blur(var(--caption-blur, 18px));
-  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 color-mix(in srgb, var(--vn-scene-rim-tint, #ffffff) 32%, rgba(255, 255, 255, 0.22));
 }
 
 /* Draggable Top Resize Grip — narrow centered handle so it never blocks top-right Play/Hide tools */
@@ -330,21 +330,42 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 
 .speaker-avatar,
 [data-vn-speaker-avatar] {
+  position: relative !important;
   width: 32px !important;
   height: 32px !important;
   min-width: 32px !important;
   min-height: 32px !important;
   border-radius: 50% !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   flex: none !important;
   display: inline-grid !important;
   place-items: center !important;
+  cursor: pointer !important;
   background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 18%, var(--vn-shell-panel, rgba(15, 23, 42, 0.85))) !important;
   border: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, var(--vn-shell-border-strong, rgba(255, 255, 255, 0.45))) !important;
   box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent) !important;
   color: var(--aperture-accent, #c4b5fd) !important;
   font-size: 13px !important;
   font-weight: 750 !important;
+}
+
+[data-vn-speaker-avatar]::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+[data-vn-speaker-avatar][data-resonance="warmth"] {
+  border-color: #f472b6 !important;
+  box-shadow: 0 0 14px rgba(244, 114, 182, 0.48) !important;
+}
+[data-vn-speaker-avatar][data-resonance="trust"] {
+  border-color: #34d399 !important;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.42) !important;
+}
+[data-vn-speaker-avatar][data-resonance="tension"] {
+  border-color: #f87171 !important;
+  box-shadow: 0 0 14px rgba(248, 113, 113, 0.48) !important;
 }
 
 [data-vn-speaker-avatar][hidden] {
@@ -354,6 +375,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 [data-vn-speaker-avatar] img {
   width: 100% !important;
   height: 100% !important;
+  border-radius: 50% !important;
   object-fit: cover !important;
   object-position: center 20% !important;
   display: block !important;
@@ -754,7 +776,62 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 [data-vn-scrubber] [data-vn-scrub-dot].active {
-  box-shadow: 0 0 12px var(--vn-atmosphere-glow, var(--aperture-accent, #8ae9b3)) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--vn-scene-rim-tint, var(--vn-atmosphere-glow, var(--aperture-accent, #8ae9b3))) 70%, transparent) !important;
+}
+
+[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="ready"]::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #dcebad)) 75%, transparent);
+  pointer-events: none;
+}
+
+[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="generating"] {
+  animation: vn-art-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes vn-art-shimmer {
+  0%, 100% { opacity: 0.45; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+/* #1 Subtle Ken Burns Camera Parallax (GPU transform-only, disabled under reduced-motion) */
+@keyframes vn-kb-drift {
+  0% { transform: translate3d(0%, 0%, 0) scale(1); }
+  50% { transform: translate3d(-1.1%, -0.8%, 0) scale(1.035); }
+  100% { transform: translate3d(0%, 0%, 0) scale(1); }
+}
+@keyframes vn-kb-establish {
+  0% { transform: translate3d(-1.4%, 0%, 0) scale(1.02); }
+  50% { transform: translate3d(1.4%, -0.6%, 0) scale(1.04); }
+  100% { transform: translate3d(-1.4%, 0%, 0) scale(1.02); }
+}
+@keyframes vn-kb-closeup {
+  0% { transform: translate3d(0%, 0.4%, 0) scale(1); }
+  50% { transform: translate3d(0%, -0.8%, 0) scale(1.045); }
+  100% { transform: translate3d(0%, 0.4%, 0) scale(1); }
+}
+@keyframes vn-kb-shoulder {
+  0% { transform: translate3d(0.9%, 0%, 0) scale(1.015); }
+  50% { transform: translate3d(-0.9%, -0.5%, 0) scale(1.038); }
+  100% { transform: translate3d(0.9%, 0%, 0) scale(1.015); }
+}
+[data-vn-scene][data-vn-ken-burns="drift"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-drift 22s ease-in-out infinite;
+}
+[data-vn-scene][data-vn-ken-burns="establishing"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-establish 24s ease-in-out infinite;
+}
+[data-vn-scene][data-vn-ken-burns="close_up"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-closeup 18s ease-in-out infinite;
+}
+[data-vn-scene][data-vn-ken-burns="over_shoulder"] [data-vn-scene-image][data-vn-layer="active"] {
+  animation: vn-kb-shoulder 20s ease-in-out infinite;
+}
+[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
+  animation: none !important;
 }
 
 [data-vn-show-text]:not([hidden]),

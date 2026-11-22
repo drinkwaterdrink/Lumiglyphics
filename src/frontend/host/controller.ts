@@ -22,6 +22,7 @@ import type { VisualNovelConfig, VisualNovelEffectIntensity, VisualNovelTextEffe
 import { REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES } from "../../protocol.js";
 import type { AssetView, BackendResponse, ConnectionCatalogOption, FrontendRequest, TurnView } from "../../protocol.js";
 import { AudioEngine, VnStage, isAmbientEffect, isStageEffect } from "../stage/index.js";
+import { QuickTunerDrawer } from "../stage/quick-tuner.js";
 import type { AmbientEffect, StageEffect } from "../store/index.js";
 import { VisualNovelSettingsPanel } from "../settings/panel.js";
 import { ImageStudio } from "../image-review/studio.js";
@@ -564,6 +565,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   let speech: SpeechController;
   let speechDock: SpeechDock;
+  let quickTuner: QuickTunerDrawer;
 
   const isSpeechHoldingAuto = (): boolean => {
     if (!speech) return false;
@@ -591,6 +593,20 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   let turnOpeningLocation:string|null=null,manualMusicTrack:string|null=null,musicScope='';
   const musicScopeFor=(view:TurnView)=>JSON.stringify([view.chatId,view.messageId,view.swipeId,view.sourceFingerprint]);
   function syncMusicChoices(view:TurnView,index:number):boolean{const changed=musicScope!==musicScopeFor(view);if(changed){musicScope=musicScopeFor(view);manualMusicTrack=null;}const tracks:Array<{url:string;label:string}>=[];for(const cue of view.audioCues??[]){if(cue.paragraphIndex>index)continue;const url=cue.bgmUrl||cue.bgm;if(url&&!tracks.some(track=>track.url===url)&&tracks.length<32)tracks.push({url,label:cue.bgm?.split(/[\\/]/).at(-1)?.slice(0,160)||`Track ${tracks.length+1}`});}if(manualMusicTrack&&!tracks.some(track=>track.url===manualMusicTrack))manualMusicTrack=null;stage.workspace.setMusicTracks(tracks,manualMusicTrack);return changed;}
+
+  function paragraphArtStatesForTurn(activeTurn: TurnView): Record<number, "ready" | "generating" | "none"> {
+    const out: Record<number, "ready" | "generating" | "none"> = {};
+    for (const asset of activeTurn.assets ?? []) {
+      const idx = asset.paragraphIndex;
+      if (!Number.isInteger(idx) || idx < 0) continue;
+      if ((asset.status === "browser_ready" || asset.status === "generated") && asset.imageUrl) {
+        out[idx] = "ready";
+      } else if ((asset.status === "queued" || asset.status === "generating") && out[idx] !== "ready") {
+        out[idx] = "generating";
+      }
+    }
+    return out;
+  }
 
   function syncAudioForParagraph(activeTurn: TurnView, paragraphIndex: number,playSfx=true): void {
     audioEngine.setBgmAttenuation(musicAttenuationForParagraph(activeTurn,paragraphIndex));
@@ -748,6 +764,28 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   let panelCapture: { chatId: string; messageId: string; fingerprint: string | null; cards: Array<{ title: string; html: string }> } | null = null;
   // Speech (default-off TTS). Own player and lifecycle; never the SFX channel.
   // Mounted into stage.panelMount so it renders in front of the stage scene and background.
+  quickTuner = new QuickTunerDrawer({
+    mount: stage.panelMount,
+    onPatch: (patch) => {
+      const current = configRef.current;
+      if (current) {
+        const next = { ...current, ...patch };
+        configRef.current = next;
+        applyVisualConfigToStage(stage, next);
+        audioEngine.setAmbientVolume(next.ambientVolume);
+        audioEngine.setBuiltInAudioEnabled(next.builtInAudioEnabled);
+        if (patch.speech) speech?.setSettings(next.speech);
+      }
+      ctx.sendToBackend({ type: "vn_set_config", patch, chatId: chatId() });
+    },
+  });
+  const onQuickTunerEvent = (event: Event) => {
+    const opener = (event as CustomEvent<{ opener?: HTMLElement }>).detail?.opener ?? null;
+    quickTuner.setConfig(configRef.current);
+    quickTuner.open(opener);
+  };
+  stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
+
   speechDock = new SpeechDock({
     mount: stage.panelMount,
     onPlay: () => { void speech.playCurrent(); },
@@ -1343,6 +1381,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
     // Loading a turn resets store progress. Restore it after the new stage exists.
     stage.setAssetProgress(computeAssetProgress(next,retryQueue,localPictureOperations));
+    stage.setParagraphArtStates?.(paragraphArtStatesForTurn(next));
     stage.workspace.setAttention(computeReviewAttention(next,localPictureOperations));
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
@@ -1466,6 +1505,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speechDock.setEnabled(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current);
+      quickTuner.setConfig(configRef.current);
       if (configRef.current?.autoEnter && !active) activate();
       if (bootPending) {
         // The boot request said nothing about the view. Now that the config is
@@ -1516,6 +1556,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speechDock.setEnabled(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current, message.requestId);
+      quickTuner.setConfig(configRef.current);
       settingsPanel?.setSaveStatus?.({ kind: "saved" }, message.requestId);
       return;
     }
@@ -1767,6 +1808,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     document.removeEventListener("visibilitychange", onVisibilityChanged);
     speech.dispose();
     speechDock.destroy();
+    quickTuner.destroy();
     speechSettings?.destroy();
     settingsPanel?.destroy();
     imageStudio.destroy();

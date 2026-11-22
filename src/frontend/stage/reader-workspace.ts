@@ -117,6 +117,7 @@ export class ReaderWorkspace {
           <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">06</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
           <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
           <button type="button" data-action="cast-toggle" class="aperture-link" style="min-height:44px"><span class="number">08</span><span>Toggle cast portraits</span>${APERTURE_ICONS.cast}</button>
+          <button type="button" data-action="quick-tuner" class="aperture-link" style="min-height:44px"><span class="number">09</span><span>Quick Look &amp; Audio</span>${APERTURE_ICONS.settings}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
         <div class="aperture-foot"><span data-aperture-chapter>CURRENT SCENE</span><span>EVERY DETAIL HAS A PLACE</span></div>
@@ -234,6 +235,12 @@ export class ReaderWorkspace {
         this.shell.dispatchEvent(new CustomEvent('lumiglyphics:cast-toggle', { bubbles: true }));
         return;
       }
+      const tunerBtn = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-action="quick-tuner"]') : null;
+      if (tunerBtn) {
+        this.toggleAperture(false);
+        this.shell.dispatchEvent(new CustomEvent('lumiglyphics:quick-tuner', { bubbles: true, detail: { opener: openMenuBtn } }));
+        return;
+      }
       const link = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-aperture-route]') : null;
       if (!link) return;
       const route = link.dataset.apertureRoute;
@@ -260,6 +267,31 @@ export class ReaderWorkspace {
     window.visualViewport?.addEventListener('resize',this.onViewportResize,{signal});
     window.visualViewport?.addEventListener('scroll',this.onViewportResize,{signal});
     window.addEventListener('resize',this.onViewportResize,{signal});
+    const settingsBtn = this.nav.querySelector<HTMLButtonElement>('[data-reader-destination="settings"]');
+    if (settingsBtn) {
+      let pressTimer: ReturnType<typeof setTimeout> | null = null;
+      let longPressed = false;
+      const clearPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+      signal.addEventListener('abort', clearPress, { once: true });
+      settingsBtn.addEventListener('pointerdown', () => {
+        clearPress();
+        longPressed = false;
+        pressTimer = setTimeout(() => {
+          pressTimer = null;
+          longPressed = true;
+          this.shell.dispatchEvent(new CustomEvent('lumiglyphics:quick-tuner', { bubbles: true, detail: { opener: settingsBtn } }));
+        }, 450);
+      }, { signal });
+      settingsBtn.addEventListener('pointerup', clearPress, { signal });
+      settingsBtn.addEventListener('pointercancel', clearPress, { signal });
+      settingsBtn.addEventListener('click', (e) => {
+        if (longPressed) {
+          longPressed = false;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, { capture: true, signal });
+    }
     this.syncViewport();this.syncReader();
   }
 
@@ -437,6 +469,11 @@ export class ReaderWorkspace {
   setAttention(count: number): void {
     const badge = this.nav.querySelector<HTMLElement>('[data-reader-attention]')!;
     badge.hidden = count <= 0; badge.textContent = String(count); badge.setAttribute('aria-label', `${count} pictures need review`);
+    const studioBtn = this.header.querySelector<HTMLElement>('[data-action="studio-toggle"]');
+    if (studioBtn) {
+      if (count > 0) studioBtn.dataset.attentionCount = String(count);
+      else delete studioBtn.dataset.attentionCount;
+    }
     const button=this.nav.querySelector('[data-reader-destination="artwork"]')!;
     if(count>0)button.setAttribute('aria-description',`${count} picture${count===1?'':'s'} need${count===1?'s':''} review`);else button.removeAttribute('aria-description');
   }
