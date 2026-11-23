@@ -12,6 +12,13 @@ export function isMobileWidth(host: Element): boolean {
   return width > 0 && width <= MOBILE_CONTAINER_MAX_WIDTH_PX;
 }
 
+/** Walk open shadow roots to return the actual opener, not its outer host. */
+export function deepActiveElement(root: Document | ShadowRoot): Element | null {
+  let active = root.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+
 const FOCUSABLE_SELECTOR = [
   "button:not(:disabled)",
   "select:not(:disabled)",

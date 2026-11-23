@@ -4,7 +4,7 @@
 
 1. Shipped in `0.2.12-beta.185`: Story DNA, autofill saves, speech consent, host lifecycle, and Director artwork targeting.
 2. Shipped in `0.2.13-beta.185`: source-grounded Sidecar and branch-aware story data.
-3. Improve the reader layout, navigation, overlays, and presentation preferences.
+3. Shipped in `0.2.14-beta.185`: embedded Settings navigation, artwork lightbox focus, passage timeline and picker, camera intensity, presentation presets, and branch-aware bond banners.
 4. Polish World Lens, the Folio, Director Studio, and the existing Saved Artwork and History views. Add field-by-field autofill review here.
 5. Add opt-in CYOA enhancements and optional Sidecar profiles.
 6. Add Branch Chronicle, Living World clocks, and Scene Rehearsal.

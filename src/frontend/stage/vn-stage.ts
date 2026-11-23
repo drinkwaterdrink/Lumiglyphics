@@ -147,10 +147,21 @@ const errorMessage = (error: unknown): string =>
     ? error.message
     : "The request failed. Try again.";
 
+type BondCelebration = { key: string; relationshipKey: string; name: string; target: string; label: string; affinity: number; tier: string };
+
+function bondTier(affinity: number): string {
+  if (affinity >= 85) return "Soulbound";
+  if (affinity >= 60) return "Devoted";
+  if (affinity >= 35) return "Trusted";
+  if (affinity >= 15) return "Warming";
+  return affinity <= -50 ? "Rival / Hostile" : "Guarded";
+}
+
 export class VnStage {
   readonly panelMount: HTMLElement;
   historyOpener?: (opener: HTMLElement) => void;
   private state: VnStageState;
+  private passagePickerParagraphs?: VnStageState["paragraphs"];
   private readonly callbacks: VnStageCallbacks;
   private dialogueSheet: DialogueSheet | null = null;
   private resumeNotice: HTMLElement | null = null;
@@ -187,6 +198,10 @@ export class VnStage {
   private folioOpenCallback: ((charName: string) => void) | null = null;
   private dnaSaveRequester: ((dna: CharacterDNA) => void) | null = null;
   private bondSnapshots = new Map<string, number>();
+  private bondBranch: string | undefined;
+  private bondAffinities = new Map<string, number>();
+  private seenBondCelebrations = new Set<string>();
+  private pendingBondCelebration: BondCelebration | undefined;
   private speakerPeekEl: HTMLElement | null = null;
   private bondBannerEl: HTMLElement | null = null;
   private bondBannerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -526,35 +541,60 @@ export class VnStage {
   setLocationArtLibrary(library: LocationArtLibrary): void { this.dossiers.setLocationArtLibrary(library); }
   setLocationArtRequester(fn: (action: LocationArtAction) => void): void { this.dossiers.setLocationArtRequester(fn); }
 
-  setCharacterDnaLibrary(library: Record<string, CharacterDNA>): void {
-    const prev = this.bondSnapshots;
-    const hadBaseline = prev.size > 0;
+  setBondBranch(branch: string): void {
+    if (this.bondBranch === branch) return;
+    this.bondBranch = branch;
+    this.bondAffinities.clear();
+    this.pendingBondCelebration = undefined;
+    this.dismissBondBanner();
+  }
+
+  setCharacterDnaLibrary(library: Record<string, CharacterDNA>, celebrate = true): void {
     const nextSnapshots = new Map<string, number>();
-    let celebrated: { name: string; target: string; label: string; affinity: number; tier: string } | null = null;
-    for (const char of Object.values(library)) {
-      const rels = char.relationships ?? [];
-      if (rels.length === 0) continue;
-      const topRel = rels.reduce((best, item) => (Math.abs(item.affinity ?? 0) >= Math.abs(best.affinity ?? 0) ? item : best), rels[0]!);
-      const affinity = topRel.affinity ?? 0;
-      nextSnapshots.set(char.id, affinity);
-      if (hadBaseline && this.readerPreferences?.confidantCutInsEnabled !== false) {
-        const oldAffinity = prev.get(char.id);
-        const tierFor = (v: number) => v >= 85 ? "Soulbound" : v >= 60 ? "Devoted" : v >= 35 ? "Trusted" : v >= 15 ? "Warming" : v <= -50 ? "Rival / Hostile" : "Guarded";
-        if (typeof oldAffinity === "number" && affinity !== oldAffinity) {
-          const oldTier = tierFor(oldAffinity);
-          const newTier = tierFor(affinity);
-          if ((newTier !== oldTier && affinity > oldAffinity) || affinity - oldAffinity >= 12) {
-            celebrated = { name: char.name, target: topRel.targetName, label: topRel.dynamicLabel || newTier, affinity, tier: newTier };
-          }
+    const nextAffinities = new Map<string, number>();
+    const canCelebrate = celebrate && this.bondBranch !== undefined
+      && this.readerPreferences?.confidantCutInsEnabled !== false && !this.isSuspended;
+    for (const character of Object.values(library)) {
+      for (const relationship of character.relationships ?? []) {
+        const affinity = relationship.affinity ?? 0;
+        if (Math.abs(affinity) >= Math.abs(nextSnapshots.get(character.id) ?? 0)) {
+          nextSnapshots.set(character.id, affinity);
         }
+        const key = JSON.stringify([character.id, relationship.targetName.trim().toLowerCase()]);
+        nextAffinities.set(key, affinity);
+        const oldAffinity = this.bondAffinities.get(key);
+        if (!canCelebrate || oldAffinity === undefined || affinity <= oldAffinity) continue;
+        const tier = bondTier(affinity);
+        if (tier === bondTier(oldAffinity) && affinity - oldAffinity < 12) continue;
+        const eventKey = JSON.stringify([this.bondBranch, key, tier, affinity]);
+        if (this.seenBondCelebrations.has(eventKey)) continue;
+        this.pendingBondCelebration = {
+          key: eventKey, relationshipKey: key, name: character.name, target: relationship.targetName,
+          label: relationship.dynamicLabel || tier, affinity, tier,
+        };
       }
     }
     this.bondSnapshots = nextSnapshots;
+    if (celebrate) this.bondAffinities = nextAffinities;
     this.characterDnaLibrary = { ...library };
     this.dossiers.setCharacterDnaLibrary(this.characterDnaLibrary);
-    if (celebrated) {
-      this.showBondResonanceBanner(celebrated);
+    if (this.state.phase === "awaiting-input") this.flushBondCelebration();
+  }
+
+  private flushBondCelebration(): void {
+    const pending = this.pendingBondCelebration;
+    if (!pending || this.destroyed || this.isSuspended || this.isTyping || this.isAutoPlay || this.isSkipping
+      || this.isRewinding || this.isBacklogOpen || this.workspace.isOpen() || this.dossiers.isOpen()
+      || this.root.dataset.vnCleanView === "true" || this.dialogueSheet?.isHidden()) return;
+    this.pendingBondCelebration = undefined;
+    if (this.readerPreferences?.confidantCutInsEnabled === false
+      || this.bondAffinities.get(pending.relationshipKey) !== pending.affinity) return;
+    this.seenBondCelebrations.add(pending.key);
+    if (this.seenBondCelebrations.size > 128) {
+      const oldest = this.seenBondCelebrations.values().next().value;
+      if (oldest !== undefined) this.seenBondCelebrations.delete(oldest);
     }
+    this.showBondResonanceBanner(pending);
   }
 
   setCharacterDnaSaver(fn: (dna: CharacterDNA) => void): void {
@@ -664,25 +704,22 @@ export class VnStage {
     this.dismissScenePostcard();
   }
 
-  private showBondResonanceBanner(info: { name: string; target: string; label: string; affinity: number; tier: string }): void {
+  private showBondResonanceBanner(info: BondCelebration): void {
     if (this.destroyed || this.readerPreferences?.confidantCutInsEnabled === false) return;
     this.dismissBondBanner();
     const el = document.createElement("div");
     el.dataset.vnBondBanner = "";
     el.setAttribute("role", "status");
-    el.style.cssText = "position:absolute;top:calc(64px + env(safe-area-inset-top, 0px));right:14px;z-index:34;max-width:min(320px,85vw);padding:10px 14px;border-radius:14px;border:1px solid var(--vn-shell-border-strong, rgba(160,205,185,0.45));background:var(--vn-shell-panel, rgba(15,23,42,0.94));color:var(--vn-shell-text, #f8fafc);box-shadow:var(--vn-shell-shadow, 0 12px 28px rgba(0,0,0,0.45));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;flex-direction:column;gap:2px;pointer-events:auto;";
     const eyebrow = document.createElement("div");
-    eyebrow.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:var(--vn-shell-accent, #6ee7b7);font-weight:700;";
+    eyebrow.dataset.vnBondTier = "";
     eyebrow.textContent = `Bond Resonance · ${info.tier}`;
-    const title = document.createElement("div");
-    title.style.cssText = "font-size:13px;font-weight:700;color:var(--vn-shell-text, #ffffff);";
+    const title = document.createElement("strong");
     title.textContent = `${info.name} → ${info.target}`;
-    const meta = document.createElement("div");
-    meta.style.cssText = "font-size:11px;color:var(--vn-shell-muted, rgba(226,232,240,0.85));";
+    const meta = document.createElement("small");
     meta.textContent = `${info.label} (${info.affinity >= 0 ? `+${info.affinity}` : info.affinity})`;
     el.append(eyebrow, title, meta);
-    el.addEventListener("click", (e) => { e.stopPropagation(); el.remove(); });
-    this.themeRoot.append(el);
+    el.addEventListener("click", (e) => { e.stopPropagation(); this.dismissBondBanner(); });
+    this.root.append(el);
     this.bondBannerEl = el;
     this.bondBannerTimer = setTimeout(() => {
       this.bondBannerEl?.remove();
@@ -828,6 +865,7 @@ export class VnStage {
 
   /** Freeze the reader before hiding it; reopening loads the saved cursor. */
   suspend(): void {
+    this.pendingBondCelebration = undefined;
     this.speechReadAlong.clear();
     this.workspace.suspend();
     this.toggleAutoPlay(false);
@@ -901,6 +939,12 @@ export class VnStage {
       delete this.root.dataset.vnAtmosphericLighting;
     }
     this.readerPreferences = preferences;
+    this.root.dataset.vnCameraEnabled = String(preferences.virtualCameraEnabled !== false);
+    this.root.dataset.vnCameraIntensity = preferences.cameraMotionIntensity ?? "full";
+    if (preferences.confidantCutInsEnabled === false) {
+      this.pendingBondCelebration = undefined;
+      this.dismissBondBanner();
+    }
     this.root.dataset.vnDialogueStyle = preferences.dialogueStyle ?? "preset";
     this.panelMount.dataset.vnDialogueStyle = preferences.dialogueStyle ?? "preset";
     if (preferences.typography) this.root.dataset.vnTypography = preferences.typography;
@@ -1288,6 +1332,11 @@ export class VnStage {
   }
 
   reset(): void {
+    this.bondBranch = undefined;
+    this.bondAffinities.clear();
+    this.bondSnapshots.clear();
+    this.seenBondCelebrations.clear();
+    this.pendingBondCelebration = undefined;
     this.speechReadAlong.setParagraph('',-1);
     this.workspace.setResume(null);
     this.resetDisplayEvaluation();
@@ -1445,7 +1494,10 @@ export class VnStage {
     this.renderSceneHud();
     const sceneSpan=this.themeRoot.querySelector<HTMLElement>("[data-vn-caption-scene]");
     const activePlace=this.dossiers.sceneHudEntries().find(e=>e.kind==="place")?.name;
-    if(sceneSpan&&activePlace)sceneSpan.textContent=activePlace.trim();
+    if (sceneSpan && activePlace) {
+      sceneSpan.textContent = activePlace.trim();
+      sceneSpan.title = sceneSpan.textContent;
+    }
   }
 
   private syncComposeUi(): void {
@@ -2197,53 +2249,53 @@ export class VnStage {
       this.toggleSpeakerPeek();
     });
     this.rpgHud.onRollEffect = (fx) => this.triggerEffect(fx);
-    if (this.scrubber) {
-      let draggingScrubber = false;
-      const jumpFromPointer = (clientX: number, clientY: number) => {
-        const hit = typeof document.elementFromPoint === "function" ? document.elementFromPoint(clientX, clientY) : null;
-        let dot = hit instanceof Element ? hit.closest<HTMLElement>("[data-vn-scrub-dot]") : null;
-        if (!dot && this.scrubber) {
-          const dots = Array.from(this.scrubber.querySelectorAll<HTMLElement>("[data-vn-scrub-dot]"));
-          dot = dots.find((candidate) => {
-            if (typeof candidate.getBoundingClientRect !== "function") return false;
-            const r = candidate.getBoundingClientRect();
-            return clientX >= r.left && clientX <= r.right;
-          }) ?? null;
-          if (!dot && dots.length > 0 && typeof this.scrubber.getBoundingClientRect === "function") {
-            const box = this.scrubber.getBoundingClientRect();
-            if (box.width > 0) {
-              const ratio = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
-              dot = dots[Math.min(dots.length - 1, Math.floor(ratio * dots.length))] ?? null;
-            }
-          }
-        }
-        const idxAttr = dot?.dataset.vnScrubIndex;
-        if (idxAttr !== undefined) {
-          const targetIdx = parseInt(idxAttr, 10);
-          if (!Number.isNaN(targetIdx) && targetIdx <= this.state.highestRevealedIndex && targetIdx !== this.state.currentParagraphIndex) {
-            this.jumpToParagraph(targetIdx);
-          }
+    const passagePicker = this.themeRoot.querySelector<HTMLSelectElement>("[data-vn-passage-picker]");
+    passagePicker?.addEventListener("change", () => {
+      this.jumpToParagraph(Number(passagePicker.value));
+    });
+    const scrubber = this.scrubber;
+    if (scrubber) {
+      let drag: { pointerId: number; lanes: { index: number; right: number }[] } | undefined;
+      const seekFromPointer = (event: PointerEvent) => {
+        if (drag?.pointerId !== event.pointerId) return;
+        const lane = drag.lanes.find(({ right }) => event.clientX < right) ?? drag.lanes.at(-1);
+        if (lane && lane.index <= this.state.highestRevealedIndex && lane.index !== this.state.currentParagraphIndex) {
+          this.jumpToParagraph(lane.index);
         }
       };
-      this.scrubber.addEventListener("pointerdown", (event) => {
-        draggingScrubber = true;
-        if (typeof this.scrubber?.setPointerCapture === "function") {
-          try { this.scrubber.setPointerCapture(event.pointerId); } catch {}
-        }
-        jumpFromPointer(event.clientX, event.clientY);
+      scrubber.addEventListener("pointerdown", (event) => {
+        if (drag || event.button !== 0) return;
+        // Keep the hit regions stable as the active pill and visible window shift.
+        const lanes = Array.from(scrubber.querySelectorAll<HTMLButtonElement>("[data-vn-scrub-dot]"), dot => ({
+          index: Number(dot.dataset.vnScrubIndex),
+          right: dot.getBoundingClientRect().right,
+        }));
+        drag = { pointerId: event.pointerId, lanes };
+        scrubber.setPointerCapture?.(event.pointerId);
+        seekFromPointer(event);
       });
-      this.scrubber.addEventListener("pointermove", (event) => {
-        if (!draggingScrubber) return;
-        jumpFromPointer(event.clientX, event.clientY);
-      });
-      const stopScrub = (event?: PointerEvent) => {
-        draggingScrubber = false;
-        if (event && this.scrubber && typeof this.scrubber.hasPointerCapture === "function" && this.scrubber.hasPointerCapture(event.pointerId) && typeof this.scrubber.releasePointerCapture === "function") {
-          try { this.scrubber.releasePointerCapture(event.pointerId); } catch {}
-        }
+      scrubber.addEventListener("pointermove", seekFromPointer);
+      const stopScrub = (event: PointerEvent) => {
+        if (drag?.pointerId === event.pointerId) drag = undefined;
       };
-      this.scrubber.addEventListener("pointerup", stopScrub);
-      this.scrubber.addEventListener("pointercancel", stopScrub);
+      scrubber.addEventListener("pointerup", stopScrub);
+      scrubber.addEventListener("pointercancel", stopScrub);
+      scrubber.addEventListener("lostpointercapture", stopScrub);
+      scrubber.addEventListener("keydown", (event) => {
+        const current = this.state.currentParagraphIndex;
+        const highest = this.state.highestRevealedIndex;
+        let target: number;
+        switch (event.key) {
+          case "ArrowLeft": target = Math.max(0, current - 1); break;
+          case "ArrowRight": target = Math.min(highest, current + 1); break;
+          case "Home": target = 0; break;
+          case "End": target = highest; break;
+          default: return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (target !== current) this.jumpToParagraph(target);
+      });
     }
     this.continueButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -2633,19 +2685,35 @@ export class VnStage {
     const stepRight = this.themeRoot.querySelector<HTMLElement>("[data-vn-step-right]");
     if (stepLeft) stepLeft.textContent = total > 0 ? `${current + 1} / ${total}` : "1 / 1";
     if (stepRight) stepRight.textContent = total > 0 ? `${Math.round(((current + 1) / total) * 100)}%` : "0%";
+    const picker = this.themeRoot.querySelector<HTMLSelectElement>("[data-vn-passage-picker]");
+    if (picker) {
+      const revealedCount = Math.min(total, this.state.highestRevealedIndex + 1);
+      if (this.passagePickerParagraphs !== this.state.paragraphs || picker.children.length !== revealedCount) {
+        const options = this.state.paragraphs.slice(0, revealedCount).map((paragraph, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = paragraph.speaker ? `Paragraph ${index + 1} · ${paragraph.speaker}` : `Paragraph ${index + 1}`;
+          return option;
+        });
+        picker.replaceChildren(...options);
+        this.passagePickerParagraphs = this.state.paragraphs;
+      }
+      picker.value = String(current);
+      picker.disabled = revealedCount < 2;
+    }
     this.scrubber.hidden = false;
+    const restoreFocus = this.scrubber.contains(this.themeRoot.activeElement);
     const count = total > 0 ? total : 4;
-    const dots: HTMLElement[] = [];
-    const start=Math.max(0,Math.min(current-20,count-40));
-    for (let idx = start; idx < Math.min(count,start+40); idx++) {
+    const dots: HTMLButtonElement[] = [];
+    const start = Math.max(0, Math.min(current - 20, count - 40));
+    for (let idx = start; idx < Math.min(count, start + 40); idx++) {
       const p = this.state.paragraphs[idx];
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "tick" + (idx === current ? " active" : "");
       btn.setAttribute("data-vn-scrub-dot", "");
-      btn.tabIndex = -1;
-      const isRead = idx <= this.state.highestRevealedIndex;
+      const isRead = Boolean(p) && idx <= this.state.highestRevealedIndex;
       const isActive = idx === current;
+      btn.tabIndex = isRead && isActive ? 0 : -1;
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
       btn.dataset.vnScrubIndex = String(idx);
@@ -2661,12 +2729,14 @@ export class VnStage {
       if (p) {
         btn.addEventListener("click", (event) => {
           event.stopPropagation();
-          this.jumpToParagraph(idx);
+          // Pointer seeking runs on the track; a post-touch click can land on a different marker after rerender.
+          if (event.detail === 0) this.jumpToParagraph(idx);
         });
       }
       dots.push(btn);
     }
     this.scrubber.replaceChildren(...dots);
+    if (restoreFocus) dots[current - start]?.focus({ preventScroll: true });
   }
 
   private renderSceneHud(): void {
@@ -2936,6 +3006,7 @@ export class VnStage {
     const sceneLoc = (activePlace || "SCENE").trim();
     if (sceneSpan) {
       sceneSpan.textContent = sceneLoc;
+      sceneSpan.title = sceneLoc;
     }
     if (splitSpan) {
       splitSpan.hidden = !sceneLoc;
@@ -3111,6 +3182,7 @@ export class VnStage {
     this.dossiers.refresh(this.state.currentParagraphIndex);
     this.renderSceneHud();
     this.renderScrubber();
+    this.flushBondCelebration();
     if (this.isSkipping) {
       this.scheduleSkipAdvance();
     } else if (this.isAutoPlay) {
@@ -3312,7 +3384,7 @@ export class VnStage {
   }
 
   private applyVirtualCameraMotion(text: string, hasSpeaker: boolean, explicitEffect?: StageEffect | null): void {
-    if (this.readerPreferences?.virtualCameraEnabled === false || this.effectIntensity === "off" || this.isSkipping) {
+    if (this.isSkipping) {
       delete this.activeImageEl.dataset.vnCameraMotion;
       delete this.scene.dataset.vnKenBurns;
       return;

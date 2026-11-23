@@ -117,8 +117,11 @@ export const THEME_MARKUP = `
           <span data-vn-reading-state aria-live="polite" style="display:none"></span>
         </div>
         <div class="reader-progress">
-          <small data-vn-step-left>1 / 1</small>
-          <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
+          <label class="reader-passage-picker">
+            <small data-vn-step-left aria-hidden="true">1 / 1</small>
+            <select data-vn-passage-picker aria-label="Jump to a revealed paragraph"></select>
+          </label>
+          <div data-vn-scrubber role="group" aria-label="Paragraph timeline"></div>
           <small data-vn-step-right hidden>100%</small>
           <div class="reader-step-nav">
             <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">

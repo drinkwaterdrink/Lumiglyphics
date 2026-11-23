@@ -382,9 +382,9 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 .caption-head [data-vn-speaker] {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 !important;
   background: transparent !important;
   border: 0 !important;
@@ -404,6 +404,8 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 .caption-head [data-vn-caption-scene] {
+  flex: 0 0 auto;
+  min-width: 0;
   font-size: 12px !important;
   font-weight: 500 !important;
   color: var(--aperture-muted, #9cb5a8) !important;
@@ -412,6 +414,9 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
+}
+.caption-head .speaker:has([data-vn-speaker]:not([hidden])) [data-vn-caption-scene] {
+  max-width: 45%;
 }
 
 .caption-head-actions,
@@ -574,7 +579,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   position: static !important;
   width: 100% !important;
   max-width: none !important;
-  height: 36px !important;
+  height: 46px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
@@ -586,6 +591,29 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   flex: none !important;
   z-index: 45 !important;
   pointer-events: auto !important;
+}
+
+.reader-passage-picker {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 999px;
+}
+.reader-passage-picker select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.reader-passage-picker select:disabled { cursor: default; }
+.reader-passage-picker:focus-within {
+  outline: 2px solid var(--aperture-accent, #c4b5fd);
+  outline-offset: -2px;
 }
 
 .reader-progress [data-vn-step-left] {
@@ -609,72 +637,90 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 .reader-progress [data-vn-scrubber] {
-  position: relative !important;
-  flex: 1 1 auto !important;
-  min-width: 48px !important;
-  max-width: 260px !important;
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 5px !important;
-  overflow: visible !important;
-  height: 24px !important;
-  padding: 0 4px !important;
-  margin: 0 auto !important;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 260px;
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  margin: 0 auto;
+  touch-action: none;
 }
 
 .reader-progress [data-vn-scrubber]::before {
   content: "";
   position: absolute;
-  left: 6px;
-  right: 6px;
+  inset-inline: 0;
   top: 50%;
   height: 1.5px;
   transform: translateY(-50%);
   border-radius: 999px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent), rgba(255, 255, 255, 0.08));
   pointer-events: none;
-  z-index: 0;
 }
 
 .reader-progress [data-vn-scrub-dot] {
-  position: relative !important;
-  z-index: 1 !important;
-  flex: 1 1 0 !important;
-  width: auto !important;
-  min-width: 6px !important;
-  max-width: 11px !important;
-  height: 5.5px !important;
-  min-height: 5.5px !important;
-  border-radius: var(--vn-scrubber-radius, 999px) !important;
-  padding: 0 !important;
-  border: 0 !important;
-  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, rgba(15, 23, 42, 0.7)) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
-  transition: flex 0.24s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease !important;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
-.reader-progress [data-vn-scrub-dot]:hover:not(:disabled) {
-  transform: scaleY(1.3) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 75%, #ffffff) !important;
+.reader-progress [data-vn-scrub-dot]::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(55%, 6px);
+  height: 5px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: var(--reader-tick-color, color-mix(in srgb, var(--aperture-text, #fff) 26%, #172136));
+  pointer-events: none;
 }
 
+.reader-progress [data-vn-scrub-dot]:focus-visible {
+  outline: 2px solid var(--aperture-accent, #c4b5fd);
+  outline-offset: -2px;
+  border-radius: 999px;
+}
+.reader-progress [data-vn-scrub-dot]:disabled { cursor: default; opacity: 0.55; }
 .reader-progress [data-vn-scrub-dot][data-read="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 56%, rgba(15, 23, 42, 0.4)) !important;
+  --reader-tick-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 63%, #172136);
 }
-
-.reader-progress [data-vn-scrub-dot][data-has-cue="true"]:not([data-active="true"]) {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 62%, transparent), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 28%, transparent) !important;
+.reader-progress [data-vn-scrub-dot]:is([data-has-cue="true"], [data-art-state="ready"])::before {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 65%, transparent);
 }
-
+.reader-progress [data-vn-scrub-dot]:is(:focus-visible, :hover:not(:disabled))::before {
+  --reader-tick-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 75%, #fff);
+}
 .reader-progress [data-vn-scrub-dot][data-active="true"] {
-  flex: 3.4 1 0 !important;
-  min-width: 24px !important;
-  max-width: 42px !important;
-  height: 6.5px !important;
-  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 62%, #ffffff)) !important;
-  box-shadow: 0 0 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.82)), 0 0 4px rgba(255, 255, 255, 0.7) !important;
+  flex-grow: 3;
+  max-width: 34px;
+}
+.reader-progress [data-vn-scrub-dot][data-active="true"]::before {
+  width: min(88%, 28px);
+  height: 6px;
+  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 62%, #fff));
+  box-shadow: 0 0 8px var(--aperture-accent-glow, rgba(167, 139, 250, 0.62));
+}
+.reader-progress [data-vn-scrub-dot][data-art-state="generating"]::before {
+  opacity: 0.8;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .reader-progress [data-vn-scrub-dot][data-art-state="generating"]::before {
+    animation: vn-art-shimmer 1.4s ease-in-out infinite;
+  }
+}
+@keyframes vn-art-shimmer {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
 /* Previous & Continue circular buttons paired cleanly on the right side of the dialogue card footer */
@@ -775,26 +821,40 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   pointer-events: none !important;
 }
 
-[data-vn-scrubber] [data-vn-scrub-dot].active {
-  box-shadow: 0 0 12px color-mix(in srgb, var(--vn-scene-rim-tint, var(--vn-atmosphere-glow, var(--aperture-accent, #8ae9b3))) 70%, transparent) !important;
-}
-
-[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="ready"]::after {
-  content: "";
+[data-vn-bond-banner] {
   position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #dcebad)) 75%, transparent);
-  pointer-events: none;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  inset-inline-end: max(14px, env(safe-area-inset-right, 0px));
+  z-index: 34;
+  display: grid;
+  gap: 2px;
+  max-width: min(320px, 85vw);
+  padding: 10px 14px;
+  border: 1px solid var(--vn-shell-border-strong, rgba(160,205,185,0.45));
+  border-radius: 14px;
+  background: var(--vn-shell-panel, rgba(15,23,42,0.94));
+  color: var(--vn-shell-text, #f8fafc);
+  box-shadow: var(--vn-shell-shadow, 0 12px 28px rgba(0,0,0,0.45));
+  backdrop-filter: blur(14px);
+  overflow-wrap: anywhere;
 }
-
-[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="generating"] {
-  animation: vn-art-shimmer 1.4s ease-in-out infinite;
+[data-vn-bond-banner] strong { font-size: 13px; }
+[data-vn-bond-banner] small { font-size: 11px; color: var(--vn-shell-muted, #cbd5e1); }
+[data-vn-bond-tier] {
+  color: var(--aperture-accent, #c4b5fd);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
-
-@keyframes vn-art-shimmer {
-  0%, 100% { opacity: 0.45; transform: scale(0.95); }
-  50% { opacity: 1; transform: scale(1.12); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-vn-root]:not([data-vn-effect-intensity="off"]) [data-vn-bond-banner] {
+    animation: vn-bond-enter 240ms ease-out both;
+  }
+}
+@keyframes vn-bond-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* #1 Subtle Ken Burns Camera Parallax (GPU transform-only, disabled under reduced-motion) */
@@ -818,20 +878,30 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   50% { transform: translate3d(-0.9%, -0.5%, 0) scale(1.038); }
   100% { transform: translate3d(0.9%, 0%, 0) scale(1.015); }
 }
-[data-vn-scene][data-vn-ken-burns="drift"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-drift 22s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="drift"] {
+  --reader-camera-shot: vn-kb-drift 22s ease-in-out infinite;
 }
-[data-vn-scene][data-vn-ken-burns="establishing"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-establish 24s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="establishing"] {
+  --reader-camera-shot: vn-kb-establish 24s ease-in-out infinite;
 }
-[data-vn-scene][data-vn-ken-burns="close_up"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-closeup 18s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="close_up"] {
+  --reader-camera-shot: vn-kb-closeup 18s ease-in-out infinite;
 }
-[data-vn-scene][data-vn-ken-burns="over_shoulder"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-shoulder 20s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="over_shoulder"] {
+  --reader-camera-shot: vn-kb-shoulder 20s ease-in-out infinite;
 }
-[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
-  animation: none !important;
+@keyframes vn-kb-gentle {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.012); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-vn-root]:not([data-vn-effect-intensity="off"], [data-vn-camera-enabled="false"])
+    [data-vn-scene][data-vn-ken-burns] [data-vn-scene-image][data-vn-layer="active"] {
+    animation: var(--reader-camera-cap, var(--reader-camera-shot));
+  }
+}
+[data-vn-root]:is([data-vn-effect-intensity="gentle"], [data-vn-camera-intensity="gentle"]) {
+  --reader-camera-cap: vn-kb-gentle 28s ease-in-out infinite;
 }
 
 [data-vn-show-text]:not([hidden]),
@@ -1079,8 +1149,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  display: inline-flex !important;
-  align-items: center !important;
+  display: block !important;
   font-size: 13.5px !important;
   font-weight: 700 !important;
   letter-spacing: 0.01em !important;

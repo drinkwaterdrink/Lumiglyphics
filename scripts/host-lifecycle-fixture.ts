@@ -1,5 +1,6 @@
 import { setupVisualNovelFrontend } from "../src/frontend/host/controller.js";
 import { VnStage } from "../src/frontend/stage/vn-stage.js";
+import { FullscreenLightbox } from "../src/frontend/stage/fullscreen-lightbox.js";
 import { normalizeConfig } from "../src/config.js";
 import type { TurnView } from "../src/protocol.js";
 
@@ -47,6 +48,16 @@ Object.assign(window,{hostFixture:{
   open:()=>toggle(), stage:()=>stage,
   revoke:(permission:string)=>{for(const handler of events.get('PERMISSION_CHANGED')??[])handler({permission,granted:false});},
   permissionListeners:()=>events.get('PERMISSION_CHANGED')?.size??0,
+  mountNestedLightboxTrigger: () => {
+    const host = document.createElement('div');
+    const wrapper = document.createElement('div');
+    host.attachShadow({ mode: 'open' }).append(wrapper);
+    const opener = document.createElement('button');
+    opener.textContent = 'Open nested artwork';
+    wrapper.attachShadow({ mode: 'open' }).append(opener);
+    document.body.append(host);
+    opener.onclick = () => FullscreenLightbox.open({ src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>' });
+  },
   changeChat:(chatId:string)=>{activeChat=chatId;for(const handler of events.get('CHAT_SWITCHED')??[])handler({chatId});},
   cleanup,
 }});

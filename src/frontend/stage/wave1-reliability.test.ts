@@ -93,6 +93,10 @@ describe("Wave 1 reliability & interaction state regressions", () => {
   test("FullscreenLightbox sets dialog ARIA attributes and restores focus on close", () => {
     const trigger = document.createElement("button");
     document.body.append(trigger);
+    Object.defineProperties(trigger, {
+      isConnected: { get: () => document.body.contains(trigger) },
+      getClientRects: { value: () => [trigger.getBoundingClientRect()] },
+    });
     let focusedTrigger = false;
     trigger.focus = () => {
       focusedTrigger = true;

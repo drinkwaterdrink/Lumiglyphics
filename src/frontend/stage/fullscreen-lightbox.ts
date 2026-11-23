@@ -1,7 +1,7 @@
 /**
  * Edge-to-edge Fullscreen Image Lightbox for History & Artwork Review Studio.
  */
-import { trapFocusWithin } from "../image-review/focus-trap.js";
+import { deepActiveElement, trapFocusWithin } from "../image-review/focus-trap.js";
 import { escapeHtml } from "../../shared/html-escape.js";
 
 export interface LightboxGalleryItem {
@@ -16,6 +16,7 @@ export interface LightboxOptions extends LightboxGalleryItem {
   gallery?: readonly LightboxGalleryItem[] | undefined;
   galleryIndex?: number | undefined;
   themeSource?: HTMLElement | undefined;
+  opener?: HTMLElement | undefined;
   onDelete?: ((item: LightboxGalleryItem, index: number) => void) | undefined;
   onSetFaceRef?: ((item: LightboxGalleryItem, index: number) => void) | undefined;
   onSetOutfitRef?: ((item: LightboxGalleryItem, index: number) => void) | undefined;
@@ -232,6 +233,10 @@ const LIGHTBOX_CSS = `
   word-break: break-word;
   color: #a8b8d0;
 }
+@media (prefers-reduced-motion: reduce) {
+  .vn-lightbox-backdrop.open, .vn-lightbox-info-drawer { animation: none; }
+  .vn-lightbox-backdrop * { transition: none; }
+}
 `;
 
 export class FullscreenLightbox {
@@ -256,7 +261,7 @@ export class FullscreenLightbox {
   private isPanning = false;
   private pinchStartDist = 0;
   private pinchStartZoom = 1;
-  private previousFocus: HTMLElement | null = null;
+  private previousFocus: (Element & Pick<HTMLElement, "focus">) | null = null;
 
   constructor() {
     this.backdrop = document.createElement("div");
@@ -570,7 +575,11 @@ export class FullscreenLightbox {
   }
 
   public show(options: LightboxOptions): void {
-    this.previousFocus = (document as unknown as { activeElement?: HTMLElement | null }).activeElement ?? null;
+    if (!this.currentOptions || options.opener) {
+      const opener = options.opener ?? deepActiveElement(document);
+      this.previousFocus = opener && "focus" in opener && typeof opener.focus === "function"
+        ? opener as Element & Pick<HTMLElement, "focus"> : null;
+    }
     this.currentOptions = options;
     const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]') as HTMLButtonElement | null;
     const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]') as HTMLButtonElement | null;
@@ -617,6 +626,6 @@ export class FullscreenLightbox {
     }
     const returnTo = this.previousFocus;
     this.previousFocus = null;
-    returnTo?.focus?.();
+    if (returnTo?.isConnected && returnTo.getClientRects().length) returnTo.focus({ preventScroll: true });
   }
 }

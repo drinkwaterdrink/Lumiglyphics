@@ -2,13 +2,23 @@ import { chromium } from "playwright";
 import assert from "node:assert/strict";
 import {browserFixtureServer} from './browser-fixture-server.ts';
 const server=await browserFixtureServer('scripts/host-lifecycle-fixture.ts');
-const browser=await chromium.launch({headless:true});
+const browser=await chromium.launch({
+  headless:true,
+  ...(process.env.LUMIGLYPHICS_CHROME_PATH ? { executablePath: process.env.LUMIGLYPHICS_CHROME_PATH } : {}),
+});
 try{
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/api/v1/images/**',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="30"><rect width="20" height="30" fill="blue"/></svg>'}));
   await page.goto(`http://127.0.0.1:${server.port}/`);
   await page.waitForFunction(()=>Boolean((window as any).hostFixture));
+  await page.evaluate(() => (window as any).hostFixture.mountNestedLightboxTrigger());
+  const nestedArtwork = page.getByRole('button', { name: 'Open nested artwork' });
+  await nestedArtwork.focus();
+  await nestedArtwork.press('Enter');
+  await page.keyboard.press('Escape');
+  assert.equal(await nestedArtwork.evaluate(el => (el.getRootNode() as ShadowRoot).activeElement === el), true,
+    'the body-mounted lightbox restores focus to the opener inside both shadow roots');
   await page.evaluate(()=>{const f=(window as any).hostFixture;f.state(f.turn());f.open();f.state(f.turn());f.stage().advance();});
   // Advance through the actual stage controls; retain a local draft at a nonzero cursor.
   await page.evaluate(()=>{const f=(window as any).hostFixture;f.stage().restoreReplyDraft('Keep this unsent reply');});

@@ -2142,20 +2142,6 @@ ${VN_TEXT_EFFECTS_CSS}
   [data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-scene-hud] { top: calc(max(0.75rem, env(safe-area-inset-top)) + 3.4rem); max-width: calc(100% - 1.5rem); }
   [data-vn-hud-pill] { min-height: 1.7rem; font-size: 0.71rem; padding: 0.18rem 0.54rem; }
 }
-[data-vn-scrubber] { display: inline-flex; align-items: center; gap: 0.32rem; flex-wrap: wrap; min-height: 44px; touch-action: none; }
-[data-vn-scrub-dot] {
-  position: relative;
-  width: 0.56rem; height: 0.56rem; min-width: 0; min-height: 0; padding: 0; border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--vn-muted-text) 55%, transparent); background: rgba(255,255,255,0.16);
-  cursor: pointer; transition: transform 160ms ease, width 180ms ease, background-color 160ms ease, border-color 160ms ease;
-}
-[data-vn-scrub-dot]::before {
-  content: "";
-  position: absolute;
-  inset: -18px -16px;
-  min-width: 44px;
-  min-height: 44px;
-}
 [data-vn-root][data-vn-sheet-detent="compact"] [data-vn-dialogue-body] {
   max-height: 22px;
   overflow: hidden;
@@ -2182,11 +2168,6 @@ ${VN_TEXT_EFFECTS_CSS}
     display: none;
   }
 }
-[data-vn-scrub-dot]:disabled { cursor: default; opacity: 0.45; }
-[data-vn-scrub-dot][data-read="true"] { background: color-mix(in srgb, var(--vn-accent) 48%, rgba(255,255,255,0.25)); border-color: color-mix(in srgb, var(--vn-accent) 70%, transparent); }
-[data-vn-scrub-dot][data-has-cue="true"] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--vn-accent) 60%, transparent); }
-[data-vn-scrub-dot][data-active="true"] { width: 1.25rem; background: var(--vn-accent); border-color: #fff; box-shadow: 0 0 0.5rem color-mix(in srgb, var(--vn-accent) 65%, transparent); }
-[data-vn-scrub-dot]:not(:disabled):hover { transform: scale(1.25); border-color: var(--vn-accent); }
 [data-vn-clean-toggle] {
   margin-left: auto; display: inline-grid; place-items: center; width: 2rem; height: 2rem; min-width: 2rem; min-height: 2rem; padding: 0;
   border: 1px solid var(--vn-chrome-border); border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--vn-muted-text);

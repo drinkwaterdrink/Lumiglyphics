@@ -29,6 +29,7 @@ export type ReaderPreferences = {
   smartBeatSegmentation?: boolean | undefined;
   readabilityScrim?: boolean | undefined;
   virtualCameraEnabled?: boolean | undefined;
+  cameraMotionIntensity?: ("gentle" | "full") | undefined;
   confidantCutInsEnabled?: boolean | undefined;
   adaptiveTint?: boolean | undefined;
 };
@@ -69,6 +70,8 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     smartDialogueExtraction: input.smartDialogueExtraction !== undefined ? input.smartDialogueExtraction === true : (DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true),
     smartBeatSegmentation: input.smartBeatSegmentation !== undefined ? input.smartBeatSegmentation === true : (DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true),
     readabilityScrim: input.readabilityScrim !== undefined ? input.readabilityScrim === true : (DEFAULT_READER_PREFERENCES.readabilityScrim ?? true),
+    ...(input.cameraMotionIntensity === "gentle" || input.cameraMotionIntensity === "full"
+      ? { cameraMotionIntensity: input.cameraMotionIntensity } : {}),
     virtualCameraEnabled: input.virtualCameraEnabled !== undefined ? input.virtualCameraEnabled === true : (DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true),
     confidantCutInsEnabled: input.confidantCutInsEnabled !== undefined ? input.confidantCutInsEnabled === true : (DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true),
     adaptiveTint: input.adaptiveTint !== undefined ? input.adaptiveTint === true : (DEFAULT_READER_PREFERENCES.adaptiveTint ?? true),

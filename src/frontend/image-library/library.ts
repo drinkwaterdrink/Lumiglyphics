@@ -97,7 +97,8 @@ export class ImageLibrary{
   this.el<HTMLButtonElement>('[data-zoom-in]').onclick=()=>this.setZoom(Math.min(4,this.zoom+.25));
   this.el<HTMLButtonElement>('[data-zoom-out]').onclick=()=>this.setZoom(Math.max(1,this.zoom-.25));
   this.el<HTMLButtonElement>('[data-fit]').onclick=()=>this.setZoom(1);
-  this.el<HTMLButtonElement>('[data-fullscreen]').onclick=()=>this.openFullscreen();
+  const fullscreenButton = this.el<HTMLButtonElement>('[data-fullscreen]');
+  fullscreenButton.onclick=()=>this.openFullscreen(undefined, fullscreenButton);
   this.el<HTMLButtonElement>('[data-delete-picture]').onclick=()=>{
    if(!this.selected||!this.context)return;
    const deleted=this.selected;
@@ -153,7 +154,7 @@ export class ImageLibrary{
   };
  }
 
- private openFullscreen(targetEntry?: LibraryImageView): void {
+ private openFullscreen(targetEntry?: LibraryImageView, opener?: HTMLElement): void {
   const entry = targetEntry ?? this.selected;
   const src = entry?.imageUrl || entry?.thumbnailUrl;
   if (!entry || !src) return;
@@ -164,7 +165,8 @@ export class ImageLibrary{
    ...this.toGalleryItem(entry),
    src,
    ...(gallery.length > 1 ? { gallery, galleryIndex } : {}),
-   themeSource: this.host
+   themeSource: this.host,
+   ...(opener ? { opener } : {})
   });
  }
 
@@ -310,7 +312,7 @@ export class ImageLibrary{
    if(entry.thumbnailUrl){
     const fsBtn=document.createElement('button');fsBtn.type='button';fsBtn.dataset.imageFullscreen='';fsBtn.title='Open fullscreen';fsBtn.setAttribute('aria-label','Open fullscreen');fsBtn.textContent='⛶';
     fsBtn.style.cssText='position:absolute;top:6px;right:6px;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:999px;background:rgba(4,8,14,0.78);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:15px;z-index:3;cursor:pointer;display:inline-flex;align-items:center;justify-content:center';
-    fsBtn.onclick=(e)=>{e.stopPropagation();this.openFullscreen(entry);};
+    fsBtn.onclick=(e)=>{e.stopPropagation();this.openFullscreen(entry, fsBtn);};
     card.append(fsBtn);
    }
    return card;

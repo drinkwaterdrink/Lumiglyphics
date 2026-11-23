@@ -27736,9 +27736,9 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 .caption-head [data-vn-speaker] {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 !important;
   background: transparent !important;
   border: 0 !important;
@@ -27758,6 +27758,8 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 .caption-head [data-vn-caption-scene] {
+  flex: 0 0 auto;
+  min-width: 0;
   font-size: 12px !important;
   font-weight: 500 !important;
   color: var(--aperture-muted, #9cb5a8) !important;
@@ -27766,6 +27768,9 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
+}
+.caption-head .speaker:has([data-vn-speaker]:not([hidden])) [data-vn-caption-scene] {
+  max-width: 45%;
 }
 
 .caption-head-actions,
@@ -27928,7 +27933,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   position: static !important;
   width: 100% !important;
   max-width: none !important;
-  height: 36px !important;
+  height: 46px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
@@ -27940,6 +27945,29 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   flex: none !important;
   z-index: 45 !important;
   pointer-events: auto !important;
+}
+
+.reader-passage-picker {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 999px;
+}
+.reader-passage-picker select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.reader-passage-picker select:disabled { cursor: default; }
+.reader-passage-picker:focus-within {
+  outline: 2px solid var(--aperture-accent, #c4b5fd);
+  outline-offset: -2px;
 }
 
 .reader-progress [data-vn-step-left] {
@@ -27963,72 +27991,90 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 .reader-progress [data-vn-scrubber] {
-  position: relative !important;
-  flex: 1 1 auto !important;
-  min-width: 48px !important;
-  max-width: 260px !important;
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 5px !important;
-  overflow: visible !important;
-  height: 24px !important;
-  padding: 0 4px !important;
-  margin: 0 auto !important;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 260px;
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  margin: 0 auto;
+  touch-action: none;
 }
 
 .reader-progress [data-vn-scrubber]::before {
   content: "";
   position: absolute;
-  left: 6px;
-  right: 6px;
+  inset-inline: 0;
   top: 50%;
   height: 1.5px;
   transform: translateY(-50%);
   border-radius: 999px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent), rgba(255, 255, 255, 0.08));
   pointer-events: none;
-  z-index: 0;
 }
 
 .reader-progress [data-vn-scrub-dot] {
-  position: relative !important;
-  z-index: 1 !important;
-  flex: 1 1 0 !important;
-  width: auto !important;
-  min-width: 6px !important;
-  max-width: 11px !important;
-  height: 5.5px !important;
-  min-height: 5.5px !important;
-  border-radius: var(--vn-scrubber-radius, 999px) !important;
-  padding: 0 !important;
-  border: 0 !important;
-  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, rgba(15, 23, 42, 0.7)) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
-  transition: flex 0.24s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease !important;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
-.reader-progress [data-vn-scrub-dot]:hover:not(:disabled) {
-  transform: scaleY(1.3) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 75%, #ffffff) !important;
+.reader-progress [data-vn-scrub-dot]::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(55%, 6px);
+  height: 5px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: var(--reader-tick-color, color-mix(in srgb, var(--aperture-text, #fff) 26%, #172136));
+  pointer-events: none;
 }
 
+.reader-progress [data-vn-scrub-dot]:focus-visible {
+  outline: 2px solid var(--aperture-accent, #c4b5fd);
+  outline-offset: -2px;
+  border-radius: 999px;
+}
+.reader-progress [data-vn-scrub-dot]:disabled { cursor: default; opacity: 0.55; }
 .reader-progress [data-vn-scrub-dot][data-read="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 56%, rgba(15, 23, 42, 0.4)) !important;
+  --reader-tick-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 63%, #172136);
 }
-
-.reader-progress [data-vn-scrub-dot][data-has-cue="true"]:not([data-active="true"]) {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 62%, transparent), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 28%, transparent) !important;
+.reader-progress [data-vn-scrub-dot]:is([data-has-cue="true"], [data-art-state="ready"])::before {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 65%, transparent);
 }
-
+.reader-progress [data-vn-scrub-dot]:is(:focus-visible, :hover:not(:disabled))::before {
+  --reader-tick-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 75%, #fff);
+}
 .reader-progress [data-vn-scrub-dot][data-active="true"] {
-  flex: 3.4 1 0 !important;
-  min-width: 24px !important;
-  max-width: 42px !important;
-  height: 6.5px !important;
-  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 62%, #ffffff)) !important;
-  box-shadow: 0 0 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.82)), 0 0 4px rgba(255, 255, 255, 0.7) !important;
+  flex-grow: 3;
+  max-width: 34px;
+}
+.reader-progress [data-vn-scrub-dot][data-active="true"]::before {
+  width: min(88%, 28px);
+  height: 6px;
+  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 62%, #fff));
+  box-shadow: 0 0 8px var(--aperture-accent-glow, rgba(167, 139, 250, 0.62));
+}
+.reader-progress [data-vn-scrub-dot][data-art-state="generating"]::before {
+  opacity: 0.8;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .reader-progress [data-vn-scrub-dot][data-art-state="generating"]::before {
+    animation: vn-art-shimmer 1.4s ease-in-out infinite;
+  }
+}
+@keyframes vn-art-shimmer {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
 /* Previous & Continue circular buttons paired cleanly on the right side of the dialogue card footer */
@@ -28129,26 +28175,40 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   pointer-events: none !important;
 }
 
-[data-vn-scrubber] [data-vn-scrub-dot].active {
-  box-shadow: 0 0 12px color-mix(in srgb, var(--vn-scene-rim-tint, var(--vn-atmosphere-glow, var(--aperture-accent, #8ae9b3))) 70%, transparent) !important;
-}
-
-[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="ready"]::after {
-  content: "";
+[data-vn-bond-banner] {
   position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  border: 1px solid color-mix(in srgb, var(--vn-scene-rim-tint, var(--aperture-accent, #dcebad)) 75%, transparent);
-  pointer-events: none;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  inset-inline-end: max(14px, env(safe-area-inset-right, 0px));
+  z-index: 34;
+  display: grid;
+  gap: 2px;
+  max-width: min(320px, 85vw);
+  padding: 10px 14px;
+  border: 1px solid var(--vn-shell-border-strong, rgba(160,205,185,0.45));
+  border-radius: 14px;
+  background: var(--vn-shell-panel, rgba(15,23,42,0.94));
+  color: var(--vn-shell-text, #f8fafc);
+  box-shadow: var(--vn-shell-shadow, 0 12px 28px rgba(0,0,0,0.45));
+  backdrop-filter: blur(14px);
+  overflow-wrap: anywhere;
 }
-
-[data-vn-scrubber] [data-vn-scrub-dot][data-art-state="generating"] {
-  animation: vn-art-shimmer 1.4s ease-in-out infinite;
+[data-vn-bond-banner] strong { font-size: 13px; }
+[data-vn-bond-banner] small { font-size: 11px; color: var(--vn-shell-muted, #cbd5e1); }
+[data-vn-bond-tier] {
+  color: var(--aperture-accent, #c4b5fd);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
-
-@keyframes vn-art-shimmer {
-  0%, 100% { opacity: 0.45; transform: scale(0.95); }
-  50% { opacity: 1; transform: scale(1.12); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-vn-root]:not([data-vn-effect-intensity="off"]) [data-vn-bond-banner] {
+    animation: vn-bond-enter 240ms ease-out both;
+  }
+}
+@keyframes vn-bond-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* #1 Subtle Ken Burns Camera Parallax (GPU transform-only, disabled under reduced-motion) */
@@ -28172,20 +28232,30 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   50% { transform: translate3d(-0.9%, -0.5%, 0) scale(1.038); }
   100% { transform: translate3d(0.9%, 0%, 0) scale(1.015); }
 }
-[data-vn-scene][data-vn-ken-burns="drift"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-drift 22s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="drift"] {
+  --reader-camera-shot: vn-kb-drift 22s ease-in-out infinite;
 }
-[data-vn-scene][data-vn-ken-burns="establishing"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-establish 24s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="establishing"] {
+  --reader-camera-shot: vn-kb-establish 24s ease-in-out infinite;
 }
-[data-vn-scene][data-vn-ken-burns="close_up"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-closeup 18s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="close_up"] {
+  --reader-camera-shot: vn-kb-closeup 18s ease-in-out infinite;
 }
-[data-vn-scene][data-vn-ken-burns="over_shoulder"] [data-vn-scene-image][data-vn-layer="active"] {
-  animation: vn-kb-shoulder 20s ease-in-out infinite;
+[data-vn-scene][data-vn-ken-burns="over_shoulder"] {
+  --reader-camera-shot: vn-kb-shoulder 20s ease-in-out infinite;
 }
-[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
-  animation: none !important;
+@keyframes vn-kb-gentle {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.012); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-vn-root]:not([data-vn-effect-intensity="off"], [data-vn-camera-enabled="false"])
+    [data-vn-scene][data-vn-ken-burns] [data-vn-scene-image][data-vn-layer="active"] {
+    animation: var(--reader-camera-cap, var(--reader-camera-shot));
+  }
+}
+[data-vn-root]:is([data-vn-effect-intensity="gentle"], [data-vn-camera-intensity="gentle"]) {
+  --reader-camera-cap: vn-kb-gentle 28s ease-in-out infinite;
 }
 
 [data-vn-show-text]:not([hidden]),
@@ -28433,8 +28503,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  display: inline-flex !important;
-  align-items: center !important;
+  display: block !important;
   font-size: 13.5px !important;
   font-weight: 700 !important;
   letter-spacing: 0.01em !important;
@@ -31816,6 +31885,12 @@ function isMobileWidth(host) {
   const width = host.getBoundingClientRect().width;
   return width > 0 && width <= MOBILE_CONTAINER_MAX_WIDTH_PX;
 }
+function deepActiveElement(root) {
+  let active = root.activeElement;
+  while (active?.shadowRoot?.activeElement)
+    active = active.shadowRoot.activeElement;
+  return active;
+}
 var FOCUSABLE_SELECTOR = [
   "button:not(:disabled)",
   "select:not(:disabled)",
@@ -32056,6 +32131,10 @@ var LIGHTBOX_CSS = `
   white-space: pre-wrap;
   word-break: break-word;
   color: #a8b8d0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vn-lightbox-backdrop.open, .vn-lightbox-info-drawer { animation: none; }
+  .vn-lightbox-backdrop * { transition: none; }
 }
 `;
 
@@ -32378,7 +32457,10 @@ class FullscreenLightbox {
     infoBtn.hidden = !item.prompt && !item.negativePrompt;
   }
   show(options) {
-    this.previousFocus = document.activeElement ?? null;
+    if (!this.currentOptions || options.opener) {
+      const opener = options.opener ?? deepActiveElement(document);
+      this.previousFocus = opener && "focus" in opener && typeof opener.focus === "function" ? opener : null;
+    }
     this.currentOptions = options;
     const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]');
     const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]');
@@ -32420,7 +32502,8 @@ class FullscreenLightbox {
     }
     const returnTo = this.previousFocus;
     this.previousFocus = null;
-    returnTo?.focus?.();
+    if (returnTo?.isConnected && returnTo.getClientRects().length)
+      returnTo.focus({ preventScroll: true });
   }
 }
 
@@ -37333,6 +37416,7 @@ function normalizeReaderPreferences(value) {
     smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true,
     smartBeatSegmentation: input2.smartBeatSegmentation !== undefined ? input2.smartBeatSegmentation === true : DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true,
     readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true,
+    ...input2.cameraMotionIntensity === "gentle" || input2.cameraMotionIntensity === "full" ? { cameraMotionIntensity: input2.cameraMotionIntensity } : {},
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
     confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true,
     adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true
@@ -43842,20 +43926,6 @@ ${VN_TEXT_EFFECTS_CSS}
   [data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-scene-hud] { top: calc(max(0.75rem, env(safe-area-inset-top)) + 3.4rem); max-width: calc(100% - 1.5rem); }
   [data-vn-hud-pill] { min-height: 1.7rem; font-size: 0.71rem; padding: 0.18rem 0.54rem; }
 }
-[data-vn-scrubber] { display: inline-flex; align-items: center; gap: 0.32rem; flex-wrap: wrap; min-height: 44px; touch-action: none; }
-[data-vn-scrub-dot] {
-  position: relative;
-  width: 0.56rem; height: 0.56rem; min-width: 0; min-height: 0; padding: 0; border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--vn-muted-text) 55%, transparent); background: rgba(255,255,255,0.16);
-  cursor: pointer; transition: transform 160ms ease, width 180ms ease, background-color 160ms ease, border-color 160ms ease;
-}
-[data-vn-scrub-dot]::before {
-  content: "";
-  position: absolute;
-  inset: -18px -16px;
-  min-width: 44px;
-  min-height: 44px;
-}
 [data-vn-root][data-vn-sheet-detent="compact"] [data-vn-dialogue-body] {
   max-height: 22px;
   overflow: hidden;
@@ -43882,11 +43952,6 @@ ${VN_TEXT_EFFECTS_CSS}
     display: none;
   }
 }
-[data-vn-scrub-dot]:disabled { cursor: default; opacity: 0.45; }
-[data-vn-scrub-dot][data-read="true"] { background: color-mix(in srgb, var(--vn-accent) 48%, rgba(255,255,255,0.25)); border-color: color-mix(in srgb, var(--vn-accent) 70%, transparent); }
-[data-vn-scrub-dot][data-has-cue="true"] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--vn-accent) 60%, transparent); }
-[data-vn-scrub-dot][data-active="true"] { width: 1.25rem; background: var(--vn-accent); border-color: #fff; box-shadow: 0 0 0.5rem color-mix(in srgb, var(--vn-accent) 65%, transparent); }
-[data-vn-scrub-dot]:not(:disabled):hover { transform: scale(1.25); border-color: var(--vn-accent); }
 [data-vn-clean-toggle] {
   margin-left: auto; display: inline-grid; place-items: center; width: 2rem; height: 2rem; min-width: 2rem; min-height: 2rem; padding: 0;
   border: 1px solid var(--vn-chrome-border); border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--vn-muted-text);
@@ -46398,8 +46463,11 @@ var THEME_MARKUP = `
           <span data-vn-reading-state aria-live="polite" style="display:none"></span>
         </div>
         <div class="reader-progress">
-          <small data-vn-step-left>1 / 1</small>
-          <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
+          <label class="reader-passage-picker">
+            <small data-vn-step-left aria-hidden="true">1 / 1</small>
+            <select data-vn-passage-picker aria-label="Jump to a revealed paragraph"></select>
+          </label>
+          <div data-vn-scrubber role="group" aria-label="Paragraph timeline"></div>
           <small data-vn-step-right hidden>100%</small>
           <div class="reader-step-nav">
             <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
@@ -46596,11 +46664,23 @@ var cueFxUid = 0;
 var MAX_BACKLOG_ENTRIES = 200;
 var TEXT_SHAKE_HEURISTIC_REGEX = /\*\s*(?:thud|slam|crash|smack|shake)[!?.,]*\s*\*/i;
 var errorMessage = (error61) => error61 instanceof Error && error61.message.trim() ? error61.message : "The request failed. Try again.";
+function bondTier(affinity) {
+  if (affinity >= 85)
+    return "Soulbound";
+  if (affinity >= 60)
+    return "Devoted";
+  if (affinity >= 35)
+    return "Trusted";
+  if (affinity >= 15)
+    return "Warming";
+  return affinity <= -50 ? "Rival / Hostile" : "Guarded";
+}
 
 class VnStage {
   panelMount;
   historyOpener;
   state;
+  passagePickerParagraphs;
   callbacks;
   dialogueSheet = null;
   resumeNotice = null;
@@ -46637,6 +46717,10 @@ class VnStage {
   folioOpenCallback = null;
   dnaSaveRequester = null;
   bondSnapshots = new Map;
+  bondBranch;
+  bondAffinities = new Map;
+  seenBondCelebrations = new Set;
+  pendingBondCelebration;
   speakerPeekEl = null;
   bondBannerEl = null;
   bondBannerTimer = null;
@@ -46998,36 +47082,68 @@ class VnStage {
   setLocationArtRequester(fn) {
     this.dossiers.setLocationArtRequester(fn);
   }
-  setCharacterDnaLibrary(library) {
-    const prev = this.bondSnapshots;
-    const hadBaseline = prev.size > 0;
+  setBondBranch(branch) {
+    if (this.bondBranch === branch)
+      return;
+    this.bondBranch = branch;
+    this.bondAffinities.clear();
+    this.pendingBondCelebration = undefined;
+    this.dismissBondBanner();
+  }
+  setCharacterDnaLibrary(library, celebrate = true) {
     const nextSnapshots = new Map;
-    let celebrated = null;
-    for (const char of Object.values(library)) {
-      const rels = char.relationships ?? [];
-      if (rels.length === 0)
-        continue;
-      const topRel = rels.reduce((best, item) => Math.abs(item.affinity ?? 0) >= Math.abs(best.affinity ?? 0) ? item : best, rels[0]);
-      const affinity = topRel.affinity ?? 0;
-      nextSnapshots.set(char.id, affinity);
-      if (hadBaseline && this.readerPreferences?.confidantCutInsEnabled !== false) {
-        const oldAffinity = prev.get(char.id);
-        const tierFor = (v) => v >= 85 ? "Soulbound" : v >= 60 ? "Devoted" : v >= 35 ? "Trusted" : v >= 15 ? "Warming" : v <= -50 ? "Rival / Hostile" : "Guarded";
-        if (typeof oldAffinity === "number" && affinity !== oldAffinity) {
-          const oldTier = tierFor(oldAffinity);
-          const newTier = tierFor(affinity);
-          if (newTier !== oldTier && affinity > oldAffinity || affinity - oldAffinity >= 12) {
-            celebrated = { name: char.name, target: topRel.targetName, label: topRel.dynamicLabel || newTier, affinity, tier: newTier };
-          }
+    const nextAffinities = new Map;
+    const canCelebrate = celebrate && this.bondBranch !== undefined && this.readerPreferences?.confidantCutInsEnabled !== false && !this.isSuspended;
+    for (const character of Object.values(library)) {
+      for (const relationship of character.relationships ?? []) {
+        const affinity = relationship.affinity ?? 0;
+        if (Math.abs(affinity) >= Math.abs(nextSnapshots.get(character.id) ?? 0)) {
+          nextSnapshots.set(character.id, affinity);
         }
+        const key = JSON.stringify([character.id, relationship.targetName.trim().toLowerCase()]);
+        nextAffinities.set(key, affinity);
+        const oldAffinity = this.bondAffinities.get(key);
+        if (!canCelebrate || oldAffinity === undefined || affinity <= oldAffinity)
+          continue;
+        const tier = bondTier(affinity);
+        if (tier === bondTier(oldAffinity) && affinity - oldAffinity < 12)
+          continue;
+        const eventKey = JSON.stringify([this.bondBranch, key, tier, affinity]);
+        if (this.seenBondCelebrations.has(eventKey))
+          continue;
+        this.pendingBondCelebration = {
+          key: eventKey,
+          relationshipKey: key,
+          name: character.name,
+          target: relationship.targetName,
+          label: relationship.dynamicLabel || tier,
+          affinity,
+          tier
+        };
       }
     }
     this.bondSnapshots = nextSnapshots;
+    if (celebrate)
+      this.bondAffinities = nextAffinities;
     this.characterDnaLibrary = { ...library };
     this.dossiers.setCharacterDnaLibrary(this.characterDnaLibrary);
-    if (celebrated) {
-      this.showBondResonanceBanner(celebrated);
+    if (this.state.phase === "awaiting-input")
+      this.flushBondCelebration();
+  }
+  flushBondCelebration() {
+    const pending = this.pendingBondCelebration;
+    if (!pending || this.destroyed || this.isSuspended || this.isTyping || this.isAutoPlay || this.isSkipping || this.isRewinding || this.isBacklogOpen || this.workspace.isOpen() || this.dossiers.isOpen() || this.root.dataset.vnCleanView === "true" || this.dialogueSheet?.isHidden())
+      return;
+    this.pendingBondCelebration = undefined;
+    if (this.readerPreferences?.confidantCutInsEnabled === false || this.bondAffinities.get(pending.relationshipKey) !== pending.affinity)
+      return;
+    this.seenBondCelebrations.add(pending.key);
+    if (this.seenBondCelebrations.size > 128) {
+      const oldest = this.seenBondCelebrations.values().next().value;
+      if (oldest !== undefined)
+        this.seenBondCelebrations.delete(oldest);
     }
+    this.showBondResonanceBanner(pending);
   }
   setCharacterDnaSaver(fn) {
     this.dnaSaveRequester = fn;
@@ -47140,22 +47256,19 @@ class VnStage {
     const el = document.createElement("div");
     el.dataset.vnBondBanner = "";
     el.setAttribute("role", "status");
-    el.style.cssText = "position:absolute;top:calc(64px + env(safe-area-inset-top, 0px));right:14px;z-index:34;max-width:min(320px,85vw);padding:10px 14px;border-radius:14px;border:1px solid var(--vn-shell-border-strong, rgba(160,205,185,0.45));background:var(--vn-shell-panel, rgba(15,23,42,0.94));color:var(--vn-shell-text, #f8fafc);box-shadow:var(--vn-shell-shadow, 0 12px 28px rgba(0,0,0,0.45));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;flex-direction:column;gap:2px;pointer-events:auto;";
     const eyebrow = document.createElement("div");
-    eyebrow.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:var(--vn-shell-accent, #6ee7b7);font-weight:700;";
+    eyebrow.dataset.vnBondTier = "";
     eyebrow.textContent = `Bond Resonance · ${info.tier}`;
-    const title = document.createElement("div");
-    title.style.cssText = "font-size:13px;font-weight:700;color:var(--vn-shell-text, #ffffff);";
+    const title = document.createElement("strong");
     title.textContent = `${info.name} → ${info.target}`;
-    const meta3 = document.createElement("div");
-    meta3.style.cssText = "font-size:11px;color:var(--vn-shell-muted, rgba(226,232,240,0.85));";
+    const meta3 = document.createElement("small");
     meta3.textContent = `${info.label} (${info.affinity >= 0 ? `+${info.affinity}` : info.affinity})`;
     el.append(eyebrow, title, meta3);
     el.addEventListener("click", (e) => {
       e.stopPropagation();
-      el.remove();
+      this.dismissBondBanner();
     });
-    this.themeRoot.append(el);
+    this.root.append(el);
     this.bondBannerEl = el;
     this.bondBannerTimer = setTimeout(() => {
       this.bondBannerEl?.remove();
@@ -47310,6 +47423,7 @@ class VnStage {
     this.render(this.state.phase);
   }
   suspend() {
+    this.pendingBondCelebration = undefined;
     this.speechReadAlong.clear();
     this.workspace.suspend();
     this.toggleAutoPlay(false);
@@ -47387,6 +47501,12 @@ class VnStage {
       delete this.root.dataset.vnAtmosphericLighting;
     }
     this.readerPreferences = preferences;
+    this.root.dataset.vnCameraEnabled = String(preferences.virtualCameraEnabled !== false);
+    this.root.dataset.vnCameraIntensity = preferences.cameraMotionIntensity ?? "full";
+    if (preferences.confidantCutInsEnabled === false) {
+      this.pendingBondCelebration = undefined;
+      this.dismissBondBanner();
+    }
     this.root.dataset.vnDialogueStyle = preferences.dialogueStyle ?? "preset";
     this.panelMount.dataset.vnDialogueStyle = preferences.dialogueStyle ?? "preset";
     if (preferences.typography)
@@ -47752,6 +47872,11 @@ class VnStage {
     return this.castStage.set(turn, index);
   }
   reset() {
+    this.bondBranch = undefined;
+    this.bondAffinities.clear();
+    this.bondSnapshots.clear();
+    this.seenBondCelebrations.clear();
+    this.pendingBondCelebration = undefined;
     this.speechReadAlong.setParagraph("", -1);
     this.workspace.setResume(null);
     this.resetDisplayEvaluation();
@@ -47930,8 +48055,10 @@ class VnStage {
     this.renderSceneHud();
     const sceneSpan = this.themeRoot.querySelector("[data-vn-caption-scene]");
     const activePlace = this.dossiers.sceneHudEntries().find((e) => e.kind === "place")?.name;
-    if (sceneSpan && activePlace)
+    if (sceneSpan && activePlace) {
       sceneSpan.textContent = activePlace.trim();
+      sceneSpan.title = sceneSpan.textContent;
+    }
   }
   syncComposeUi() {
     const hasDraft = Boolean(this.state.draft.trim());
@@ -48659,59 +48786,65 @@ class VnStage {
       this.toggleSpeakerPeek();
     });
     this.rpgHud.onRollEffect = (fx) => this.triggerEffect(fx);
-    if (this.scrubber) {
-      let draggingScrubber = false;
-      const jumpFromPointer = (clientX, clientY) => {
-        const hit = typeof document.elementFromPoint === "function" ? document.elementFromPoint(clientX, clientY) : null;
-        let dot = hit instanceof Element ? hit.closest("[data-vn-scrub-dot]") : null;
-        if (!dot && this.scrubber) {
-          const dots = Array.from(this.scrubber.querySelectorAll("[data-vn-scrub-dot]"));
-          dot = dots.find((candidate) => {
-            if (typeof candidate.getBoundingClientRect !== "function")
-              return false;
-            const r = candidate.getBoundingClientRect();
-            return clientX >= r.left && clientX <= r.right;
-          }) ?? null;
-          if (!dot && dots.length > 0 && typeof this.scrubber.getBoundingClientRect === "function") {
-            const box = this.scrubber.getBoundingClientRect();
-            if (box.width > 0) {
-              const ratio2 = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
-              dot = dots[Math.min(dots.length - 1, Math.floor(ratio2 * dots.length))] ?? null;
-            }
-          }
-        }
-        const idxAttr = dot?.dataset.vnScrubIndex;
-        if (idxAttr !== undefined) {
-          const targetIdx = parseInt(idxAttr, 10);
-          if (!Number.isNaN(targetIdx) && targetIdx <= this.state.highestRevealedIndex && targetIdx !== this.state.currentParagraphIndex) {
-            this.jumpToParagraph(targetIdx);
-          }
-        }
-      };
-      this.scrubber.addEventListener("pointerdown", (event) => {
-        draggingScrubber = true;
-        if (typeof this.scrubber?.setPointerCapture === "function") {
-          try {
-            this.scrubber.setPointerCapture(event.pointerId);
-          } catch {}
-        }
-        jumpFromPointer(event.clientX, event.clientY);
-      });
-      this.scrubber.addEventListener("pointermove", (event) => {
-        if (!draggingScrubber)
+    const passagePicker = this.themeRoot.querySelector("[data-vn-passage-picker]");
+    passagePicker?.addEventListener("change", () => {
+      this.jumpToParagraph(Number(passagePicker.value));
+    });
+    const scrubber = this.scrubber;
+    if (scrubber) {
+      let drag;
+      const seekFromPointer = (event) => {
+        if (drag?.pointerId !== event.pointerId)
           return;
-        jumpFromPointer(event.clientX, event.clientY);
-      });
-      const stopScrub = (event) => {
-        draggingScrubber = false;
-        if (event && this.scrubber && typeof this.scrubber.hasPointerCapture === "function" && this.scrubber.hasPointerCapture(event.pointerId) && typeof this.scrubber.releasePointerCapture === "function") {
-          try {
-            this.scrubber.releasePointerCapture(event.pointerId);
-          } catch {}
+        const lane = drag.lanes.find(({ right }) => event.clientX < right) ?? drag.lanes.at(-1);
+        if (lane && lane.index <= this.state.highestRevealedIndex && lane.index !== this.state.currentParagraphIndex) {
+          this.jumpToParagraph(lane.index);
         }
       };
-      this.scrubber.addEventListener("pointerup", stopScrub);
-      this.scrubber.addEventListener("pointercancel", stopScrub);
+      scrubber.addEventListener("pointerdown", (event) => {
+        if (drag || event.button !== 0)
+          return;
+        const lanes = Array.from(scrubber.querySelectorAll("[data-vn-scrub-dot]"), (dot) => ({
+          index: Number(dot.dataset.vnScrubIndex),
+          right: dot.getBoundingClientRect().right
+        }));
+        drag = { pointerId: event.pointerId, lanes };
+        scrubber.setPointerCapture?.(event.pointerId);
+        seekFromPointer(event);
+      });
+      scrubber.addEventListener("pointermove", seekFromPointer);
+      const stopScrub = (event) => {
+        if (drag?.pointerId === event.pointerId)
+          drag = undefined;
+      };
+      scrubber.addEventListener("pointerup", stopScrub);
+      scrubber.addEventListener("pointercancel", stopScrub);
+      scrubber.addEventListener("lostpointercapture", stopScrub);
+      scrubber.addEventListener("keydown", (event) => {
+        const current = this.state.currentParagraphIndex;
+        const highest = this.state.highestRevealedIndex;
+        let target2;
+        switch (event.key) {
+          case "ArrowLeft":
+            target2 = Math.max(0, current - 1);
+            break;
+          case "ArrowRight":
+            target2 = Math.min(highest, current + 1);
+            break;
+          case "Home":
+            target2 = 0;
+            break;
+          case "End":
+            target2 = highest;
+            break;
+          default:
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (target2 !== current)
+          this.jumpToParagraph(target2);
+      });
     }
     this.continueButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -49139,7 +49272,24 @@ class VnStage {
       stepLeft.textContent = total > 0 ? `${current + 1} / ${total}` : "1 / 1";
     if (stepRight)
       stepRight.textContent = total > 0 ? `${Math.round((current + 1) / total * 100)}%` : "0%";
+    const picker = this.themeRoot.querySelector("[data-vn-passage-picker]");
+    if (picker) {
+      const revealedCount = Math.min(total, this.state.highestRevealedIndex + 1);
+      if (this.passagePickerParagraphs !== this.state.paragraphs || picker.children.length !== revealedCount) {
+        const options = this.state.paragraphs.slice(0, revealedCount).map((paragraph, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = paragraph.speaker ? `Paragraph ${index + 1} · ${paragraph.speaker}` : `Paragraph ${index + 1}`;
+          return option;
+        });
+        picker.replaceChildren(...options);
+        this.passagePickerParagraphs = this.state.paragraphs;
+      }
+      picker.value = String(current);
+      picker.disabled = revealedCount < 2;
+    }
     this.scrubber.hidden = false;
+    const restoreFocus = this.scrubber.contains(this.themeRoot.activeElement);
     const count2 = total > 0 ? total : 4;
     const dots = [];
     const start = Math.max(0, Math.min(current - 20, count2 - 40));
@@ -49147,11 +49297,10 @@ class VnStage {
       const p = this.state.paragraphs[idx];
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "tick" + (idx === current ? " active" : "");
       btn.setAttribute("data-vn-scrub-dot", "");
-      btn.tabIndex = -1;
-      const isRead = idx <= this.state.highestRevealedIndex;
+      const isRead = Boolean(p) && idx <= this.state.highestRevealedIndex;
       const isActive = idx === current;
+      btn.tabIndex = isRead && isActive ? 0 : -1;
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
       btn.dataset.vnScrubIndex = String(idx);
@@ -49169,12 +49318,15 @@ class VnStage {
       if (p) {
         btn.addEventListener("click", (event) => {
           event.stopPropagation();
-          this.jumpToParagraph(idx);
+          if (event.detail === 0)
+            this.jumpToParagraph(idx);
         });
       }
       dots.push(btn);
     }
     this.scrubber.replaceChildren(...dots);
+    if (restoreFocus)
+      dots[current - start]?.focus({ preventScroll: true });
   }
   renderSceneHud() {
     const atmo = this.narrative.hidden || !this.state.worldAtmosphere?.length ? null : atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex);
@@ -49430,6 +49582,7 @@ class VnStage {
     const sceneLoc = (activePlace || "SCENE").trim();
     if (sceneSpan) {
       sceneSpan.textContent = sceneLoc;
+      sceneSpan.title = sceneLoc;
     }
     if (splitSpan) {
       splitSpan.hidden = !sceneLoc;
@@ -49589,6 +49742,7 @@ class VnStage {
     this.dossiers.refresh(this.state.currentParagraphIndex);
     this.renderSceneHud();
     this.renderScrubber();
+    this.flushBondCelebration();
     if (this.isSkipping) {
       this.scheduleSkipAdvance();
     } else if (this.isAutoPlay) {
@@ -49823,7 +49977,7 @@ class VnStage {
     return "neutral";
   }
   applyVirtualCameraMotion(text, hasSpeaker, explicitEffect) {
-    if (this.readerPreferences?.virtualCameraEnabled === false || this.effectIntensity === "off" || this.isSkipping) {
+    if (this.isSkipping) {
       delete this.activeImageEl.dataset.vnCameraMotion;
       delete this.scene.dataset.vnKenBurns;
       return;
@@ -52396,14 +52550,14 @@ dialog p{margin:12px 0 20px}
 [data-setup]{display:none!important}
 [data-shell][data-show-onboarding] [data-setup]{display:grid!important}
 @container(min-width:800px){
- [data-layout]{display:grid;grid-template-columns:216px minmax(0,1fr);gap:28px}
- [data-nav]{display:block;background:transparent}
- [data-tablist]{display:flex;flex-direction:column;overflow:visible}
- [data-tab]{min-height:52px;border-radius:9px;padding:10px;white-space:normal}
- [data-tab-summary]{display:block;font-size:.85rem;white-space:normal}
- [data-workspace-header]{background:transparent;border:0;padding:0}
- [data-category-picker]{pointer-events:none;font-size:1rem;color:var(--set-muted)}
- [data-category-picker]>span:last-child{display:none}
+ :host(:not([data-vn-workspace-tool])) [data-layout]{display:grid;grid-template-columns:216px minmax(0,1fr);gap:28px}
+ :host(:not([data-vn-workspace-tool])) [data-nav]{display:block;background:transparent}
+ :host(:not([data-vn-workspace-tool])) [data-tablist]{display:flex;flex-direction:column;overflow:visible}
+ :host(:not([data-vn-workspace-tool])) [data-tab]{min-height:52px;border-radius:9px;padding:10px;white-space:normal}
+ :host(:not([data-vn-workspace-tool])) [data-tab-summary]{display:block;font-size:.85rem;white-space:normal}
+ :host(:not([data-vn-workspace-tool])) [data-workspace-header]{background:transparent;border:0;padding:0}
+ :host(:not([data-vn-workspace-tool])) [data-category-picker]{pointer-events:none;font-size:1rem;color:var(--set-muted)}
+ :host(:not([data-vn-workspace-tool])) [data-category-picker]>span:last-child{display:none}
 }
 @container(max-width:420px){[data-row]{grid-template-columns:1fr}[data-all-settings] span{display:none}[data-all-settings]{font-size:1.2rem}[data-preset-row]{display:grid;grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
@@ -56177,6 +56331,19 @@ var VOICE_SEARCH_ENTRIES = [
   { label: "Delivery style", keywords: "speech gemini audio tags whisper emotion" },
   { label: "Speech volume", keywords: "speech tts autoplay auto-play loudness" }
 ];
+var READER_PRESENTATION_PRESETS = [
+  { name: "Cinematic", camera: true, intensity: "full", lighting: true, banners: true },
+  { name: "Reading", camera: true, intensity: "gentle", lighting: false, banners: false },
+  { name: "Quiet", camera: false, intensity: "gentle", lighting: false, banners: false }
+];
+function readerPresentationPatch(preset) {
+  return {
+    virtualCameraEnabled: preset.camera,
+    cameraMotionIntensity: preset.intensity,
+    atmosphericLighting: preset.lighting,
+    confidantCutInsEnabled: preset.banners
+  };
+}
 
 class VisualNovelSettingsPanel {
   host;
@@ -56186,6 +56353,7 @@ class VisualNovelSettingsPanel {
   options;
   storage;
   config = DEFAULT_CONFIG;
+  presentationUndo;
   drafts = new Set;
   promptPresets = [];
   systemPromptProfiles = {};
@@ -56458,9 +56626,19 @@ class VisualNovelSettingsPanel {
               <label data-check ${find("Intelligent dramatic pacing", "smart pacing pause punctuation rhythm typewriter drama timing")}><input name="smartPacing" type="checkbox" /><span>Intelligent dramatic pacing<small>Pauses naturally on punctuation (commas, periods, ellipses) for living visual novel rhythm</small></span></label>
             `, { find: find("Pace", "speed pacing smart pause punctuation") })}
             ${group("Cinematic presentation", `
+              <details ${find("Presentation presets", "cinematic reading quiet camera motion lighting bond banners")}>
+                <summary>Presentation presets</summary>
+                <label data-field><span>Preset</span><select data-presentation-preset>
+                  ${READER_PRESENTATION_PRESETS.map((preset, index) => `<option value="${index}">${preset.name}</option>`).join("")}
+                </select></label>
+                <small data-presentation-description aria-live="polite"></small>
+                <button type="button" data-presentation-apply>Apply preset</button>
+                <button type="button" data-presentation-undo hidden>Undo preset</button>
+              </details>
               <label data-check ${find("Cinematic chapter cards", "cinematic chapter title splash cards location letterbox turn intro splash screen")}><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
               <label data-check ${find("Director AI shot framing", "director ai shot selection framing portrait action scenery intelligent cues")}><input name="directorAi" type="checkbox" /><span>Director AI shot framing<small>Intelligently balances portrait emotion closeups, dynamic action framing, and scenery establishing shots</small></span></label>
               <label data-check ${find("2.5D virtual camera rig", "virtual camera rig pan zoom focal speaker choreography eyeline")}><input name="virtualCameraEnabled" type="checkbox" /><span>2.5D virtual camera rig<small>Subtly pans and zooms artwork toward the active speaker and dramatic focus on stage</small></span></label>
+              <label data-field ${find("Camera motion", "virtual camera intensity gentle zoom drift")}><span>Camera motion</span><select name="cameraMotionIntensity"><option value="full">Cinematic</option><option value="gentle">Gentle drift</option></select><small>Gentle drift uses a small, slow zoom. The global stage-effects limit and reduced-motion preference still apply.</small></label>
               <label data-check ${find("Confidant bond banners", "confidant bond banners resonance cut in relationship tier persona")}><input name="confidantCutInsEnabled" type="checkbox" /><span>Confidant bond banners<small>Show celebratory resonance banners on stage when a relationship tier levels up</small></span></label>
             `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai") })}
             ${group("Smart AI reader & filtering", `
@@ -57360,6 +57538,54 @@ class VisualNovelSettingsPanel {
           miniP.style.fontSize = `calc(13px * ${val})`;
       }
     });
+    const presetPicker = this.root.querySelector("[data-presentation-preset]");
+    const presetDescription = this.root.querySelector("[data-presentation-description]");
+    const undoPreset = this.root.querySelector("[data-presentation-undo]");
+    const selectedPreset = () => READER_PRESENTATION_PRESETS[presetPicker.selectedIndex] ?? READER_PRESENTATION_PRESETS[0];
+    const describePreset = () => {
+      const preset = selectedPreset();
+      const camera = preset.camera ? preset.intensity === "gentle" ? "Gentle drift" : "Cinematic" : "Off (Gentle drift if re-enabled)";
+      presetDescription.textContent = `Camera: ${camera}. Atmospheric lighting: ${preset.lighting ? "On" : "Off"}. Bond banners: ${preset.banners ? "On" : "Off"}.`;
+    };
+    const savePresentation = (readerPreferences) => {
+      const preferences = normalizeReaderPreferences(readerPreferences);
+      this.config = { ...this.config, readerPreferences: preferences };
+      this.syncEveryday(this.config);
+      this.save({ readerPreferences: preferences });
+    };
+    presetPicker.addEventListener("change", describePreset);
+    describePreset();
+    this.root.querySelector("[data-presentation-apply]")?.addEventListener("click", () => {
+      const applied = readerPresentationPatch(selectedPreset());
+      const current = this.config.readerPreferences;
+      this.presentationUndo = { previous: {
+        virtualCameraEnabled: current.virtualCameraEnabled,
+        cameraMotionIntensity: current.cameraMotionIntensity,
+        atmosphericLighting: current.atmosphericLighting,
+        confidantCutInsEnabled: current.confidantCutInsEnabled
+      }, applied };
+      undoPreset.hidden = false;
+      savePresentation({ ...current, ...applied });
+    });
+    undoPreset.addEventListener("click", () => {
+      if (!this.presentationUndo)
+        return;
+      const { previous, applied } = this.presentationUndo;
+      const current = this.config.readerPreferences;
+      const restored = { ...current };
+      if (current.virtualCameraEnabled === applied.virtualCameraEnabled)
+        restored.virtualCameraEnabled = previous.virtualCameraEnabled;
+      if (current.cameraMotionIntensity === applied.cameraMotionIntensity)
+        restored.cameraMotionIntensity = previous.cameraMotionIntensity;
+      if (current.atmosphericLighting === applied.atmosphericLighting)
+        restored.atmosphericLighting = previous.atmosphericLighting;
+      if (current.confidantCutInsEnabled === applied.confidantCutInsEnabled)
+        restored.confidantCutInsEnabled = previous.confidantCutInsEnabled;
+      delete this.presentationUndo;
+      undoPreset.hidden = true;
+      this.root.querySelector("[data-presentation-apply]")?.focus();
+      savePresentation(restored);
+    });
     this.root.querySelector("[data-novelai-random-seed]")?.addEventListener("click", () => {
       const seed = this.control("novelAiSeed");
       seed.value = "";
@@ -57842,6 +58068,8 @@ class VisualNovelSettingsPanel {
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartDialogueExtraction: checked }) };
       case "smartBeatSegmentation":
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartBeatSegmentation: checked }) };
+      case "cameraMotionIntensity":
+        return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, cameraMotionIntensity: target2.value }) };
       case "virtualCameraEnabled":
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, virtualCameraEnabled: checked }) };
       case "confidantCutInsEnabled":
@@ -58540,6 +58768,9 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.control("smartDialogueExtraction").checked = config2.readerPreferences.smartDialogueExtraction !== false;
     this.control("smartBeatSegmentation").checked = config2.readerPreferences.smartBeatSegmentation !== false;
     this.control("virtualCameraEnabled").checked = config2.readerPreferences.virtualCameraEnabled !== false;
+    const cameraIntensity = this.control("cameraMotionIntensity");
+    cameraIntensity.value = config2.readerPreferences.cameraMotionIntensity ?? "full";
+    cameraIntensity.disabled = config2.readerPreferences.virtualCameraEnabled === false;
     this.control("confidantCutInsEnabled").checked = config2.readerPreferences.confidantCutInsEnabled !== false;
     const themeStatus = this.root.querySelector("[data-aperture-theme-status]");
     if (themeStatus)
@@ -58949,8 +59180,6 @@ function clamp(value, minimum, maximum, fallback) {
 var READER_SETTINGS_CSS = `
 :host([data-vn-workspace-tool]){--set-accent:var(--vn-shell-accent);--set-accent-text:var(--vn-shell-accent-contrast);--set-text:var(--vn-shell-text);--set-muted:var(--vn-shell-muted);--set-border:var(--vn-shell-border);--set-surface:var(--vn-shell-panel);--set-field:var(--vn-shell-field);--set-hover:var(--vn-shell-button);font-family:var(--vn-shell-family);}
 :host([data-vn-workspace-tool]) [data-shell]{padding:18px;max-width:none}
-:host([data-vn-workspace-tool]) [data-layout]{display:block}
-:host([data-vn-workspace-tool]) [data-nav]{display:none}
 :host([data-vn-workspace-tool]) [data-options]{grid-template-columns:1fr}
 :host([data-vn-workspace-tool]) [data-row]{grid-template-columns:1fr}
 :host([data-vn-workspace-tool]) [data-home] h1{font-size:1.5rem}
@@ -60157,7 +60386,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.13-beta.185";
+var LUMIGLYPHICS_VERSION = "0.2.14-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -63851,7 +64080,8 @@ class ImageLibrary {
     this.el("[data-zoom-in]").onclick = () => this.setZoom(Math.min(4, this.zoom + 0.25));
     this.el("[data-zoom-out]").onclick = () => this.setZoom(Math.max(1, this.zoom - 0.25));
     this.el("[data-fit]").onclick = () => this.setZoom(1);
-    this.el("[data-fullscreen]").onclick = () => this.openFullscreen();
+    const fullscreenButton = this.el("[data-fullscreen]");
+    fullscreenButton.onclick = () => this.openFullscreen(undefined, fullscreenButton);
     this.el("[data-delete-picture]").onclick = () => {
       if (!this.selected || !this.context)
         return;
@@ -63934,7 +64164,7 @@ Negative prompt:
       negativePrompt: entry.negativePrompt
     };
   }
-  openFullscreen(targetEntry) {
+  openFullscreen(targetEntry, opener) {
     const entry = targetEntry ?? this.selected;
     const src = entry?.imageUrl || entry?.thumbnailUrl;
     if (!entry || !src)
@@ -63946,7 +64176,8 @@ Negative prompt:
       ...this.toGalleryItem(entry),
       src,
       ...gallery.length > 1 ? { gallery, galleryIndex } : {},
-      themeSource: this.host
+      themeSource: this.host,
+      ...opener ? { opener } : {}
     });
   }
   flushPendingDelete() {
@@ -64305,7 +64536,7 @@ Negative prompt:
         fsBtn.style.cssText = "position:absolute;top:6px;right:6px;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:999px;background:rgba(4,8,14,0.78);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:15px;z-index:3;cursor:pointer;display:inline-flex;align-items:center;justify-content:center";
         fsBtn.onclick = (e) => {
           e.stopPropagation();
-          this.openFullscreen(entry);
+          this.openFullscreen(entry, fsBtn);
         };
         card.append(fsBtn);
       }
@@ -72598,6 +72829,7 @@ function setupVisualNovelFrontend(baseContext) {
     if (!turn || turn.chatId !== next.chatId || turn.messageId !== next.messageId || turn.sourceFingerprint !== next.sourceFingerprint || turn.swipeId !== next.swipeId || turn.revision !== next.revision)
       retryQueue = null;
     turn = next;
+    stage.setBondBranch(JSON.stringify([next.chatId, next.messageId, next.sourceFingerprint, next.swipeId]));
     imageStudio.setTurn(next);
     const nextDnaToken = JSON.stringify([next.chatId, next.messageId, next.sourceFingerprint, next.swipeId, next.revision]);
     dnaChangedThisTurn = nextDnaToken !== dnaTurnToken;
@@ -72810,7 +73042,7 @@ function setupVisualNovelFrontend(baseContext) {
       dnaRevision = message.library.revision ?? 0;
       characterFolio.setLibrary(message.library, owner.action !== "list", owner.saved);
       characterFolio.setGalleries(message.characterGalleries);
-      stage.setCharacterDnaLibrary(message.library.characters);
+      stage.setCharacterDnaLibrary(message.library.characters, owner.turnToken === dnaTurnToken);
       if (message.proposal)
         characterFolio.setProposal(message.proposal);
       return;

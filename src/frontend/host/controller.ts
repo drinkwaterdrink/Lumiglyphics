@@ -1371,6 +1371,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if(!turn||turn.chatId!==next.chatId||turn.messageId!==next.messageId||turn.sourceFingerprint!==next.sourceFingerprint||turn.swipeId!==next.swipeId||turn.revision!==next.revision)retryQueue=null;
     turn = next;
+    stage.setBondBranch(JSON.stringify([next.chatId, next.messageId, next.sourceFingerprint, next.swipeId]));
     imageStudio.setTurn(next);
     const nextDnaToken=JSON.stringify([next.chatId,next.messageId,next.sourceFingerprint,next.swipeId,next.revision]);dnaChangedThisTurn=nextDnaToken!==dnaTurnToken;if(dnaChangedThisTurn){characterFolio.invalidateContext();for(const[id,r]of dnaRequests)if(dnaTurnScoped(r.action))dnaRequests.delete(id);dnaTurnToken=nextDnaToken;}
     characterFolio.setContext(next.chatId);
@@ -1514,7 +1515,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       dnaRevision=message.library.revision??0;
       characterFolio.setLibrary(message.library,owner.action!=='list',owner.saved);
       characterFolio.setGalleries(message.characterGalleries);
-      stage.setCharacterDnaLibrary(message.library.characters);
+      stage.setCharacterDnaLibrary(message.library.characters, owner.turnToken === dnaTurnToken);
       if(message.proposal)characterFolio.setProposal(message.proposal);
       return;
     }

@@ -17,6 +17,13 @@ Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visu
 | Listen to a passage | Configure a voice and enable speech. [Speech setup and troubleshooting](SPEECH.md) |
 | Diagnose installation or build issues | [Local staging installation](#install-into-a-local-lumiverse-staging-checkout) · [Development checks](#development) |
 
+### Reader controls and presentation
+
+- **Revisit a passage.** Tap or drag the dots along the caption timeline, or select the passage counter to jump to any paragraph you’ve already revealed in that reply. With the timeline focused, Left and Right seek one passage at a time. Home and End go to the first and last revealed passages. Ready and generating markers describe artwork for that passage.
+- **Adjust the stage.** In **Settings → Reading → Cinematic presentation**, choose Cinematic camera movement, Gentle drift, or turn off the virtual camera. Global effects and system reduced-motion settings can further limit motion.
+- **Apply a presentation preset.** Open **Presentation presets** to see what Cinematic, Reading, and Quiet change. Choose **Apply preset** to save the listed camera, lighting, and bond-banner preferences. **Undo preset** is available in the same Settings session and preserves later edits to those controls. Changing the preset selection alone makes no save or generation request.
+- **Find a Settings section.** When Settings is open inside the reader, use the category picker. Standalone Settings also shows a section rail on wide screens. **Escape** closes the category picker or artwork lightbox and returns focus to its opener when that control is still visible.
+
 ### How the reader keeps story context
 
 - **Sidecar Curator** collects optional story details after the reply is readable. If the provider is unavailable or returns partial data, you can keep reading and verified document quotes remain available.
@@ -43,7 +50,7 @@ Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japol
 
 In Images → Scene templates, **Full scene / ensemble** depicts the physically present cast, including the persona when present. It starts unchecked for dynamic mode; choose it as your default or enable it in the dynamic list. Named appearances come from the story-reader cast snapshot, saved appearance guidance and enabled persona context. Each person keeps a separate description; a single portrait image is not applied to the entire group. Appearance summaries share the existing 3,000-character combined prompt budget. Scenes exceeding 16 named subjects require a smaller group/template instead of silently generating an incomplete cast.
 
-Settings now open on a compact category index with seven destinations. **Images** owns generation, scene templates, shared style, rules and reuse; **Characters & places** owns saved appearances, outfits and display art. **Audio** includes the existing Speech and Music pages. Search opens focused pages, and technical editors save only their own changes. Cast subpages share one draft, with explicit Save/Discard/Stay and story-scoped draft recovery. All 62 config fields and existing library actions remain available; stored keys and generation behavior are unchanged.
+Settings open on a compact category index. **Images** owns generation, scene templates, shared style, rules and reuse; **Characters & places** owns saved appearances, outfits and display art. **Audio** includes the existing Speech and Music pages. Search opens focused pages, and technical editors save only their own changes. Cast subpages share one draft, with explicit Save/Discard/Stay and story-scoped draft recovery.
 
 Warp illustrations now respect **Review before generating**, including with the reader closed. Their separate approval dialog supports prompt/parameter edits and cancellation; zero removes the image limit consistently. Native card artwork uses existing pictures without a new image request.
 

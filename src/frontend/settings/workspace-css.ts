@@ -63,14 +63,14 @@ dialog p{margin:12px 0 20px}
 [data-setup]{display:none!important}
 [data-shell][data-show-onboarding] [data-setup]{display:grid!important}
 @container(min-width:800px){
- [data-layout]{display:grid;grid-template-columns:216px minmax(0,1fr);gap:28px}
- [data-nav]{display:block;background:transparent}
- [data-tablist]{display:flex;flex-direction:column;overflow:visible}
- [data-tab]{min-height:52px;border-radius:9px;padding:10px;white-space:normal}
- [data-tab-summary]{display:block;font-size:.85rem;white-space:normal}
- [data-workspace-header]{background:transparent;border:0;padding:0}
- [data-category-picker]{pointer-events:none;font-size:1rem;color:var(--set-muted)}
- [data-category-picker]>span:last-child{display:none}
+ :host(:not([data-vn-workspace-tool])) [data-layout]{display:grid;grid-template-columns:216px minmax(0,1fr);gap:28px}
+ :host(:not([data-vn-workspace-tool])) [data-nav]{display:block;background:transparent}
+ :host(:not([data-vn-workspace-tool])) [data-tablist]{display:flex;flex-direction:column;overflow:visible}
+ :host(:not([data-vn-workspace-tool])) [data-tab]{min-height:52px;border-radius:9px;padding:10px;white-space:normal}
+ :host(:not([data-vn-workspace-tool])) [data-tab-summary]{display:block;font-size:.85rem;white-space:normal}
+ :host(:not([data-vn-workspace-tool])) [data-workspace-header]{background:transparent;border:0;padding:0}
+ :host(:not([data-vn-workspace-tool])) [data-category-picker]{pointer-events:none;font-size:1rem;color:var(--set-muted)}
+ :host(:not([data-vn-workspace-tool])) [data-category-picker]>span:last-child{display:none}
 }
 @container(max-width:420px){[data-row]{grid-template-columns:1fr}[data-all-settings] span{display:none}[data-all-settings]{font-size:1.2rem}[data-preset-row]{display:grid;grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

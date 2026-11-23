@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.13-beta.185",
+  "version": "0.2.14-beta.185",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -12,6 +12,8 @@
     "test:panels": "bun run ./scripts/test-panels-browser.ts",
     "test:settings": "bun run ./scripts/test-settings-browser.ts",
     "test:settings-workspace": "bun run ./scripts/test-settings-workspace-browser.ts",
+    "test:embedded-settings": "bun run ./scripts/test-embedded-settings-browser.ts",
+    "test:reader-timeline": "bun run ./scripts/test-reader-timeline-browser.ts",
     "test:cast-workspace": "node --experimental-strip-types ./scripts/test-cast-workspace-browser.ts",
     "test:settings-resilience": "node --experimental-strip-types ./scripts/test-settings-resilience-browser.ts",
     "test:artwork-corrections": "node --experimental-strip-types ./scripts/test-artwork-corrections-browser.ts",

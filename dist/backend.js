@@ -39300,6 +39300,7 @@ function normalizeReaderPreferences(value) {
     smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true,
     smartBeatSegmentation: input2.smartBeatSegmentation !== undefined ? input2.smartBeatSegmentation === true : DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true,
     readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true,
+    ...input2.cameraMotionIntensity === "gentle" || input2.cameraMotionIntensity === "full" ? { cameraMotionIntensity: input2.cameraMotionIntensity } : {},
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
     confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true,
     adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true

@@ -26,7 +26,7 @@ import { ContextSourcesPanel } from './context-sources.js';
 import type { ContextSourceReport } from '../../shared/context-sources.js';
 import { BUILTIN_SHARED_STYLES, applySharedStyle, restoredSharedStyleId } from "../../shared/image-styles.js";
 import { ImageTemplateEditor } from "./image-templates.js";
-import { normalizeReaderPreferences } from "../../shared/reader-preferences.js";
+import { normalizeReaderPreferences, type ReaderPreferences } from "../../shared/reader-preferences.js";
 import { THEME_PALETTE_SPECS } from "../theme/palette-tokens.js";
 import { normalizeRpgMode } from "../../shared/rpg-state.js";
 import type { ImagePromptMetadata } from "../../shared/image-templates.js";
@@ -460,6 +460,24 @@ const VOICE_SEARCH_ENTRIES: ReadonlyArray<{ label: string; keywords: string }> =
   { label: "Speech volume", keywords: "speech tts autoplay auto-play loudness" },
 ];
 
+const READER_PRESENTATION_PRESETS = [
+  { name: "Cinematic", camera: true, intensity: "full", lighting: true, banners: true },
+  { name: "Reading", camera: true, intensity: "gentle", lighting: false, banners: false },
+  { name: "Quiet", camera: false, intensity: "gentle", lighting: false, banners: false },
+] as const;
+
+type ReaderPresentationPatch = Pick<ReaderPreferences,
+  "virtualCameraEnabled" | "cameraMotionIntensity" | "atmosphericLighting" | "confidantCutInsEnabled">;
+
+function readerPresentationPatch(preset: (typeof READER_PRESENTATION_PRESETS)[number]): ReaderPresentationPatch {
+  return {
+    virtualCameraEnabled: preset.camera,
+    cameraMotionIntensity: preset.intensity,
+    atmosphericLighting: preset.lighting,
+    confidantCutInsEnabled: preset.banners,
+  };
+}
+
 export class VisualNovelSettingsPanel {
   private readonly host: HTMLElement;
   private readonly root: ShadowRoot;
@@ -468,6 +486,7 @@ export class VisualNovelSettingsPanel {
   private readonly options: SettingsPanelOptions;
   private readonly storage: SetupFlagStorage | null;
   private config: VisualNovelConfig = DEFAULT_CONFIG;
+  private presentationUndo?: { previous: ReaderPresentationPatch; applied: ReaderPresentationPatch };
   private drafts = new Set<AdvancedKey>();
   private promptPresets: VisualNovelPromptPreset[] = [];
   private systemPromptProfiles: NonNullable<VisualNovelConfig["systemPromptProfiles"]> = {};
@@ -738,9 +757,19 @@ export class VisualNovelSettingsPanel {
               <label data-check ${find("Intelligent dramatic pacing", "smart pacing pause punctuation rhythm typewriter drama timing")}><input name="smartPacing" type="checkbox" /><span>Intelligent dramatic pacing<small>Pauses naturally on punctuation (commas, periods, ellipses) for living visual novel rhythm</small></span></label>
             `, { find: find("Pace", "speed pacing smart pause punctuation") })}
             ${group("Cinematic presentation", `
+              <details ${find("Presentation presets", "cinematic reading quiet camera motion lighting bond banners")}>
+                <summary>Presentation presets</summary>
+                <label data-field><span>Preset</span><select data-presentation-preset>
+                  ${READER_PRESENTATION_PRESETS.map((preset, index) => `<option value="${index}">${preset.name}</option>`).join("")}
+                </select></label>
+                <small data-presentation-description aria-live="polite"></small>
+                <button type="button" data-presentation-apply>Apply preset</button>
+                <button type="button" data-presentation-undo hidden>Undo preset</button>
+              </details>
               <label data-check ${find("Cinematic chapter cards", "cinematic chapter title splash cards location letterbox turn intro splash screen")}><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
               <label data-check ${find("Director AI shot framing", "director ai shot selection framing portrait action scenery intelligent cues")}><input name="directorAi" type="checkbox" /><span>Director AI shot framing<small>Intelligently balances portrait emotion closeups, dynamic action framing, and scenery establishing shots</small></span></label>
               <label data-check ${find("2.5D virtual camera rig", "virtual camera rig pan zoom focal speaker choreography eyeline")}><input name="virtualCameraEnabled" type="checkbox" /><span>2.5D virtual camera rig<small>Subtly pans and zooms artwork toward the active speaker and dramatic focus on stage</small></span></label>
+              <label data-field ${find("Camera motion", "virtual camera intensity gentle zoom drift")}><span>Camera motion</span><select name="cameraMotionIntensity"><option value="full">Cinematic</option><option value="gentle">Gentle drift</option></select><small>Gentle drift uses a small, slow zoom. The global stage-effects limit and reduced-motion preference still apply.</small></label>
               <label data-check ${find("Confidant bond banners", "confidant bond banners resonance cut in relationship tier persona")}><input name="confidantCutInsEnabled" type="checkbox" /><span>Confidant bond banners<small>Show celebratory resonance banners on stage when a relationship tier levels up</small></span></label>
             `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai") })}
             ${group("Smart AI reader & filtering", `
@@ -1521,6 +1550,50 @@ export class VisualNovelSettingsPanel {
         if (miniP) miniP.style.fontSize = `calc(13px * ${val})`;
       }
     });
+    const presetPicker = this.root.querySelector<HTMLSelectElement>("[data-presentation-preset]")!;
+    const presetDescription = this.root.querySelector<HTMLElement>("[data-presentation-description]")!;
+    const undoPreset = this.root.querySelector<HTMLButtonElement>("[data-presentation-undo]")!;
+    const selectedPreset = () => READER_PRESENTATION_PRESETS[presetPicker.selectedIndex] ?? READER_PRESENTATION_PRESETS[0];
+    const describePreset = () => {
+      const preset = selectedPreset();
+      const camera = preset.camera ? (preset.intensity === "gentle" ? "Gentle drift" : "Cinematic") : "Off (Gentle drift if re-enabled)";
+      presetDescription.textContent = `Camera: ${camera}. Atmospheric lighting: ${preset.lighting ? "On" : "Off"}. Bond banners: ${preset.banners ? "On" : "Off"}.`;
+    };
+    const savePresentation = (readerPreferences: ReaderPreferences) => {
+      const preferences = normalizeReaderPreferences(readerPreferences);
+      this.config = { ...this.config, readerPreferences: preferences };
+      this.syncEveryday(this.config);
+      this.save({ readerPreferences: preferences });
+    };
+    presetPicker.addEventListener("change", describePreset);
+    describePreset();
+    this.root.querySelector("[data-presentation-apply]")?.addEventListener("click", () => {
+      const applied = readerPresentationPatch(selectedPreset());
+      const current = this.config.readerPreferences;
+      this.presentationUndo = { previous: {
+        virtualCameraEnabled: current.virtualCameraEnabled,
+        cameraMotionIntensity: current.cameraMotionIntensity,
+        atmosphericLighting: current.atmosphericLighting,
+        confidantCutInsEnabled: current.confidantCutInsEnabled,
+      }, applied };
+      undoPreset.hidden = false;
+      savePresentation({ ...current, ...applied });
+    });
+    undoPreset.addEventListener("click", () => {
+      if (!this.presentationUndo) return;
+      const { previous, applied } = this.presentationUndo;
+      const current = this.config.readerPreferences;
+      const restored = { ...current };
+      // Keep any controls the player changed independently after applying the preset.
+      if (current.virtualCameraEnabled === applied.virtualCameraEnabled) restored.virtualCameraEnabled = previous.virtualCameraEnabled;
+      if (current.cameraMotionIntensity === applied.cameraMotionIntensity) restored.cameraMotionIntensity = previous.cameraMotionIntensity;
+      if (current.atmosphericLighting === applied.atmosphericLighting) restored.atmosphericLighting = previous.atmosphericLighting;
+      if (current.confidantCutInsEnabled === applied.confidantCutInsEnabled) restored.confidantCutInsEnabled = previous.confidantCutInsEnabled;
+      delete this.presentationUndo;
+      undoPreset.hidden = true;
+      this.root.querySelector<HTMLButtonElement>("[data-presentation-apply]")?.focus();
+      savePresentation(restored);
+    });
     // "Random" clears the NovelAI seed and saves (an explicit null overrides a stored seed).
     this.root.querySelector<HTMLButtonElement>("[data-novelai-random-seed]")?.addEventListener("click", () => {
       const seed = this.control<HTMLInputElement>("novelAiSeed");
@@ -1937,6 +2010,7 @@ export class VisualNovelSettingsPanel {
       case "smartProseFilter": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartProseFilter: checked }) };
       case "smartDialogueExtraction": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartDialogueExtraction: checked }) };
       case "smartBeatSegmentation": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartBeatSegmentation: checked }) };
+      case "cameraMotionIntensity": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, cameraMotionIntensity: target.value }) };
       case "virtualCameraEnabled": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, virtualCameraEnabled: checked }) };
       case "confidantCutInsEnabled": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, confidantCutInsEnabled: checked }) };
       
@@ -2543,6 +2617,9 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("smartDialogueExtraction").checked = config.readerPreferences.smartDialogueExtraction !== false;
     this.control<HTMLInputElement>("smartBeatSegmentation").checked = config.readerPreferences.smartBeatSegmentation !== false;
     this.control<HTMLInputElement>("virtualCameraEnabled").checked = config.readerPreferences.virtualCameraEnabled !== false;
+    const cameraIntensity = this.control<HTMLSelectElement>("cameraMotionIntensity");
+    cameraIntensity.value = config.readerPreferences.cameraMotionIntensity ?? "full";
+    cameraIntensity.disabled = config.readerPreferences.virtualCameraEnabled === false;
     this.control<HTMLInputElement>("confidantCutInsEnabled").checked = config.readerPreferences.confidantCutInsEnabled !== false;
     const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
     if (themeStatus) themeStatus.textContent = `${THEME_PRESET_LABELS[config.themePreset].toUpperCase()} / ACTIVE`;
@@ -2943,8 +3020,6 @@ function clamp(value: number, minimum: number, maximum: number, fallback: number
 const READER_SETTINGS_CSS=`
 :host([data-vn-workspace-tool]){--set-accent:var(--vn-shell-accent);--set-accent-text:var(--vn-shell-accent-contrast);--set-text:var(--vn-shell-text);--set-muted:var(--vn-shell-muted);--set-border:var(--vn-shell-border);--set-surface:var(--vn-shell-panel);--set-field:var(--vn-shell-field);--set-hover:var(--vn-shell-button);font-family:var(--vn-shell-family);}
 :host([data-vn-workspace-tool]) [data-shell]{padding:18px;max-width:none}
-:host([data-vn-workspace-tool]) [data-layout]{display:block}
-:host([data-vn-workspace-tool]) [data-nav]{display:none}
 :host([data-vn-workspace-tool]) [data-options]{grid-template-columns:1fr}
 :host([data-vn-workspace-tool]) [data-row]{grid-template-columns:1fr}
 :host([data-vn-workspace-tool]) [data-home] h1{font-size:1.5rem}
