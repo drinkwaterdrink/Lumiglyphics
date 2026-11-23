@@ -26,9 +26,11 @@ describe("Wave D — Quick-Director, Secrets Board & Tactile Document Reader", (
     const director = new QuickDirectorPopover({
       mount,
       onDirect: (cmd) => commands.push(cmd),
+      onOpenArtwork: () => {},
     });
 
     director.setPreset("midnight-noir");
+    director.setPicture({ label: "Artwork for passage 1", imageUrl: "/saved" });
     director.open();
     expect(director.isOpen()).toBe(true);
     const shadow = director.getShadowRoot();
@@ -42,6 +44,9 @@ describe("Wave D — Quick-Director, Secrets Board & Tactile Document Reader", (
     ]);
     const closeUpBtn = shadow.querySelector('[data-dir-label="Close-up"]') as HTMLButtonElement;
     closeUpBtn.click();
+    expect(commands).toHaveLength(0);
+    const prepare = shadow.querySelector("[data-dir-prepare]") as HTMLButtonElement;
+    prepare.click();
     expect(director.isOpen()).toBe(false);
     expect(commands[0]?.kind).toBe("shot");
     expect(commands[0]?.label).toBe("Close-up");
@@ -49,6 +54,8 @@ describe("Wave D — Quick-Director, Secrets Board & Tactile Document Reader", (
     director.open();
     const outfitBtn = shadow.querySelector('[data-dir-outfit="Raincoat"]') as HTMLButtonElement;
     outfitBtn.click();
+    expect(commands).toHaveLength(1);
+    prepare.click();
     expect(commands[1]?.kind).toBe("outfit");
 
     // Escape closes

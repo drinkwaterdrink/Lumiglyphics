@@ -14,6 +14,7 @@ import type { StructuredTurnHints } from '../core/paragraphs.js';
 import type { AssetScheduler } from '../core/asset-scheduler.js';
 import { mutateCharacterDnaLibrary } from './character-dna-store.js';
 import { handleCharacterDnaRequest } from './character-dna-workflow.js';
+import { sameLoreSource } from './story-dna-projection.js';
 import {handleStoryDnaRequest} from './story-dna-workflow.js';
 import { loadStoryDNASet, mutateStoryDNASet } from './story-dna-store.js';
 import { filterStoryDnaForActiveBranch, harvestTurnStoryDNA } from './story-dna-harvester.js';
@@ -1346,6 +1347,14 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
       directorScope.revision !== record.plan.key.revision || directorScope.paragraphIndex !== job.paragraphIndex)) {
     throw new Error("This Director request belongs to an older passage.");
   }
+  if (directorScope?.imageId !== undefined && directorScope.imageId !== job.imageId) {
+    throw new Error("The selected picture changed. Reopen Quick Director to view its current version.");
+  }
+  if (directorScope && record.imageRequests?.some(entry =>
+    entry.jobId === job.jobId && (entry.state === "review" || (entry.state === "prepared" && !job.imageId))
+  )) {
+    throw new Error("This picture already has a prompt waiting for review. Open Artwork Studio to continue.");
+  }
   if(job.provider===CACHE_JOB_PROVIDER) throw new Error("This is a reuse-only picture outside the image budget. Choose one of this reply’s generated pictures instead.");
   const previousImages = { ...record.previousImages };
   let previousVersions = normalizeImageVersionHistory(record.previousVersions);
@@ -2636,7 +2645,22 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       return;
     }
     case "vn_story_dna": {
-      await handleStoryDnaRequest(spindle, request, userId);
+      await handleStoryDnaRequest(spindle, request, userId, async ({ key: source, paragraphIndex }) => {
+        const chatId = request.chatId;
+        const scope = runtimeKey(userId, chatId);
+        const epoch = intakeEpochs.get(scope) ?? 0;
+        const state = await loadChatState(spindle, chatId, userId);
+        const record = await loadTurnRecord(spindle, state.activeTurnPath, userId);
+        const messages = await spindle.chat.getMessages(chatId) as NormalizedChatMessage[];
+        const latest = [...messages].reverse().find(message => !message.is_user && Boolean(message.content.trim()));
+        const intake = latest ? await resolveMessageIntake(spindle, chatId, latest.content, userId) : undefined;
+        if (!record || !latest || !intake?.resolved || !views.isOpen(userId, chatId) || epoch !== (intakeEpochs.get(scope) ?? 0)
+          || !sameLoreSource(record.plan.key, source) || relateRecord(record, latest, intake) !== "current"
+          || paragraphIndex >= record.plan.paragraphs.length) {
+          throw new Error("The reply changed. Reopen this passage before running autofill.");
+        }
+        return record.plan.paragraphs.slice(Math.max(0, paragraphIndex - 32), paragraphIndex + 1).map(paragraph => paragraph.text);
+      });
       return;
     }
     case "vn_generate_document_image": {

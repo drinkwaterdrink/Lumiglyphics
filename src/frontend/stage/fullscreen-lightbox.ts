@@ -212,7 +212,7 @@ const LIGHTBOX_CSS = `
   max-height: 40dvh;
   overflow-y: auto;
   padding: 16px 20px max(16px, env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
+  background: var(--vn-shell-panel, #0a1018);
   border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
   color: var(--vn-shell-text, #e0e5ed);
   font-size: 13px;
@@ -231,7 +231,7 @@ const LIGHTBOX_CSS = `
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #a8b8d0;
+  color: var(--vn-shell-text, #e0e5ed);
 }
 @media (prefers-reduced-motion: reduce) {
   .vn-lightbox-backdrop.open, .vn-lightbox-info-drawer { animation: none; }

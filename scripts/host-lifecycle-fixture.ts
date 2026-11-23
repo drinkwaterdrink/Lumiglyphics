@@ -3,6 +3,10 @@ import { VnStage } from "../src/frontend/stage/vn-stage.js";
 import { FullscreenLightbox } from "../src/frontend/stage/fullscreen-lightbox.js";
 import { normalizeConfig } from "../src/config.js";
 import type { TurnView } from "../src/protocol.js";
+import { templateSnapshot, BUILTIN_IMAGE_TEMPLATES, type VisualBrief } from "../src/shared/image-templates.js";
+import { resolveImageOutputPlan } from "../src/shared/image-output-plan.js";
+import { resolveShotSpec } from "../src/backend/runtime/shot-director.js";
+
 
 let activeChat = "A";
 let receive: (message: unknown) => void = () => {};
@@ -48,6 +52,19 @@ Object.assign(window,{hostFixture:{
   open:()=>toggle(), stage:()=>stage,
   revoke:(permission:string)=>{for(const handler of events.get('PERMISSION_CHANGED')??[])handler({permission,granted:false});},
   permissionListeners:()=>events.get('PERMISSION_CHANGED')?.size??0,
+  directorPromptMetadata: () => {
+    const brief: VisualBrief = {
+      scene: "A bookshop on a rainy street", subjects: "", action: "A sign reads “OPEN”",
+      composition: "street-level view", lighting: "warm lamp light", subjectMode: "none",
+      framing: "wide", referencePolicy: "none", sources: [], conflicts: [],
+    };
+    const outputPlan = resolveImageOutputPlan({ requestedRatio: "16:9" });
+    return {
+      template: templateSnapshot(BUILTIN_IMAGE_TEMPLATES[0]!),
+      selectionReason: "test", format: "description", trackerStatus: "not_found",
+      brief, outputPlan, shotSpec: resolveShotSpec({ brief, outputPlan }),
+    };
+  },
   mountNestedLightboxTrigger: () => {
     const host = document.createElement('div');
     const wrapper = document.createElement('div');

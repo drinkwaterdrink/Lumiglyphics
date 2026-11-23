@@ -648,6 +648,33 @@ test("a saved submission with failed generation remains deduplicated after reser
   expect(appends).toBe(1);
 });
 
+test("World Lens autofill routes through the active reply and rejects a changed swipe", async () => {
+  const f = generationFixture();
+  f.data.set("config.json", { generateImages: false, includeCharacterContext: false, includePersonaContext: false });
+  registerVisualNovelBackend(f.spindle);
+  await sendState(f.spindle, "chat", "review-user", { viewOpen: true });
+  const record = () => f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord | undefined;
+  await waitFor(() => Boolean(record()));
+  const stored = record()!;
+  const readingPosition = { version: 1, key: stored.plan.key, paragraphIndex: 0 };
+  const request = { type: "vn_story_dna", chatId: "chat", readingPosition };
+  f.request({ ...request, action: "review_autofill", requestId: "proposal-1", kind: "place", name: "First paragraph" });
+  const messages = f.sent as Array<{ type: string; requestId?: string; result?: { proposal?: { evidence: string[] } } }>;
+  await waitFor(() => messages.some(message => message.requestId === "proposal-1"));
+  const result = messages.find(message => message.requestId === "proposal-1");
+  expect(result?.type).toBe("vn_story_autofill");
+  expect(result?.result?.proposal?.evidence.join(" ")).toContain("First paragraph");
+  expect(result?.result?.proposal?.evidence.join(" ")).not.toContain("Second paragraph");
+
+  const original = f.spindle.chat.getMessages.bind(f.spindle.chat);
+  f.spindle.chat.getMessages = async (...args) => (await original(...args)).map(message => ({ ...message, swipe_id: 1 }));
+  f.request({ ...request, action: "apply_autofill", requestId: "apply-stale", proposalId: "proposal-1", fields: ["environmentDescription"] });
+  await waitFor(() => messages.some(message => message.requestId === "apply-stale"));
+  expect(messages.find(message => message.requestId === "apply-stale")?.type).toBe("vn_error");
+  expect((f.data.get("chats/chat/story-dna.json") as { locations?: Record<string, unknown> } | undefined)
+    ?.locations?.["first-paragraph"]).toBeUndefined();
+});
+
 test("state replies echo the requesting identity for active and empty chat selections", async () => {
   const f = generationFixture();
   f.data.set("config.json", { enabled: false });
@@ -712,6 +739,10 @@ describe("image review controller lifecycle", () => {
     f.request({ type: "vn_prepare_image", ...scope, jobId: first.jobId, directorScope: { ...directorScope, paragraphIndex: directorScope.paragraphIndex + 1 } });
     await waitFor(() => f.sent.some((m: any) => m.type === "vn_error" && m.error.includes("older passage")));
     expect(latest()?.requestId).toBe(first.requestId);
+    f.request({ type: "vn_prepare_image", ...scope, jobId: first.jobId, directorScope: { ...directorScope, imageId: "replaced-image" } });
+    await waitFor(() => f.sent.some((m: any) => m.type === "vn_error" && m.error.includes("selected picture changed")));
+    expect(latest()?.requestId).toBe(first.requestId);
+    expect(record().jobs[0]?.imageId).toBe("original");
     f.request({ type: "vn_prepare_image", ...scope, jobId: first.jobId, templateId: "manga-page", directorScope, quickGenerate: true });
     await waitFor(() => latest()?.requestId !== first.requestId && latest()?.state === "review");
     expect(latest()?.imagePromptMetadata?.template.id).toBe("manga-page");

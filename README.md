@@ -24,6 +24,14 @@ Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visu
 - **Apply a presentation preset.** Open **Presentation presets** to see what Cinematic, Reading, and Quiet change. Choose **Apply preset** to save the listed camera, lighting, and bond-banner preferences. **Undo preset** is available in the same Settings session and preserves later edits to those controls. Changing the preset selection alone makes no save or generation request.
 - **Find a Settings section.** When Settings is open inside the reader, use the category picker. Standalone Settings also shows a section rail on wide screens. **Escape** closes the category picker or artwork lightbox and returns focus to its opener when that control is still visible.
 
+### Direct artwork and update your world
+
+- **Direct a saved picture.** Open **Quick Director** from the Stage menu. When the current passage has one saved picture, the Director shows it and lets you choose framing, lighting, or an available outfit for that picture. **Prepare revised prompt** may use text tokens. Open the result in Artwork Studio and review it before choosing **Generate**. If multiple pictures or an existing draft are available, the Director routes you to Artwork Studio.
+- **Compare prompt formats.** In Artwork Studio, open **Words → Prompt format preview**. The current draft preview shows the wording, parameter edits, and character count. Alternate formats are local examples based on saved scene metadata. Legacy pictures with no recorded scene metadata can still show their current draft.
+- **Find a saved picture.** Use **Browse saved artwork** for an image-first view, or **History** for pictures grouped with their source replies. Use **Read so far** to limit browsing to your reading position. If full-size art can no longer load, saved prompts and excerpts remain readable.
+- **Review Location or Item suggestions.** Inspect an entry in World Lens, open its DNA Studio, then choose **Review autofill suggestions**. The review shows current and suggested values with excerpts from up to 33 reached passages in the active reply. Choose **Apply selected fields** to save them. If the source changes or someone edits a selected field first, reopen the entry and review the latest values before applying.
+- **Navigate Atlas and Perspectives.** Atlas uses a list on narrow screens and when several places are shown. Open **Perspectives** to see revealed knowledge states. Questions, sharing, and travel add text to your editable reply draft for you to send.
+
 ### How the reader keeps story context
 
 - **Sidecar Curator** collects optional story details after the reply is readable. If the provider is unavailable or returns partial data, you can keep reading and verified document quotes remain available.

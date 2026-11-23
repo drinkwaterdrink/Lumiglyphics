@@ -1,3 +1,4 @@
+import { reviewStoryAutofill, type ReadAutofillScope } from "./story-dna-autofill-review.js";
 import type { SpindleAPI } from 'lumiverse-spindle-types';
 import {
   type StoryDNASet,
@@ -37,7 +38,8 @@ export { StoryDnaRequestSchema, type StoryDnaRequest };
 export async function handleStoryDnaRequest(
   spindle: SpindleAPI,
   rawRequest: unknown,
-  userId: string
+  userId: string,
+  readAutofillScope?: ReadAutofillScope,
 ): Promise<void> {
   const request = StoryDnaRequestSchema.parse(rawRequest);
   const reply = async (storyDna: StoryDNASet) => {
@@ -64,6 +66,15 @@ export async function handleStoryDnaRequest(
   };
 
   try {
+    if (request.action === 'review_autofill' || request.action === 'apply_autofill') {
+      if (!readAutofillScope) throw new Error('Open a prepared reply before running autofill.');
+      const proposal = await reviewStoryAutofill(spindle, request, userId, readAutofillScope);
+      spindle.sendToFrontend({
+        type: 'vn_story_autofill', chatId: request.chatId, requestId: request.requestId,
+        result: proposal ? { proposal } : { saved: true },
+      }, userId);
+      return;
+    }
     if (request.action === 'list') {
       const storyDna = await loadStoryDNASet(spindle, request.chatId, userId);
       await reply(storyDna);

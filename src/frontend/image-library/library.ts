@@ -120,13 +120,27 @@ export class ImageLibrary{
    this.status('Picture removed. Undo within 4.5s.');
    this.back();
   };
-  this.el<HTMLImageElement>('[data-full-image]').onclick=()=>this.openFullscreen();
+  this.el<HTMLImageElement>('[data-full-image]').onclick=()=>{
+   if(!fullscreenButton.disabled)this.openFullscreen(undefined,fullscreenButton);
+  };
   this.el<HTMLButtonElement>('[data-copy]').onclick=async()=>{
    if(!this.selected?.prompt)return;
    try{await navigator.clipboard.writeText(`${this.selected.prompt}${this.selected.negativePrompt?'\n\nNegative prompt:\n'+this.selected.negativePrompt:''}`);this.status('Prompt copied.');}
    catch{this.status('Clipboard unavailable. Select the saved wording to copy it.');}
   };
-  this.el<HTMLImageElement>('[data-full-image]').onerror=()=>{if(this.selected)this.status('This image could not be loaded. Its saved reference may no longer be available.');};
+  const detailImage=this.el<HTMLImageElement>('[data-full-image]');
+  detailImage.onerror=()=>{
+   const entry=this.selected;
+   if(!entry)return;
+   fullscreenButton.disabled=true;
+   if(entry.thumbnailUrl&&detailImage.getAttribute('src')!==entry.thumbnailUrl){
+    this.status('Full-size artwork could not be loaded. Showing the saved thumbnail.');
+    detailImage.src=entry.thumbnailUrl;
+   }else{
+    detailImage.hidden=true;
+    this.status('This image could not be loaded. Saved details remain readable.');
+   }
+  };
   for(const type of ['click','pointerdown','pointerup','touchstart','touchend','wheel','keydown'])this.root.addEventListener(type,event=>event.stopPropagation());
   this.root.addEventListener('keydown',event=>{
    const e=event as KeyboardEvent;
@@ -210,6 +224,13 @@ export class ImageLibrary{
   return req;
  }
  private load(){
+  const title=this.mode==='story'?'History':'Saved artwork';
+  this.el<HTMLElement>('h2').textContent=title;
+  this.el<HTMLButtonElement>('[data-library-close]').setAttribute('aria-label','Close '+title.toLowerCase());
+  this.el<HTMLButtonElement>('[data-detail-back]').setAttribute('aria-label','Back to '+title.toLowerCase());
+  this.el<HTMLElement>('[data-browse] .note').textContent=this.mode==='story'
+   ? 'Saved replies and pictures from this chat. Browsing never generates images.'
+   : 'Pictures saved in this chat. Open one to see its source and recorded prompt.';
   this.readingHistorySlot.hidden=this.mode!=='story'||this.pageIndex!==0;
   if(!this.readingHistorySlot.hidden)this.onReadingHistoryRefresh?.();
   if(!this.context||!this.opened)return;this.cancel();this.page=null;this.back(false);this.el<HTMLElement>('[data-grid]').replaceChildren();this.el<HTMLButtonElement>('[data-load-more]').hidden=true;this.status(this.mode==='story'?'Loading story history…':'Loading saved pictures…');this.el<HTMLElement>('[data-retry]').hidden=true;
@@ -371,7 +392,12 @@ export class ImageLibrary{
  }
  private view(entry:LibraryImageView){
   this.browseScroll=this.el<HTMLElement>('.body').scrollTop;this.selected=entry;this.el<HTMLElement>('[data-browse]').hidden=true;this.el<HTMLElement>('[data-detail]').hidden=false;this.el<HTMLElement>('[data-detail-back]').hidden=false;this.el<HTMLElement>('[data-library-footer]').hidden=true;
-  const image=this.el<HTMLImageElement>('[data-full-image]');image.removeAttribute('src');image.hidden=!entry.imageUrl;if(entry.imageUrl)image.src=entry.imageUrl;
+  const image=this.el<HTMLImageElement>('[data-full-image]');
+  image.removeAttribute('src');
+  const source=entry.imageUrl||entry.thumbnailUrl;
+  image.hidden=!source;
+  this.el<HTMLButtonElement>('[data-fullscreen]').disabled=!entry.imageUrl;
+  if(source)image.src=source;
   this.el<HTMLElement>('[data-description]').textContent=`Reply ${entry.messageNumber} · Picture ${entry.paragraphIndex+1} · ${entry.template??'Story picture'} · ${entry.versionLabel} · ${entry.model??'Model not recorded'}${entry.provider?' · '+entry.provider:''}`;
   this.el<HTMLElement>('[data-excerpt]').textContent=stripUnknownPresetTags(entry.excerpt||'Source excerpt not recorded.');
   this.el<HTMLTextAreaElement>('[data-positive]').value=entry.prompt??'Prompt not recorded for this picture.';this.el<HTMLTextAreaElement>('[data-negative]').value=entry.negativePrompt??'Negative prompt not recorded.';this.el<HTMLButtonElement>('[data-copy]').disabled=!entry.prompt;this.el<HTMLDetailsElement>('[data-prompts]').open=false;

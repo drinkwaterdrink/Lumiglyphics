@@ -21128,7 +21128,7 @@ function scrubStoryDNASwipes(set2, activeMessageSwipes) {
     revision: (set2.revision ?? 0) + 1
   });
 }
-var LocationSpatialAnchorsSchema, LocationDNASchema, ItemDNASchema, ThoughtCabinetEntrySchema, ChapterCodexEntrySchema, NpcBeliefSchema, StoryDocumentLedgerEntrySchema, StoryLoreEventSchema, StoryDNASetSchema, GENERIC_ALIAS_WORDS, TRAILING_CONTAINER_SUFFIXES, BOUNDARY_SHORT_STOPWORDS, PERSONAL_HONORIFIC_RE, StoryDnaRequestSchema;
+var LocationSpatialAnchorsSchema, LocationDNASchema, ItemDNASchema, ThoughtCabinetEntrySchema, ChapterCodexEntrySchema, NpcBeliefSchema, StoryDocumentLedgerEntrySchema, StoryLoreEventSchema, StoryDNASetSchema, GENERIC_ALIAS_WORDS, TRAILING_CONTAINER_SUFFIXES, BOUNDARY_SHORT_STOPWORDS, PERSONAL_HONORIFIC_RE, LOCATION_AUTOFILL_FIELDS, ITEM_AUTOFILL_FIELDS, StoryAutofillFieldSchema, StoryDnaRequestSchema;
 var init_story_dna = __esm(() => {
   init_zod();
   init_turn_key();
@@ -21463,6 +21463,9 @@ var init_story_dna = __esm(() => {
     "men"
   ]);
   PERSONAL_HONORIFIC_RE = /^(?:mr|mrs|ms|miss|dr|prof|professor|lady|lord|sir|dame|capt|captain|insp|inspector|det|detective|lt|lieutenant|sgt|sergeant|rev|father|sister|brother)\.?$/i;
+  LOCATION_AUTOFILL_FIELDS = ["environmentDescription", "lighting", "atmosphere", "architecture", "persistentElements", "loreText"];
+  ITEM_AUTOFILL_FIELDS = ["itemType", "description", "materials", "distinctiveFeatures", "colors", "heldBy", "loreText"];
+  StoryAutofillFieldSchema = exports_external.enum([...LOCATION_AUTOFILL_FIELDS, ...ITEM_AUTOFILL_FIELDS]);
   StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
     exports_external.object({
       type: exports_external.literal("vn_story_dna"),
@@ -21511,6 +21514,25 @@ var init_story_dna = __esm(() => {
       itemId: exports_external.string(),
       revision: exports_external.number().int().optional()
     }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("review_autofill"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().min(1).max(160),
+      kind: exports_external.enum(["place", "object"]),
+      targetId: exports_external.string().min(1).max(256).optional(),
+      name: exports_external.string().trim().min(1).max(160),
+      readingPosition: ReadingPositionSchema
+    }).strict(),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("apply_autofill"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().min(1).max(160),
+      proposalId: exports_external.string().min(1).max(160),
+      fields: exports_external.array(StoryAutofillFieldSchema).min(1).max(7),
+      readingPosition: ReadingPositionSchema
+    }).strict(),
     exports_external.object({
       type: exports_external.literal("vn_story_dna"),
       action: exports_external.literal("autofill_location"),
@@ -36503,57 +36525,59 @@ async function autofillLocationDNA(spindle2, params) {
     lastUpdated: Date.now()
   };
   const config2 = await loadConfig(spindle2, params.userId).catch(() => null);
-  const messages = await spindle2.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
-  const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined) ?? [...messages].reverse().find((m) => m.role === "assistant");
-  const evidenceParts = [];
-  if (targetMsg) {
-    const swipeId = typeof targetMsg.swipe_id === "number" ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
-    const record2 = await loadTurnRecord(spindle2, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
-    if (record2) {
-      for (const scene of record2.plan.scenes) {
-        if (findMatchingLocation({ [base.id]: base }, scene.environment.location)) {
-          if (!base.environmentDescription && scene.environment.description) {
-            base.environmentDescription = scene.environment.description.trim().slice(0, 2000);
+  const evidenceParts = params.revealedEvidence?.map((passage) => "Story passage: " + passage) ?? [];
+  if (!params.revealedEvidence) {
+    const messages = await spindle2.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
+    const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined) ?? [...messages].reverse().find((m) => m.role === "assistant");
+    if (targetMsg) {
+      const swipeId = typeof targetMsg.swipe_id === "number" ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
+      const record2 = await loadTurnRecord(spindle2, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
+      if (record2) {
+        for (const scene of record2.plan.scenes) {
+          if (findMatchingLocation({ [base.id]: base }, scene.environment.location)) {
+            if (!base.environmentDescription && scene.environment.description) {
+              base.environmentDescription = scene.environment.description.trim().slice(0, 2000);
+            }
+            if (!base.lighting && scene.environment.lighting) {
+              base.lighting = scene.environment.lighting.trim().slice(0, 500);
+            }
+            const atm = [scene.environment.timeOfDay, scene.environment.weather].filter(Boolean).join(", ");
+            if (!base.atmosphere && atm)
+              base.atmosphere = atm.slice(0, 500);
+            if (scene.environment.persistentElements.length && base.persistentElements.length === 0) {
+              base.persistentElements = scene.environment.persistentElements.slice(0, 24);
+            }
+            evidenceParts.push(`Scene environment: ${JSON.stringify(scene.environment)}`);
           }
-          if (!base.lighting && scene.environment.lighting) {
-            base.lighting = scene.environment.lighting.trim().slice(0, 500);
+        }
+        for (const ref of record2.plan.storyReferences ?? []) {
+          if (ref.kind === "place" && findMatchingLocation({ [base.id]: base }, ref.name)) {
+            evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
+            if (!base.loreText && ref.value.trim())
+              base.loreText = ref.value.trim().slice(0, 4000);
           }
-          const atm = [scene.environment.timeOfDay, scene.environment.weather].filter(Boolean).join(", ");
-          if (!base.atmosphere && atm)
-            base.atmosphere = atm.slice(0, 500);
-          if (scene.environment.persistentElements.length && base.persistentElements.length === 0) {
-            base.persistentElements = scene.environment.persistentElements.slice(0, 24);
-          }
-          evidenceParts.push(`Scene environment: ${JSON.stringify(scene.environment)}`);
         }
       }
-      for (const ref of record2.plan.storyReferences ?? []) {
-        if (ref.kind === "place" && findMatchingLocation({ [base.id]: base }, ref.name)) {
-          evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
-          if (!base.loreText && ref.value.trim())
-            base.loreText = ref.value.trim().slice(0, 4000);
-        }
+      if (config2?.includeSimTrackerContext) {
+        const sim = extractSimTracker(messages.map((m) => ({ id: m.id, content: m.content })), targetMsg.id, config2.simTrackerMappings);
+        if (sim.world)
+          evidenceParts.push(`SimTracker world: ${sim.world}`);
       }
     }
-    if (config2?.includeSimTrackerContext) {
-      const sim = extractSimTracker(messages.map((m) => ({ id: m.id, content: m.content })), targetMsg.id, config2.simTrackerMappings);
-      if (sim.world)
-        evidenceParts.push(`SimTracker world: ${sim.world}`);
+    for (const m of messages.slice(-10)) {
+      for (const passage of targetDnaPassages(m.content, candidateNames)) {
+        evidenceParts.push(`Story passage: ${passage}`);
+      }
     }
-  }
-  for (const m of messages.slice(-10)) {
-    for (const passage of targetDnaPassages(m.content, candidateNames)) {
-      evidenceParts.push(`Story passage: ${passage}`);
-    }
-  }
-  try {
-    if (config2) {
-      const ctx = await loadVisualContext(spindle2, { chatId: params.chatId, userId: params.userId, config: config2, target: targetName });
-      if (ctx.plannerContext)
-        evidenceParts.push(`Card/Lore context:
+    try {
+      if (config2) {
+        const ctx = await loadVisualContext(spindle2, { chatId: params.chatId, userId: params.userId, config: config2, target: targetName });
+        if (ctx.plannerContext)
+          evidenceParts.push(`Card/Lore context:
 ${ctx.plannerContext.slice(0, 4000)}`);
-    }
-  } catch {}
+      }
+    } catch {}
+  }
   if (evidenceParts.length > 0 && config2 && typeof spindle2.generate?.raw === "function") {
     try {
       const connection = config2.sidecarUseForAutofill !== false ? await resolveSidecarConnection(spindle2, config2, params.userId) : await resolvePlannerConnection(spindle2, config2, params.userId);
@@ -36571,11 +36595,13 @@ ${ctx.plannerContext.slice(0, 4000)}`);
             },
             {
               role: "user",
-              content: JSON.stringify({ location: targetName, existing: base, evidence: evidenceParts.slice(0, 12) })
+              content: JSON.stringify({ location: targetName, ...!params.revealedEvidence ? { existing: base } : {}, evidence: evidenceParts.slice(0, 12) })
             }
           ]
         });
         const parsed = LocationAutofillOutputSchema.safeParse(jsonObject(responseText(res)));
+        if (!parsed.success && params.revealedEvidence)
+          throw new Error("The autofill model returned invalid fields.");
         if (parsed.success) {
           if (parsed.data.environmentDescription)
             base.environmentDescription = parsed.data.environmentDescription;
@@ -36591,7 +36617,10 @@ ${ctx.plannerContext.slice(0, 4000)}`);
             base.loreText = parsed.data.loreText;
         }
       }
-    } catch {}
+    } catch {
+      if (params.revealedEvidence)
+        throw new Error("Autofill could not read the model response. Run it again to retry.");
+    }
   }
   if (!base.environmentDescription && evidenceParts.length > 0) {
     const snippet = evidenceParts.find((p) => p.startsWith("Story passage:"));
@@ -36619,51 +36648,53 @@ async function autofillItemDNA(spindle2, params) {
     lastUpdated: Date.now()
   };
   const config2 = await loadConfig(spindle2, params.userId).catch(() => null);
-  const messages = await spindle2.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
-  const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined) ?? [...messages].reverse().find((m) => m.role === "assistant");
-  const evidenceParts = [];
-  if (targetMsg) {
-    const swipeId = typeof targetMsg.swipe_id === "number" ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
-    const record2 = await loadTurnRecord(spindle2, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
-    if (record2) {
-      for (const doc2 of record2.plan.storyDocuments ?? []) {
-        if (findMatchingItem({ [base.id]: base }, doc2.name)) {
-          const text2 = doc2.sections.map((s) => s.text).join(" ").trim();
-          if (!base.itemType)
-            base.itemType = doc2.kind;
-          if (text2) {
-            base.loreText = base.loreText || text2.slice(0, 4000);
-            if (!base.description || base.description === base.name)
-              base.description = text2.slice(0, 2000);
-            evidenceParts.push(`Document (${doc2.kind}): ${text2}`);
+  const evidenceParts = params.revealedEvidence?.map((passage) => "Story passage: " + passage) ?? [];
+  if (!params.revealedEvidence) {
+    const messages = await spindle2.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
+    const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined) ?? [...messages].reverse().find((m) => m.role === "assistant");
+    if (targetMsg) {
+      const swipeId = typeof targetMsg.swipe_id === "number" ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
+      const record2 = await loadTurnRecord(spindle2, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
+      if (record2) {
+        for (const doc2 of record2.plan.storyDocuments ?? []) {
+          if (findMatchingItem({ [base.id]: base }, doc2.name)) {
+            const text2 = doc2.sections.map((s) => s.text).join(" ").trim();
+            if (!base.itemType)
+              base.itemType = doc2.kind;
+            if (text2) {
+              base.loreText = base.loreText || text2.slice(0, 4000);
+              if (!base.description || base.description === base.name)
+                base.description = text2.slice(0, 2000);
+              evidenceParts.push(`Document (${doc2.kind}): ${text2}`);
+            }
+          }
+        }
+        for (const ref of record2.plan.storyReferences ?? []) {
+          if (ref.kind === "object" && findMatchingItem({ [base.id]: base }, ref.name)) {
+            evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
+            if (ref.field === "owner" && !base.heldBy)
+              base.heldBy = ref.value.slice(0, 160);
+            else if (!base.description || base.description === base.name)
+              base.description = ref.value.slice(0, 2000);
+            else if (!base.loreText)
+              base.loreText = ref.value.slice(0, 4000);
+          }
+        }
+        for (const cue of record2.plan.visualCues) {
+          const actionObj = typeof cue.action === "object" && cue.action !== null ? cue.action.object : undefined;
+          if (actionObj && findMatchingItem({ [base.id]: base }, actionObj)) {
+            if (cue.character && !base.heldBy)
+              base.heldBy = cue.character.slice(0, 160);
+            if (cue.visualFocus)
+              evidenceParts.push(`Visual focus: ${cue.visualFocus}`);
           }
         }
       }
-      for (const ref of record2.plan.storyReferences ?? []) {
-        if (ref.kind === "object" && findMatchingItem({ [base.id]: base }, ref.name)) {
-          evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
-          if (ref.field === "owner" && !base.heldBy)
-            base.heldBy = ref.value.slice(0, 160);
-          else if (!base.description || base.description === base.name)
-            base.description = ref.value.slice(0, 2000);
-          else if (!base.loreText)
-            base.loreText = ref.value.slice(0, 4000);
-        }
-      }
-      for (const cue of record2.plan.visualCues) {
-        const actionObj = typeof cue.action === "object" && cue.action !== null ? cue.action.object : undefined;
-        if (actionObj && findMatchingItem({ [base.id]: base }, actionObj)) {
-          if (cue.character && !base.heldBy)
-            base.heldBy = cue.character.slice(0, 160);
-          if (cue.visualFocus)
-            evidenceParts.push(`Visual focus: ${cue.visualFocus}`);
-        }
-      }
     }
-  }
-  for (const m of messages.slice(-10)) {
-    for (const passage of targetDnaPassages(m.content, candidateNames)) {
-      evidenceParts.push(`Story passage: ${passage}`);
+    for (const m of messages.slice(-10)) {
+      for (const passage of targetDnaPassages(m.content, candidateNames)) {
+        evidenceParts.push(`Story passage: ${passage}`);
+      }
     }
   }
   if (evidenceParts.length > 0 && config2 && typeof spindle2.generate?.raw === "function") {
@@ -36683,11 +36714,13 @@ async function autofillItemDNA(spindle2, params) {
             },
             {
               role: "user",
-              content: JSON.stringify({ item: targetName, existing: base, evidence: evidenceParts.slice(0, 12) })
+              content: JSON.stringify({ item: targetName, ...!params.revealedEvidence ? { existing: base } : {}, evidence: evidenceParts.slice(0, 12) })
             }
           ]
         });
         const parsed = ItemAutofillOutputSchema.safeParse(jsonObject(responseText(res)));
+        if (!parsed.success && params.revealedEvidence)
+          throw new Error("The autofill model returned invalid fields.");
         if (parsed.success) {
           if (parsed.data.itemType)
             base.itemType = parsed.data.itemType;
@@ -36705,7 +36738,10 @@ async function autofillItemDNA(spindle2, params) {
             base.loreText = parsed.data.loreText;
         }
       }
-    } catch {}
+    } catch {
+      if (params.revealedEvidence)
+        throw new Error("Autofill could not read the model response. Run it again to retry.");
+    }
   }
   if ((!base.description || base.description === base.name) && evidenceParts.length > 0) {
     const snippet = evidenceParts.find((p) => p.startsWith("Story passage:") || p.startsWith("Visual focus:"));
@@ -46235,7 +46271,7 @@ async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mut
     if (expectedRevision !== undefined && expectedRevision !== (set2.revision ?? 0)) {
       throw new Error("Story DNA changed. Reload the latest data before saving.");
     }
-    mutation(set2);
+    await mutation(set2);
     set2.revision = (set2.revision ?? 0) + 1;
     const candidate = StoryDNASetSchema.safeParse(set2);
     if (!candidate.success) {
@@ -52510,9 +52546,16 @@ function isPhotographicMedium2(styleDNA, brief) {
   }
   return false;
 }
-function extractQuotedText2(text3) {
-  const match = text3.match(/['"]([^'"]{1,40})['"]/);
-  return match && match[1] ? match[1].trim() : null;
+function extractVisibleLettering(text3) {
+  const cue = /\b(?:sign(?:age|board)?|poster|plaque|label|banner|billboard|lettering|inscription|written text|printed text)\b(?:\s+(?:that\s+)?(?:reads?|says?|reading|bearing|displaying|lettered|labeled|labelled))?\s*:?\s*/giu;
+  const quote = /^(?:"([^"\r\n]{1,40})"|\u201C([^\u201D\r\n]{1,40})\u201D|'((?:[^'\r\n]|(?<=\w)'(?=\w)){1,40})'(?!\w)|\u2018((?:[^\u2019\r\n]|(?<=\w)\u2019(?=\w)){1,40})\u2019(?!\w))/iu;
+  for (const match of text3.matchAll(cue)) {
+    const literal2 = quote.exec(text3.slice(match.index + match[0].length));
+    const wording = literal2?.slice(1).find((value) => value !== undefined)?.trim();
+    if (wording)
+      return wording;
+  }
+  return;
 }
 function findPlacementForSubject(subjectName, shotSpec) {
   const placements = shotSpec?.composition?.subjectPlacements;
@@ -52551,6 +52594,8 @@ function serializeIdeogramV4(input2) {
   const sections = [];
   const subjects = parseSubjectsFromBrief(brief, cue);
   const palette = extractIdeogramPalette(brief, styleDNA);
+  const rolePalette = (first2, second) => [palette[first2 % palette.length], palette[second % palette.length]];
+  const lettering = extractVisibleLettering(cue?.visualFocus ?? "") ?? extractVisibleLettering(brief.action);
   const isPhoto = isPhotographicMedium2(styleDNA, brief);
   const isDirectJson = profile.ideogramMode !== "structured-prose";
   const cameraText = formatCameraFraming(shotSpec, styleDNA) || "medium shot";
@@ -52621,7 +52666,7 @@ function serializeIdeogramV4(input2) {
           type: "obj",
           bbox,
           desc: `${sub.name}: ${appearanceDesc}${attireStr}. ${stagingClause}`,
-          color_palette: [palette[i % palette.length], palette[(i + 1) % palette.length]]
+          color_palette: rolePalette(i, i + 1)
         });
       });
     } else if (subjects.length === 1 && brief.subjectMode !== "none") {
@@ -52633,49 +52678,48 @@ function serializeIdeogramV4(input2) {
         type: "obj",
         bbox: [120, 200, 880, 800],
         desc: `${main.name}: ${appearanceDesc}${attireStr}, ${main.action || brief.action || "featured in the scene"}.`,
-        color_palette: [palette[0], palette[1]]
+        color_palette: rolePalette(0, 1)
       });
       elements.push({
         type: "obj",
         bbox: [480, 320, 800, 680],
         desc: cue?.visualFocus ? `Featured focal element: ${cue.visualFocus}.` : "Featured interaction prop and immediate environmental details.",
-        color_palette: [palette[2], palette[3]]
+        color_palette: rolePalette(2, 3)
       });
     } else {
       elements.push({
         type: "obj",
         bbox: [180, 150, 820, 850],
         desc: cue?.visualFocus ? `Central focus: ${cue.visualFocus}.` : "Central focal scenery and primary architectural features.",
-        color_palette: [palette[0], palette[1]]
+        color_palette: rolePalette(0, 1)
       });
     }
     elements.push({
       type: "obj",
       bbox: [760, 40, 960, 960],
       desc: "Immediate foreground floor plane with detailed material textures, reflections, and spatial perspective.",
-      color_palette: [palette[0], palette[1]]
+      color_palette: rolePalette(0, 1)
     });
     const midgroundBackdrop = cleanScene.slice(0, 500).replace(/[,\s]+$/, "").trim();
     elements.push({
       type: "obj",
       bbox: [180, 40, 740, 960],
       desc: `Midground environmental backdrop: ${midgroundBackdrop}.${overflowCastDescriptions}`,
-      color_palette: [palette[2], palette[3]]
+      color_palette: rolePalette(2, 3)
     });
     elements.push({
       type: "obj",
       bbox: [20, 40, 360, 960],
       desc: "Upper ceiling structure, sky gradient, and atmospheric volumetric light spill overhead.",
-      color_palette: [palette[3], palette[4] || palette[0]]
+      color_palette: rolePalette(3, 4)
     });
-    const quoteInAction = extractQuotedText2(`${brief.action} ${cue?.visualFocus || ""}`);
-    if (quoteInAction && elements.length < 6) {
+    if (lettering && elements.length < 6) {
       elements.unshift({
         type: "text",
         bbox: [80, 150, 200, 850],
-        text: quoteInAction.slice(0, 35),
+        text: lettering.slice(0, 35),
         desc: "Sharp, elegant typography displayed cleanly on an environmental sign or surface.",
-        color_palette: [palette[1], palette[4] || palette[0]]
+        color_palette: rolePalette(1, 4)
       });
     }
     const payload = {
@@ -52721,8 +52765,7 @@ function serializeIdeogramV4(input2) {
     const attire = main?.attire ? `, wearing ${main.attire}` : "";
     subjectsText = `${main?.name || "Character"} (${main?.appearance || "distinct traits"}${attire}), ${main?.action || brief.action || "in the scene"}`;
   }
-  const quoted = extractQuotedText2(`${brief.action} ${cue?.visualFocus || ""}`);
-  const textClause = quoted ? ` featuring clean typography reading '${quoted}'` : "";
+  const textClause = lettering ? ` featuring clean typography reading '${lettering}'` : "";
   const backgroundText = `Behind, ${cleanScene}.`;
   const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ""}${isPhoto ? "shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus" : "clean linework, rich volumetric shading, and painterly depth"}${suffix ? `, ${suffix}` : ""}.`;
   const paletteText = `color palette ${palette.join(", ")}`;
@@ -55162,7 +55205,7 @@ var init_protocol = __esm(() => {
     keyLightDirection: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
     mood: exports_external.string().trim().max(64).optional()
   }).strict();
-  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), directorScope: exports_external.object({ swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), paragraphIndex: exports_external.number().int().nonnegative() }).strict().optional(), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
+  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), directorScope: exports_external.object({ swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), paragraphIndex: exports_external.number().int().nonnegative(), imageId: exports_external.string().min(1).max(256).optional() }).strict().optional(), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
   RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
   DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
   GenerateDocumentImageRequestSchema = exports_external.object({
@@ -58282,6 +58325,150 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
   }
 }
 
+// src/backend/runtime/controller.ts
+init_story_dna_projection();
+
+// src/backend/runtime/story-dna-autofill-review.ts
+init_story_dna();
+init_story_dna_projection();
+init_character_dna_autofill();
+init_story_dna_harvester();
+init_story_dna_store();
+var sessions2 = new WeakMap;
+var REVIEW_MS = 5 * 60000;
+function changesFor(base, proposed, fields2) {
+  return fields2.flatMap((field) => {
+    const before = base?.[field] ?? null;
+    const after = proposed[field];
+    if (!Array.isArray(after) && typeof after !== "string" || JSON.stringify(before) === JSON.stringify(after) || after.length === 0)
+      return [];
+    return [{ field, before, after }];
+  });
+}
+async function reviewStoryAutofill(spindle2, request, userId, readScope) {
+  const { readingPosition: position, chatId } = request;
+  if (position.key.chatId !== chatId)
+    throw new Error("This autofill request belongs to another chat.");
+  let reviews = sessions2.get(spindle2);
+  if (!reviews) {
+    reviews = new Map;
+    sessions2.set(spindle2, reviews);
+  }
+  const key = JSON.stringify([userId, chatId]);
+  if (request.action === "review_autofill") {
+    const now = Date.now();
+    for (const [owner, review3] of reviews)
+      if (review3.expires <= now)
+        reviews.delete(owner);
+    if (reviews.size >= 128 && !reviews.has(key)) {
+      const oldest = reviews.keys().next().value;
+      if (oldest !== undefined)
+        reviews.delete(oldest);
+    }
+    const review2 = { position, expires: now + REVIEW_MS };
+    reviews.set(key, review2);
+    try {
+      const paragraphs = await readScope(position);
+      const set2 = await loadStoryDNASet(spindle2, chatId, userId);
+      const locations = request.kind === "place";
+      const records = locations ? set2.locations : set2.items;
+      const existing = request.targetId ? Object.hasOwn(records, request.targetId) ? records[request.targetId] : undefined : locations ? findMatchingLocation(set2.locations, request.name) : findMatchingItem(set2.items, request.name);
+      const candidateId = locations ? createLocationId(request.name) : createItemId(request.name);
+      const id8 = existing?.id ?? request.targetId ?? candidateId;
+      const deleted = locations ? set2.deletedLocations : set2.deletedItems;
+      if (!existing && request.targetId && id8 !== candidateId || deleted && Object.hasOwn(deleted, id8)) {
+        throw new Error("This entry changed or was deleted. Reopen it before running autofill.");
+      }
+      if (existing?.locked)
+        throw new Error("Unlock this entry before running autofill.");
+      const name2 = existing?.name ?? request.name;
+      const evidence = [...new Set(paragraphs.flatMap((text3) => targetDnaPassages(text3, [name2, ...existing?.aliases ?? []])))].slice(-8);
+      if (!evidence.length)
+        throw new Error("No revealed passage mentions this entry yet.");
+      const params = {
+        chatId,
+        userId,
+        revealedEvidence: evidence,
+        set: {
+          revision: set2.revision,
+          locations: locations && existing ? { [id8]: existing } : {},
+          items: !locations && existing ? { [id8]: existing } : {}
+        }
+      };
+      const changes = locations ? changesFor(existing, await autofillLocationDNA(spindle2, { ...params, locationId: id8, locationName: name2 }), LOCATION_AUTOFILL_FIELDS) : changesFor(existing, await autofillItemDNA(spindle2, { ...params, itemId: id8, itemName: name2 }), ITEM_AUTOFILL_FIELDS);
+      if (reviews.get(key) !== review2)
+        throw new Error("A newer autofill review replaced this request.");
+      await readScope(position);
+      if (reviews.get(key) !== review2)
+        throw new Error("A newer autofill review replaced this request.");
+      const proposal = { id: request.requestId, name: name2, paragraphIndex: position.paragraphIndex, evidence, changes };
+      review2.proposal = proposal;
+      review2.target = { kind: request.kind, id: id8, base: existing };
+      return proposal;
+    } catch (error61) {
+      if (reviews.get(key) === review2)
+        reviews.delete(key);
+      throw error61;
+    }
+  }
+  const review = reviews.get(key);
+  if (!review?.target || !review.proposal || review.proposal.id !== request.proposalId || review.expires <= Date.now()) {
+    throw new Error("This autofill review expired. Run autofill again.");
+  }
+  if (review.pending)
+    throw new Error("The selected fields are already saving.");
+  if (!sameLoreSource(position.key, review.position.key) || position.paragraphIndex !== review.position.paragraphIndex) {
+    throw new Error("The reading position changed. Run autofill again from this passage.");
+  }
+  const selected = review.proposal.changes.filter((change) => request.fields.includes(change.field));
+  if (selected.length !== request.fields.length)
+    throw new Error("Choose fields from this autofill review.");
+  const { kind, id: id7, base } = review.target;
+  const name = review.proposal.name;
+  review.pending = true;
+  try {
+    await mutateStoryDNASet(spindle2, chatId, userId, undefined, async (set2) => {
+      await readScope(position);
+      if (reviews.get(key) !== review)
+        throw new Error("A newer autofill review replaced this request.");
+      if (review.expires <= Date.now())
+        throw new Error("This autofill review expired. Run autofill again.");
+      const places = kind === "place";
+      const records = places ? set2.locations : set2.items;
+      const deleted = places ? set2.deletedLocations : set2.deletedItems;
+      const current = Object.hasOwn(records, id7) ? records[id7] : undefined;
+      if (!base && current || base && (!current || current.name !== base.name || current.locked) || deleted && Object.hasOwn(deleted, id7)) {
+        throw new Error("This entry changed, was locked, or was removed. Your selections are still open.");
+      }
+      for (const change of selected) {
+        const value = current?.[change.field] ?? null;
+        if (JSON.stringify(value) !== JSON.stringify(change.before)) {
+          throw new Error("A selected field changed since autofill ran. Your selections are still open.");
+        }
+      }
+      const updates = Object.fromEntries(selected.map((change) => [change.field, change.after]));
+      const merged = {
+        id: id7,
+        name,
+        ...places ? {} : { description: name },
+        ...current,
+        ...updates,
+        autoDiscovered: false,
+        lastUpdated: Date.now()
+      };
+      if (places)
+        set2.locations[id7] = LocationDNASchema.parse(merged);
+      else
+        set2.items[id7] = ItemDNASchema.parse(merged);
+    });
+    if (reviews.get(key) === review)
+      reviews.delete(key);
+  } finally {
+    review.pending = false;
+  }
+  return;
+}
+
 // src/backend/runtime/story-dna-workflow.ts
 init_story_dna();
 init_story_dna_store();
@@ -58809,7 +58996,7 @@ async function generateItemPropArtwork(params) {
 init_storage();
 init_story_dna_projection();
 init_story_dna_harvester();
-async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
+async function handleStoryDnaRequest(spindle2, rawRequest, userId, readAutofillScope) {
   const request = StoryDnaRequestSchema.parse(rawRequest);
   const reply = async (storyDna) => {
     const msgs = typeof spindle2.chat?.getMessages === "function" ? await spindle2.chat.getMessages(request.chatId).catch(() => []) : [];
@@ -58830,6 +59017,18 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
     }, userId);
   };
   try {
+    if (request.action === "review_autofill" || request.action === "apply_autofill") {
+      if (!readAutofillScope)
+        throw new Error("Open a prepared reply before running autofill.");
+      const proposal = await reviewStoryAutofill(spindle2, request, userId, readAutofillScope);
+      spindle2.sendToFrontend({
+        type: "vn_story_autofill",
+        chatId: request.chatId,
+        requestId: request.requestId,
+        result: proposal ? { proposal } : { saved: true }
+      }, userId);
+      return;
+    }
     if (request.action === "list") {
       const storyDna = await loadStoryDNASet(spindle2, request.chatId, userId);
       await reply(storyDna);
@@ -61358,6 +61557,12 @@ async function prepareSingleImageUnlocked(spindle2, request, userId, quick) {
   if (directorScope && (directorScope.swipeId !== record5.plan.key.swipeId || directorScope.revision !== record5.plan.key.revision || directorScope.paragraphIndex !== job.paragraphIndex)) {
     throw new Error("This Director request belongs to an older passage.");
   }
+  if (directorScope?.imageId !== undefined && directorScope.imageId !== job.imageId) {
+    throw new Error("The selected picture changed. Reopen Quick Director to view its current version.");
+  }
+  if (directorScope && record5.imageRequests?.some((entry) => entry.jobId === job.jobId && (entry.state === "review" || entry.state === "prepared" && !job.imageId))) {
+    throw new Error("This picture already has a prompt waiting for review. Open Artwork Studio to continue.");
+  }
   if (job.provider === CACHE_JOB_PROVIDER)
     throw new Error("This is a reuse-only picture outside the image budget. Choose one of this reply\u2019s generated pictures instead.");
   const previousImages = { ...record5.previousImages };
@@ -62719,7 +62924,20 @@ async function handleFrontendMessage(spindle2, request, userId) {
       return;
     }
     case "vn_story_dna": {
-      await handleStoryDnaRequest(spindle2, request, userId);
+      await handleStoryDnaRequest(spindle2, request, userId, async ({ key: source, paragraphIndex }) => {
+        const chatId = request.chatId;
+        const scope4 = runtimeKey(userId, chatId);
+        const epoch = intakeEpochs.get(scope4) ?? 0;
+        const state = await loadChatState(spindle2, chatId, userId);
+        const record5 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
+        const messages = await spindle2.chat.getMessages(chatId);
+        const latest = [...messages].reverse().find((message) => !message.is_user && Boolean(message.content.trim()));
+        const intake = latest ? await resolveMessageIntake(spindle2, chatId, latest.content, userId) : undefined;
+        if (!record5 || !latest || !intake?.resolved || !views.isOpen(userId, chatId) || epoch !== (intakeEpochs.get(scope4) ?? 0) || !sameLoreSource(record5.plan.key, source) || relateRecord(record5, latest, intake) !== "current" || paragraphIndex >= record5.plan.paragraphs.length) {
+          throw new Error("The reply changed. Reopen this passage before running autofill.");
+        }
+        return record5.plan.paragraphs.slice(Math.max(0, paragraphIndex - 32), paragraphIndex + 1).map((paragraph) => paragraph.text);
+      });
       return;
     }
     case "vn_generate_document_image": {

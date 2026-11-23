@@ -116,6 +116,34 @@ describe('Ideogram V4 Native Prompting Engine', () => {
     expect(textElement.text).toBe('THE BLACK CROW');
   });
 
+  test('three custom colors remain valid in every role palette', () => {
+    const profile = resolveImagePromptProfileV2('nanogpt', 'ideogram/v4/instant');
+    const palette = ['#123456', '#ABCDEF', '#FEDCBA'];
+    const { prompt } = compileModelPrompt({ brief: baseBrief, shotSpec, styleDNA: { palette }, outputPlan, profile });
+    const parsed = JSON.parse(prompt);
+    expect(parsed.style_description.color_palette).toEqual(palette);
+    for (const element of parsed.compositional_deconstruction.elements) {
+      expect(element.color_palette).toHaveLength(2);
+      expect(element.color_palette.every((color: string) => palette.includes(color))).toBe(true);
+    }
+  });
+
+  test.each(['json', 'structured-prose'] as const)('%s reserves lettering for explicit visual cues', (ideogramPromptMode) => {
+    const profile = resolveImagePromptProfileV2('nanogpt', 'ideogram/v4/instant', { ideogramPromptMode });
+    const promptFor = (action: string) => compileModelPrompt({
+      brief: { ...baseBrief, action }, shotSpec, outputPlan, profile
+    }).prompt;
+    const lettering = (prompt: string) => ideogramPromptMode === 'json'
+      ? JSON.parse(prompt).compositional_deconstruction.elements.find((e: { type: string }) => e.type === 'text')?.text
+      : prompt.match(/clean typography reading '(.+?)' in/)?.[1];
+    const ordinary = promptFor(`Mara's scarf brushes Jo's collar as she says "Walk with me."`);
+    if (ideogramPromptMode === 'json') expect(lettering(ordinary)).toBeUndefined();
+    else expect(ordinary).not.toContain('clean typography reading');
+    const sign = promptFor(`Mara's coat flutters by a sign that reads “JO’S TEA HOUSE”.`);
+    if (ideogramPromptMode === 'json') expect(lettering(sign)).toBe('JO’S TEA HOUSE');
+    else expect(sign).toContain("clean typography reading 'JO’S TEA HOUSE'");
+  });
+
   test('Ensemble shot separates multiple characters spatially into distinct bounding boxes', () => {
     const ensembleBrief: VisualBrief = {
       ...baseBrief,

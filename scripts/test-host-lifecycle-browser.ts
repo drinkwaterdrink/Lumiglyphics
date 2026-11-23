@@ -98,5 +98,147 @@ try{
   });
   assert.deepEqual(permissionEnd,{closures:1,listeners:0});
   assert.deepEqual(errors,[]);
-  console.log('Real host controller: revised presentation/draft/cursor, stale chats/state attempts, replacement acknowledgements and close suspension passed.');
+  await page.reload();
+  await page.waitForFunction(() => Boolean((window as any).hostFixture));
+  const setPictures = (pictures: string[], draft = false) => page.evaluate(({ pictures, draft }) => {
+    const f = (window as any).hostFixture;
+    const view = f.turn('A', 0, {
+      assets: pictures.map(id => ({ jobId: id, cueId: id, imageId: id, paragraphIndex: 0, status: 'browser_ready' })),
+      ...(draft ? { imageRequests: [{
+        requestId: 'draft-1', jobId: 'saved', state: 'review', paragraphIndex: 0, provider: 'nanogpt',
+        prompt: 'Keep this accepted picture draft', negativePrompt: '', model: 'test-model',
+        connectionId: 'images', parameters: {}, referenceSummary: '', createdAt: '2026-11-22',
+        imagePromptMetadata: f.directorPromptMetadata(),
+      }] } : {}),
+    });
+    if (!f.stage()) { f.state(view); f.open(); f.state(view); }
+    else f.receive({ type: 'vn_turn', turn: view });
+  }, { pictures, draft });
+  const openDirector = async () => {
+    await page.locator('[data-aperture-open]').click();
+    await page.locator('[data-action="quick-director"]').click();
+  };
+  const director = page.getByRole('dialog', { name: 'Quick Director' });
+  const preparations = () => page.evaluate(() => (window as any).hostFixture.sent.filter((m: any) => m.type === 'vn_prepare_image'));
+  await setPictures([]);
+  await openDirector();
+  assert.match(await director.innerText(), /no saved picture/);
+  assert.equal(await director.getByRole('button', { name: 'Open Artwork Studio' }).isVisible(), true);
+  await page.keyboard.press('Escape');
+
+  await setPictures(['saved', 'other']);
+  await openDirector();
+  assert.match(await director.innerText(), /more than one picture/);
+  assert.equal(await director.getByRole('button', { name: 'Prepare revised prompt' }).isVisible(), false);
+  await page.keyboard.press('Escape');
+
+  await setPictures(['saved'], true);
+  await openDirector();
+  assert.equal(await director.getByRole('button', { name: 'Review existing draft' }).isVisible(), true);
+  assert.equal((await preparations()).length, 0);
+  await director.getByRole('button', { name: 'Review existing draft' }).click();
+  const prompt = page.getByRole('textbox', { name: 'Positive prompt', exact: true });
+  const disclosure = page.locator('[data-dialect-preview]');
+  if (!await disclosure.isVisible()) await page.getByRole('tab', { name: /Words/ }).click();
+  await disclosure.locator('summary').click();
+  const format = disclosure.getByLabel('Prompt preview format');
+  const previewText = disclosure.locator('[data-preview-format-text]');
+  assert.match(await previewText.inputValue(), /Keep this accepted picture draft/);
+  await format.selectOption('ideogram-json');
+  assert.equal(JSON.parse(await previewText.inputValue()).compositional_deconstruction.elements[0]?.text, 'OPEN');
+  assert.equal(await prompt.inputValue(), 'Keep this accepted picture draft');
+  assert.equal((await preparations()).length, 0);
+  await page.getByRole('button', { name: 'Close workspace and return to reader' }).click();
+
+  await setPictures(['saved']);
+  await openDirector();
+  await director.getByRole('button', { name: 'Close-up', exact: true }).click();
+  assert.match(await director.getByRole('status').innerText(), /intimate close-up/);
+  assert.equal((await preparations()).length, 0, 'selecting a direction is local');
+  await setPictures(['replaced']);
+  await director.getByRole('button', { name: 'Prepare revised prompt', exact: true }).click();
+  assert.equal((await preparations()).length, 0, 'stale selection makes no prepare request');
+
+  await openDirector();
+  await director.getByRole('button', { name: 'Moonlit', exact: true }).click();
+  await director.getByRole('button', { name: 'Prepare revised prompt', exact: true }).click();
+  const [prepared] = await preparations();
+  assert.equal(prepared?.jobId, 'replaced');
+  assert.deepEqual(prepared.directorScope, { swipeId: 0, revision: 0, paragraphIndex: 0, imageId: 'replaced' });
+  assert.equal(prepared.lockContinuity, true);
+  assert.equal(prepared.quickGenerate, undefined);
+  assert.equal(prepared.relight, true);
+  const previewButton = page.getByRole('button', { name: 'View selected artwork fullscreen' });
+  if (!await previewButton.isVisible()) await page.getByRole('tab', { name: /Hub/ }).click();
+  await previewButton.press('Enter');
+  await page.keyboard.press('Escape');
+  assert.equal(await previewButton.evaluate(el => (el.getRootNode() as ShadowRoot).activeElement === el), true);
+
+  assert.deepEqual(errors, []);
+  await page.getByRole('button', { name: 'Close workspace and return to reader' }).click();
+  await page.evaluate(() => {
+    const stage = (window as any).hostFixture.stage();
+    stage.setStoryDna({
+      version: 1, items: {},
+      locations: Object.fromEntries(Array.from({ length: 31 }, (_, index) => {
+        const id = 'place-' + index;
+        return [id, { id, name: 'Place ' + index + ' with an unusually long location name',
+          aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: index,
+          ...(index % 2 ? { environmentDescription: 'Previously visited' } : { autoDiscovered: true }) }];
+      })),
+    });
+  });
+  await page.locator('[data-aperture-open]').click();
+  await page.locator('[data-aperture-route="world"]').click();
+  await page.locator('[data-world-hub-tab="atlas"]').click();
+  const places = page.locator('[data-world-atlas-view] .map-node-pill');
+  assert.equal(await places.count(), 31);
+  const sizes = await places.evaluateAll(nodes => nodes.map(node => {
+    const rect = node.getBoundingClientRect();
+    return { y: rect.top, bottom: rect.bottom, height: rect.height, style: getComputedStyle(node).position };
+  }));
+  assert.ok(sizes.every((size, index) => size.style === 'static' && size.height >= 40
+    && (!index || size.y >= sizes[index - 1]!.bottom)));
+  await places.filter({ hasText: 'Place 1 with an unusually long location name' }).click();
+  await page.getByRole('button', { name: /Inspect location/ }).click();
+  await page.locator('[data-story-dna-drawer] summary').click();
+  const editableNote = page.locator('[data-story-dna-studio] [data-dna-field="notes"]');
+  await editableNote.fill('Keep this unsaved editor note');
+  await page.getByRole('button', { name: 'Review autofill suggestions' }).click();
+  const reviewRequest = await page.evaluate(() => (window as any).hostFixture.sent.filter((message: any) => message.action === 'review_autofill').at(-1));
+  assert.equal(reviewRequest.readingPosition.paragraphIndex, 0);
+  assert.equal(reviewRequest.targetId, 'place-1');
+  await page.evaluate(request => (window as any).hostFixture.receive({
+    type: 'vn_story_autofill', chatId: 'A', requestId: request.requestId, result: { proposal: {
+      id: request.requestId, name: request.name, paragraphIndex: 0, evidence: ['Cedar chairs face the window.'],
+      changes: [
+        { field: 'environmentDescription', before: 'Previously visited', after: 'Cedar chairs face the window.' },
+        { field: 'lighting', before: null, after: 'Warm lamp light' },
+      ],
+    } },
+  }), reviewRequest);
+  const review = page.locator('[data-story-autofill-review]');
+  const applyFields = review.getByRole('button', { name: 'Apply selected fields' });
+  assert.equal(await applyFields.isDisabled(), true);
+  await review.locator('[data-autofill-field="lighting"]').check();
+  await applyFields.click();
+  const selection = await page.evaluate(() => (window as any).hostFixture.sent.filter((message: any) => message.action === 'apply_autofill').at(-1));
+  assert.deepEqual(selection.fields, ['lighting']);
+  await page.evaluate(request => (window as any).hostFixture.receive({
+    type: 'vn_error', operation: 'vn_story_dna', chatId: 'A', requestId: request.requestId,
+    error: 'A selected field changed since autofill ran.',
+  }), selection);
+  assert.match(await review.getByRole('status').innerText(), /A selected field changed/);
+  assert.equal(await review.locator('[data-autofill-field="lighting"]').isChecked(), true);
+  await applyFields.click();
+  await page.evaluate(() => {
+    const f = (window as any).hostFixture;
+    const request = f.sent.filter((message: any) => message.action === 'apply_autofill').at(-1);
+    f.receive({ type: 'vn_story_autofill', chatId: 'A', requestId: request.requestId, result: { saved: true } });
+  });
+  assert.equal(await review.isVisible(), false);
+  assert.equal(await editableNote.inputValue(), 'Keep this unsaved editor note');
+  assert.equal(await page.locator('[data-story-dna-studio] [data-dna-field="lighting"]').inputValue(), 'Warm lamp light');
+  assert.deepEqual(errors, []);
+  console.log('Real host controller: revised presentation/draft/cursor, stale chats/state attempts, replacement acknowledgements, close suspension, Director picture ownership, the 31-place Atlas, and selected-field autofill passed.');
 }finally{await browser.close();await server.stop();}

@@ -281,7 +281,7 @@ describe('DossierCard & World Lens Header', () => {
       (card.host.querySelector('[data-story-dna-autofill]') as unknown as HTMLButtonElement).click();
       (card.host.querySelector('[data-story-dna-save]') as unknown as HTMLButtonElement).click();
 
-      expect(sentBodies.some((b) => b.action === 'autofill_location' && b.locationName === 'Flat 3')).toBe(true);
+      expect(sentBodies.some((b) => b.action === 'review_autofill' && b.kind === 'place' && b.name === 'Flat 3')).toBe(true);
       expect(sentBodies.some((b) => b.action === 'save_location' && b.location.environmentDescription?.includes('warm brass lamps'))).toBe(true);
     } finally {
       restore();

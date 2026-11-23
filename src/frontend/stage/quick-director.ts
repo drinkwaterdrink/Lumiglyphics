@@ -1,3 +1,4 @@
+import { trapFocusWithin } from "../image-review/focus-trap.js";
 import { VN_SHELL_PRESET_TOKENS_CSS } from "../theme/palette-tokens.js";
 
 export type QuickDirectorCommand =
@@ -14,9 +15,15 @@ export type QuickDirectorOutfitOption = {
   active: boolean;
 };
 
+export type QuickDirectorPicture =
+  | { label: string; imageUrl: string }
+  | { unavailable: string; artworkLabel: string };
+
 export type QuickDirectorPopoverOptions = {
   mount: HTMLElement;
   onDirect: (command: QuickDirectorCommand) => void;
+  onOpenArtwork: () => void;
+  onVisibility?: (open: boolean) => void;
 };
 
 const DIRECTOR_CSS = `
@@ -114,6 +121,22 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
   border-color: transparent;
   font-weight: 750;
 }
+.dir-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dir-target img {
+  width: 56px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.dir-controls { display: grid; gap: 10px; }
+.dir-sheet [hidden] { display: none; }
+.dir-pill:disabled { cursor: default; opacity: 0.6; }
 .dir-empty {
   font-size: 12px;
   color: var(--vn-shell-muted, #9cb5a8);
@@ -135,6 +158,14 @@ export class QuickDirectorPopover {
   private readonly shadow: ShadowRoot;
   private readonly closeBtn: HTMLButtonElement;
   private readonly outfitRow: HTMLElement;
+  private readonly picture: HTMLImageElement;
+  private readonly targetStatus: HTMLElement;
+  private readonly controls: HTMLElement;
+  private readonly openArtworkBtn: HTMLButtonElement;
+  private readonly prepareBtn: HTMLButtonElement;
+  private readonly direction: HTMLElement;
+  private staged: QuickDirectorCommand | undefined;
+  private selectedButton: HTMLButtonElement | undefined;
   private openState = false;
   private opener: HTMLElement | null = null;
 
@@ -163,6 +194,7 @@ export class QuickDirectorPopover {
     sheet.addEventListener("click", (event) => event.stopPropagation());
     sheet.addEventListener("keydown", (event) => {
       event.stopPropagation();
+      if (event.key === "Tab") trapFocusWithin(sheet, event, this.shadow.activeElement);
       if (event.key === "Escape") {
         event.preventDefault();
         this.close();
@@ -173,7 +205,7 @@ export class QuickDirectorPopover {
     head.className = "dir-head";
     const title = document.createElement("span");
     title.className = "dir-title";
-    title.textContent = "Steer / Reshoot Scene";
+    title.textContent = "Quick Director";
     this.closeBtn = document.createElement("button");
     this.closeBtn.type = "button";
     this.closeBtn.className = "dir-close";
@@ -182,16 +214,31 @@ export class QuickDirectorPopover {
     this.closeBtn.addEventListener("click", () => this.close());
     head.append(title, this.closeBtn);
 
+    const target = document.createElement("div");
+    target.className = "dir-target";
+    this.picture = document.createElement("img");
+    this.picture.alt = "";
+    this.picture.hidden = true;
+    this.picture.addEventListener("error", () => { this.picture.hidden = true; });
+    this.targetStatus = document.createElement("span");
+    target.append(this.picture, this.targetStatus);
+    this.openArtworkBtn = document.createElement("button");
+    this.openArtworkBtn.type = "button";
+    this.openArtworkBtn.className = "dir-pill";
+    this.openArtworkBtn.addEventListener("click", () => {
+      this.close(false);
+      this.options.onOpenArtwork();
+    });
+
     const regenRow = document.createElement("div");
     regenRow.className = "dir-row";
     const regenBtn = document.createElement("button");
     regenBtn.type = "button";
-    regenBtn.className = "dir-pill primary";
+    regenBtn.className = "dir-pill";
     regenBtn.dataset.dirAction = "regenerate";
-    regenBtn.textContent = "↻ Regenerate Scene";
+    regenBtn.textContent = "Fresh composition";
     regenBtn.addEventListener("click", () => {
-      this.options.onDirect({ kind: "regenerate", label: "Regenerate", guidance: "Fresh composition with stronger detail" });
-      this.close();
+      this.preview(regenBtn, { kind: "regenerate", label: "Fresh composition", guidance: "Fresh composition with stronger detail" });
     });
     regenRow.appendChild(regenBtn);
 
@@ -210,8 +257,7 @@ export class QuickDirectorPopover {
         btn.dataset.dirLabel = item.label;
         btn.textContent = item.label;
         btn.addEventListener("click", () => {
-          this.options.onDirect({ kind: item.kind, label: item.label, guidance: item.guidance });
-          this.close();
+          this.preview(btn, item);
         });
         row.appendChild(btn);
       }
@@ -236,16 +282,53 @@ export class QuickDirectorPopover {
     const outfitWrap = document.createElement("div");
     const outfitLbl = document.createElement("div");
     outfitLbl.className = "dir-label";
-    outfitLbl.textContent = "Swap Outfit";
+    outfitLbl.textContent = "Outfit for this picture";
     this.outfitRow = document.createElement("div");
     this.outfitRow.className = "dir-row";
     outfitWrap.append(outfitLbl, this.outfitRow);
 
-    sheet.append(head, regenRow, shotGroup, relightGroup, outfitWrap);
+    this.controls = document.createElement("div");
+    this.controls.className = "dir-controls";
+    this.direction = document.createElement("div");
+    this.direction.className = "dir-empty";
+    this.direction.setAttribute("role", "status");
+    this.prepareBtn = document.createElement("button");
+    this.prepareBtn.type = "button";
+    this.prepareBtn.dataset.dirPrepare = "";
+    this.prepareBtn.className = "dir-pill primary";
+    this.prepareBtn.textContent = "Prepare revised prompt";
+    this.prepareBtn.addEventListener("click", () => {
+      const command = this.staged;
+      if (!command || this.controls.hidden) return;
+      this.close();
+      this.options.onDirect(command);
+    });
+    this.controls.append(regenRow, shotGroup, relightGroup, outfitWrap, this.direction, this.prepareBtn);
+    sheet.append(head, target, this.controls, this.openArtworkBtn);
     backdrop.appendChild(sheet);
     this.shadow.append(style, backdrop);
     options.mount.appendChild(this.host);
     this.setOutfits([]);
+  }
+
+  setPicture(picture: QuickDirectorPicture): void {
+    const unavailable = "unavailable" in picture;
+    this.controls.hidden = unavailable;
+    this.openArtworkBtn.hidden = !unavailable;
+    this.openArtworkBtn.textContent = unavailable ? picture.artworkLabel : "";
+    this.targetStatus.textContent = unavailable ? picture.unavailable : picture.label;
+    this.picture.hidden = unavailable;
+    if (unavailable) this.picture.removeAttribute("src");
+    else this.picture.src = picture.imageUrl;
+  }
+
+  private preview(button: HTMLButtonElement, command: QuickDirectorCommand): void {
+    this.selectedButton?.setAttribute("aria-pressed", "false");
+    this.selectedButton = button;
+    button.setAttribute("aria-pressed", "true");
+    this.staged = command;
+    this.direction.textContent = command.guidance;
+    this.prepareBtn.disabled = false;
   }
 
   setOutfits(outfits: ReadonlyArray<QuickDirectorOutfitOption>): void {
@@ -262,18 +345,22 @@ export class QuickDirectorPopover {
       btn.type = "button";
       btn.className = "dir-pill";
       btn.dataset.dirOutfit = opt.key;
-      btn.setAttribute("aria-pressed", opt.active ? "true" : "false");
+      btn.title = opt.active ? "Current saved outfit" : "";
       btn.textContent = `${opt.charName}: ${opt.key}`;
+      const guidance = "Change " + opt.charName + "'s outfit to: " + opt.outfit;
+      if (guidance.length > 400) {
+        btn.disabled = true;
+        btn.title = "This outfit is too long for Quick Director. Use Artwork Studio to edit the full prompt.";
+      }
       btn.addEventListener("click", () => {
-        this.options.onDirect({
+        this.preview(btn, {
           kind: "outfit",
           label: opt.key,
-          guidance: `Change ${opt.charName}'s outfit to: ${opt.outfit}`,
+          guidance,
           charId: opt.charId,
           wardrobeKey: opt.key,
           outfit: opt.outfit,
         });
-        this.close();
       });
       this.outfitRow.appendChild(btn);
     }
@@ -293,10 +380,16 @@ export class QuickDirectorPopover {
 
   open(opener?: HTMLElement | null): void {
     this.opener = opener ?? null;
+    this.staged = undefined;
+    this.selectedButton?.setAttribute("aria-pressed", "false");
+    this.selectedButton = undefined;
+    this.direction.textContent = "Choose a direction, then prepare a prompt for review.";
+    this.prepareBtn.disabled = true;
     this.openState = true;
     this.host.dataset.open = "true";
     this.host.style.display = "block";
     this.closeBtn.focus?.({ preventScroll: true });
+    this.options.onVisibility?.(true);
   }
 
   close(restoreFocus = true): void {
@@ -306,6 +399,7 @@ export class QuickDirectorPopover {
     this.host.style.display = "none";
     if (restoreFocus) this.opener?.focus?.({ preventScroll: true });
     this.opener = null;
+    this.options.onVisibility?.(false);
   }
 
   destroy(): void {

@@ -20454,6 +20454,9 @@ function formatLocationDNAForImagePrompt(dna, options) {
 function formatItemDNAForImagePrompt(dna) {
   return formatItemDNAToPromptClause(dna, { optimizeForImagePrompt: true });
 }
+var LOCATION_AUTOFILL_FIELDS = ["environmentDescription", "lighting", "atmosphere", "architecture", "persistentElements", "loreText"];
+var ITEM_AUTOFILL_FIELDS = ["itemType", "description", "materials", "distinctiveFeatures", "colors", "heldBy", "loreText"];
+var StoryAutofillFieldSchema = exports_external.enum([...LOCATION_AUTOFILL_FIELDS, ...ITEM_AUTOFILL_FIELDS]);
 var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
   exports_external.object({
     type: exports_external.literal("vn_story_dna"),
@@ -20502,6 +20505,25 @@ var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
     itemId: exports_external.string(),
     revision: exports_external.number().int().optional()
   }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("review_autofill"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().min(1).max(160),
+    kind: exports_external.enum(["place", "object"]),
+    targetId: exports_external.string().min(1).max(256).optional(),
+    name: exports_external.string().trim().min(1).max(160),
+    readingPosition: ReadingPositionSchema
+  }).strict(),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("apply_autofill"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().min(1).max(160),
+    proposalId: exports_external.string().min(1).max(160),
+    fields: exports_external.array(StoryAutofillFieldSchema).min(1).max(7),
+    readingPosition: ReadingPositionSchema
+  }).strict(),
   exports_external.object({
     type: exports_external.literal("vn_story_dna"),
     action: exports_external.literal("autofill_location"),
@@ -24960,7 +24982,7 @@ var ManualLightingSchema = exports_external.object({
   keyLightDirection: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
   mood: exports_external.string().trim().max(64).optional()
 }).strict();
-var PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), directorScope: exports_external.object({ swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), paragraphIndex: exports_external.number().int().nonnegative() }).strict().optional(), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
+var PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), directorScope: exports_external.object({ swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), paragraphIndex: exports_external.number().int().nonnegative(), imageId: exports_external.string().min(1).max(256).optional() }).strict().optional(), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
 var RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
 var DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
 var GenerateDocumentImageRequestSchema = exports_external.object({
@@ -32111,7 +32133,7 @@ var LIGHTBOX_CSS = `
   max-height: 40dvh;
   overflow-y: auto;
   padding: 16px 20px max(16px, env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
+  background: var(--vn-shell-panel, #0a1018);
   border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
   color: var(--vn-shell-text, #e0e5ed);
   font-size: 13px;
@@ -32130,7 +32152,7 @@ var LIGHTBOX_CSS = `
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #a8b8d0;
+  color: var(--vn-shell-text, #e0e5ed);
 }
 @media (prefers-reduced-motion: reduce) {
   .vn-lightbox-backdrop.open, .vn-lightbox-info-drawer { animation: none; }
@@ -32999,6 +33021,30 @@ class InteractionTray {
 
 // src/frontend/stage/dossier-css.ts
 var DOSSIER_CSS = `
+[data-dossier-art-open] {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--vn-shell-border, rgba(255,255,255,0.16));
+  background: var(--vn-shell-panel, rgba(0,0,0,0.28));
+  cursor: zoom-in;
+}
+[data-dossier-art-open]:focus-visible {
+  outline: 2px solid var(--vn-shell-accent, #86dbb2);
+  outline-offset: -3px;
+}
+[data-dossier-art-open] img {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+
 [data-vn-references][hidden]{display:none!important}
 [data-vn-root] [data-vn-references]{min-width:44px!important;min-height:44px!important;width:44px;height:44px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
 [data-vn-references] svg{width:20px;height:20px;display:block;flex:none}
@@ -33124,13 +33170,36 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .present-cast-pill,.present-item-pill{min-height:44px;min-width:44px;padding:8px 12px!important;margin:0!important;font-size:12px!important;border-radius:999px!important;background:color-mix(in srgb,var(--vn-shell-accent,#a8d3c8) 14%,var(--vn-shell-button,transparent))!important;border:1px solid var(--vn-shell-border-strong,var(--vn-shell-border))!important;color:var(--vn-shell-text,inherit)!important}
 .present-item-pill.active,.present-cast-pill.active{background:var(--vn-shell-accent,#a8d3c8)!important;color:var(--vn-shell-accent-contrast,#091418)!important;border-color:var(--vn-shell-accent,#a8d3c8)!important;font-weight:750!important}
 .world-scene-empty{font-size:11px;color:var(--vn-shell-muted,inherit)}
-.world-atlas-view{position:relative;height:215px;width:100%;max-width:360px}
+.world-atlas-section{display:flex;flex-direction:column;gap:8px;margin-top:6px;container-type:inline-size}
+.world-atlas-sizer{position:relative;width:var(--world-atlas-width,330px);height:var(--world-atlas-height,215px)}
+.world-atlas-view{position:relative;width:330px;height:215px;transform-origin:top left;transform:scale(var(--world-atlas-scale,1))}
+.world-atlas-view .map-node-pill{min-height:44px;max-width:106px}
+.world-atlas-section[data-dense="true"] .world-atlas-sizer{width:auto;height:auto}
+.world-atlas-section[data-dense="true"] .world-atlas-view{display:grid;gap:6px;padding:8px;width:auto;height:auto;transform:none}
+.world-atlas-section[data-dense="true"] :is(.world-map-svg,[data-atlas-zoom-control],.index-dot){display:none}
+.world-atlas-section[data-dense="true"] .map-node-pill{position:static;width:100%;max-width:none;transform:none}
+.world-atlas-section[data-dense="true"] .map-node-pill b{white-space:normal;overflow-wrap:anywhere}
+@container(max-width:370px){
+ .world-atlas-sizer{width:auto;height:auto}
+ .world-atlas-view{display:grid;gap:6px;padding:8px;width:auto;height:auto;transform:none}
+ .world-atlas-section :is(.world-map-svg,[data-atlas-zoom-control],.index-dot){display:none}
+ .world-atlas-view .map-node-pill{position:static;width:100%;max-width:none;transform:none}
+ .world-atlas-view .map-node-pill b{white-space:normal;overflow-wrap:anywhere}
+}
 .story-dna-studio{margin:12px 0;padding:12px;border-radius:var(--vn-shell-radius,12px);background:var(--vn-shell-field,rgba(18,32,38,.7));border:1px solid var(--vn-shell-border,rgba(130,185,165,.32));display:flex;flex-direction:column;gap:10px}
 .story-dna-studio-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .story-dna-studio-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--vn-shell-accent,#d6ecad)}
 .story-dna-studio-actions{display:flex;gap:6px}
 .story-dna-studio-actions button{min-height:44px;min-width:44px;padding:6px 12px!important;font-size:12px!important;margin:0!important}
 .story-dna-status{margin:0;font-size:11px;color:var(--vn-shell-accent,#93c5fd)}
+[data-story-autofill-review]{display:grid;gap:8px;padding:12px;border:1px solid var(--vn-shell-border);border-radius:10px}
+[data-story-autofill-review][hidden]{display:none}
+[data-story-autofill-review] h4,[data-story-autofill-review] p{margin:0;overflow-wrap:anywhere}
+[data-story-autofill-review] blockquote{margin:6px 0;padding-inline-start:8px;border-inline-start:2px solid var(--vn-shell-border);overflow-wrap:anywhere}
+[data-story-autofill-review] fieldset{display:grid;gap:6px;min-width:0;border:0;padding:0;margin:0}
+.story-autofill-field{display:grid;grid-template-columns:22px minmax(0,1fr);gap:4px 8px;align-items:center;min-height:44px;padding:8px;border:1px solid var(--vn-shell-border);border-radius:8px}
+.story-autofill-field small{grid-column:2;white-space:pre-line;overflow-wrap:anywhere}
+
 .story-dna-form{display:grid;grid-template-columns:1fr;gap:8px}
 .story-dna-field{display:flex;flex-direction:column;gap:3px;font-size:11px}
 .story-dna-field span{color:var(--vn-shell-muted,inherit);font-weight:600}
@@ -33251,6 +33320,7 @@ class DossierCard {
   selectedEntityId = null;
   hubView = "scene";
   perspectiveFilter = "all";
+  perspectivesOpen = false;
   linkMode = false;
   linkSourceId = null;
   storyDna = { locations: {}, items: {}, revision: 0 };
@@ -34050,6 +34120,7 @@ class DossierCard {
       this.selectedEntityId = null;
       this.hubView = "scene";
       this.perspectiveFilter = "all";
+      this.perspectivesOpen = false;
       this.linkMode = false;
       this.linkSourceId = null;
     }
@@ -34535,7 +34606,7 @@ class DossierCard {
         worldSheet.append(sceneHub);
       } else {
         const atlasSection = document.createElement("div");
-        atlasSection.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:6px;";
+        atlasSection.className = "world-atlas-section";
         const atlasBar = document.createElement("div");
         atlasBar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;opacity:0.9;";
         const legend = document.createElement("span");
@@ -34549,19 +34620,16 @@ class DossierCard {
         atlasViewport.className = "world-atlas-viewport";
         atlasViewport.style.cssText = "overflow:auto;max-height:260px;border-radius:10px;border:1px solid var(--vn-panel-border,rgba(255,255,255,.16));background:rgba(12,24,20,0.55);";
         const atlasSizer = document.createElement("div");
-        atlasSizer.style.cssText = "position:relative;";
+        atlasSizer.className = "world-atlas-sizer";
         const atlasWrap = document.createElement("div");
         atlasWrap.className = "world-atlas-view";
         atlasWrap.dataset.worldAtlasView = "";
-        atlasWrap.style.width = "330px";
-        atlasWrap.style.height = "215px";
-        atlasWrap.style.transformOrigin = "top left";
         const applyAtlasZoom = (next) => {
           atlasZoom = Math.max(0.75, Math.min(1.75, Number(next.toFixed(2))));
           worldSheet.dataset.atlasZoom = String(atlasZoom);
-          atlasSizer.style.width = `${Math.round(330 * atlasZoom)}px`;
-          atlasSizer.style.height = `${Math.round(215 * atlasZoom)}px`;
-          atlasWrap.style.transform = `scale(${atlasZoom})`;
+          atlasSizer.style.setProperty("--world-atlas-width", String(Math.round(330 * atlasZoom)) + "px");
+          atlasSizer.style.setProperty("--world-atlas-height", String(Math.round(215 * atlasZoom)) + "px");
+          atlasSizer.style.setProperty("--world-atlas-scale", String(atlasZoom));
         };
         if (this.storyDnaRequester) {
           const linkBtn = document.createElement("button");
@@ -34580,6 +34648,7 @@ class DossierCard {
         }
         for (const [label, aria, delta] of [["−", "Zoom out atlas", -0.25], ["1:1", "Reset atlas zoom", 0], ["+", "Zoom in atlas", 0.25]]) {
           const zBtn = document.createElement("button");
+          zBtn.dataset.atlasZoomControl = "";
           zBtn.type = "button";
           zBtn.textContent = label;
           zBtn.setAttribute("aria-label", aria);
@@ -34624,6 +34693,7 @@ class DossierCard {
           }
         }
         const nodes = [...placeMap.values()].filter((n) => !qLower || n.name.toLocaleLowerCase().includes(qLower));
+        atlasSection.dataset.dense = String(nodes.length > 4);
         const coords = new Map;
         nodes.forEach((node2, idx) => {
           if (nodes.length === 1) {
@@ -34666,10 +34736,11 @@ class DossierCard {
           nodeBtn.className = `map-node-pill ${this.selectedEntityId === node2.entryId || this.linkMode && this.linkSourceId === (node2.dnaId ?? node2.id) ? "active" : ""} ${node2.isActive ? "active-location" : ""}`;
           nodeBtn.style.left = `${Math.max(4, Math.min(68, Math.round(pt.x / 330 * 100 - 11)))}%`;
           nodeBtn.style.top = `${Math.max(4, Math.min(72, Math.round(pt.y / 210 * 100 - 10)))}%`;
-          nodeBtn.style.maxWidth = "120px";
+          nodeBtn.dataset.atlasPlaceState = node2.state;
           const icon = node2.state === "active" ? "★" : node2.state === "visited" ? "\uD83D\uDCCD" : "○";
           const badge = node2.state === "active" ? `★ ACTIVE · \uD83D\uDC65 ${presentCast.length}` : node2.state === "visited" ? "Visited" : "Mentioned";
-          nodeBtn.innerHTML = html`<span class="index-dot"></span><b style="white-space:normal;line-height:1.2;word-break:break-word">${icon} ${node2.name}</b><small>${badge}</small>`.value;
+          nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${icon} ${node2.name}</b><small>${badge}</small>`.value;
+          nodeBtn.title = node2.name;
           nodeBtn.onclick = () => {
             if (this.linkMode && this.storyDnaRequester) {
               const targetKey = node2.dnaId ?? node2.id;
@@ -34861,14 +34932,19 @@ class DossierCard {
       if (this.hubView === "atlas" || threads.length > 0) {
         worldSheet.append(threadsCard);
       }
-      if (beliefNpcs.length > 0 || this.hubView === "atlas") {
-        const perspCard = document.createElement("div");
+      if (this.hubView === "atlas") {
+        const perspCard = document.createElement("details");
+        perspCard.open = this.perspectivesOpen;
+        perspCard.ontoggle = () => {
+          if (this.host.contains(perspCard))
+            this.perspectivesOpen = perspCard.open;
+        };
         perspCard.className = "world-threads-card secrets-board";
         perspCard.dataset.worldPerspectivesSection = "";
         perspCard.dataset.secretsBoard = "";
-        const pHdr = document.createElement("div");
+        const pHdr = document.createElement("summary");
         pHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--vn-shell-info-ink,#93c5fd);margin-bottom:6px;";
-        pHdr.textContent = "\uD83D\uDC41️ Secrets & Beliefs · Who Knows What";
+        pHdr.textContent = "Perspectives";
         const pFilterRow = document.createElement("div");
         pFilterRow.className = "chip-row";
         for (const npc of ["all", ...beliefNpcs.map(([n]) => n)]) {
@@ -34888,7 +34964,7 @@ class DossierCard {
         if (beliefNpcs.length === 0) {
           const emptySecrets = document.createElement("p");
           emptySecrets.className = "world-scene-empty";
-          emptySecrets.textContent = "No character beliefs or hidden secrets recorded yet in this chat.";
+          emptySecrets.textContent = "No character perspectives have been revealed here yet.";
           bList.append(emptySecrets);
         } else {
           for (const [npc, items] of beliefNpcs) {
@@ -34911,17 +34987,24 @@ class DossierCard {
               body2.style.cssText = "font-size:11.5px;line-height:1.4;color:var(--vn-shell-text,#f4f7ee);";
               body2.textContent = item.belief;
               row.append(head, body2);
-              if (this.sceneHubContext?.onDraftAction) {
+              const draftAction = this.sceneHubContext?.actionsEnabled ? this.sceneHubContext.onDraftAction : undefined;
+              if (draftAction) {
                 const askBtn = document.createElement("button");
                 askBtn.type = "button";
                 askBtn.className = "secret-action-btn";
                 askBtn.dataset.secretAsk = "";
-                askBtn.textContent = `Reveal / Ask ${npc} about this`;
-                askBtn.onclick = () => {
-                  this.close();
-                  this.sceneHubContext?.onDraftAction?.(`Ask ${npc} about ${item.topic}: "${item.belief}" `);
-                };
+                askBtn.textContent = "Draft a question for " + npc;
+                askBtn.onclick = () => draftAction("I ask " + npc + " about " + item.topic + ".");
                 row.append(askBtn);
+                if (rawState === "knows") {
+                  const share = document.createElement("button");
+                  share.type = "button";
+                  share.className = "secret-action-btn";
+                  share.dataset.secretShare = "";
+                  share.textContent = "Draft sharing this with " + npc;
+                  share.onclick = () => draftAction("I tell " + npc + " what I learned about " + item.topic + ": " + item.belief);
+                  row.append(share);
+                }
               }
               bList.append(row);
             }
@@ -35027,10 +35110,10 @@ class DossierCard {
           goBtn.type = "button";
           goBtn.className = "world-lens-cta";
           goBtn.dataset.worldLensGoTo = activeEntry.entity.name;
-          goBtn.textContent = `Head to ${activeEntry.entity.name}`;
+          goBtn.title = "Add a travel intention to your reply draft";
+          goBtn.textContent = `Draft travel to ${activeEntry.entity.name}`;
           goBtn.onclick = () => {
             this.sceneHubContext?.onDraftAction?.(`I head to ${activeEntry.entity.name}.`);
-            this.close();
           };
           actionsRow.append(goBtn);
         }
@@ -35267,7 +35350,7 @@ class DossierCard {
     const autofillBtn = document.createElement("button");
     autofillBtn.type = "button";
     autofillBtn.dataset.storyDnaAutofill = "";
-    autofillBtn.textContent = "✨ Auto-Fill DNA";
+    autofillBtn.textContent = "Review autofill suggestions";
     autofillBtn.disabled = isLocked || !this.storyDnaRequester;
     lockBtn.onclick = () => {
       isLocked = !isLocked;
@@ -35279,8 +35362,8 @@ class DossierCard {
     actionsRow.append(lockBtn, autofillBtn);
     head.append(heading, actionsRow);
     wrap.append(head, status);
-    const factVal = (...fields2) => {
-      for (const f of fields2) {
+    const factVal = (...fields3) => {
+      for (const f of fields3) {
         const hit = dossier.facts.find((x) => x.field === f)?.value || dossier.state?.[f];
         if (hit?.trim())
           return hit.trim();
@@ -35357,16 +35440,6 @@ class DossierCard {
       };
       [aliasesIn, descIn, archIn, lightIn, atmIn, elemIn, connIn, loreIn, notesIn].forEach((el) => el.addEventListener("input", refreshPreview));
       refreshPreview();
-      autofillBtn.onclick = () => {
-        this.awaitingDnaSync = true;
-        status.textContent = "Scanning story & SimTracker for scenery clues...";
-        status.hidden = false;
-        this.storyDnaRequester?.({
-          action: "autofill_location",
-          locationId: existingLoc?.id,
-          locationName: dossier.entity.name
-        });
-      };
       saveBtn.onclick = () => {
         const nextLoc = buildLoc();
         this.storyDnaRequester?.({ action: "save_location", location: nextLoc, revision: this.storyDna.revision });
@@ -35496,13 +35569,19 @@ class DossierCard {
       }
     } else {
       if (existingItem?.referenceImageUrl) {
-        const artWrap = document.createElement("div");
-        artWrap.style.cssText = "margin-bottom:10px;border-radius:10px;overflow:hidden;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.16));background:rgba(0,0,0,0.28);display:flex;justify-content:center;";
+        const artWrap = document.createElement("button");
+        artWrap.type = "button";
+        artWrap.dataset.dossierArtOpen = "";
+        artWrap.setAttribute("aria-label", "Inspect artwork: " + existingItem.name);
         const artImg = document.createElement("img");
         artImg.src = existingItem.referenceImageUrl;
-        artImg.alt = existingItem.name;
-        artImg.style.cssText = "max-width:100%;max-height:240px;object-fit:contain;cursor:zoom-in;display:block;";
-        artImg.onclick = () => FullscreenLightbox.open({ src: existingItem.referenceImageUrl, title: existingItem.name, themeSource: this.host });
+        artImg.alt = "";
+        artWrap.onclick = () => FullscreenLightbox.open({
+          src: existingItem.referenceImageUrl,
+          title: existingItem.name,
+          themeSource: this.host,
+          opener: artWrap
+        });
         artWrap.append(artImg);
         form.append(artWrap);
       }
@@ -35558,16 +35637,6 @@ class DossierCard {
         status.textContent = "Rendering artifact close-up artwork…";
         status.hidden = false;
         this.storyDnaRequester?.({ action: "generate_item_art", itemId: existingItem.id });
-      };
-      autofillBtn.onclick = () => {
-        this.awaitingDnaSync = true;
-        status.textContent = "Scanning story for artifact details...";
-        status.hidden = false;
-        this.storyDnaRequester?.({
-          action: "autofill_item",
-          itemId: existingItem?.id,
-          itemName: dossier.entity.name
-        });
       };
       saveBtn.onclick = () => {
         const nextItem = buildItem();
@@ -35631,7 +35700,163 @@ class DossierCard {
         form.append(mergeRow);
       }
     }
-    wrap.append(form, preview, footer);
+    const review = document.createElement("section");
+    review.dataset.storyAutofillReview = "";
+    review.hidden = true;
+    const fields2 = new Map(Array.from(form.querySelectorAll("[data-dna-field]")).map((input2) => [input2.dataset.dnaField, { input: input2, saved: input2.value }]));
+    const setAutofillStatus = (text) => {
+      status.textContent = text;
+      status.hidden = !text;
+      status.setAttribute("role", "status");
+    };
+    let savingReview = false;
+    const closeReview = () => {
+      if (savingReview)
+        return;
+      review.hidden = true;
+      review.replaceChildren();
+      autofillBtn.focus({ preventScroll: true });
+    };
+    review.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        event.preventDefault();
+        closeReview();
+      }
+    });
+    const showReview = (proposal) => {
+      if (!proposal.changes.length) {
+        setAutofillStatus("Autofill found no new fields in the revealed passages.");
+        return;
+      }
+      const heading2 = document.createElement("h4");
+      heading2.textContent = "Review suggestions for " + proposal.name;
+      heading2.tabIndex = -1;
+      const scope = document.createElement("small");
+      scope.textContent = "Revealed through passage " + (proposal.paragraphIndex + 1);
+      const evidence = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "Read the source excerpts";
+      evidence.append(summary);
+      for (const excerpt of proposal.evidence) {
+        const quote = document.createElement("blockquote");
+        quote.textContent = excerpt;
+        evidence.append(quote);
+      }
+      const choices = document.createElement("fieldset");
+      const legend = document.createElement("legend");
+      legend.textContent = "Select fields to apply";
+      choices.append(legend);
+      const apply = document.createElement("button");
+      apply.type = "button";
+      apply.textContent = "Apply selected fields";
+      apply.disabled = true;
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.textContent = "Keep current fields";
+      cancel.onclick = closeReview;
+      const note = document.createElement("p");
+      note.setAttribute("role", "status");
+      const checked = new Set;
+      for (const change of proposal.changes) {
+        const label = document.createElement("label");
+        label.className = "story-autofill-field";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.dataset.autofillField = change.field;
+        const labelText = document.createElement("strong");
+        labelText.textContent = fields2.get(change.field)?.input.closest("label")?.querySelector("span")?.textContent ?? change.field;
+        const values = document.createElement("small");
+        const format = (value) => (Array.isArray(value) ? value.join(", ") : value) || "Empty";
+        values.textContent = "Current: " + format(change.before) + `
+Suggested: ` + format(change.after);
+        box.onchange = () => {
+          if (box.checked)
+            checked.add(change.field);
+          else
+            checked.delete(change.field);
+          apply.disabled = checked.size === 0;
+        };
+        label.append(box, labelText, values);
+        choices.append(label);
+      }
+      apply.onclick = () => {
+        const selected = proposal.changes.filter((change) => checked.has(change.field));
+        if (!selected.length || apply.disabled)
+          return;
+        if (selected.some((change) => {
+          const field = fields2.get(change.field);
+          return field && field.input.value !== field.saved;
+        })) {
+          note.textContent = "A selected field has unsaved edits in this editor. Keep your edits or deselect that field.";
+          return;
+        }
+        savingReview = true;
+        apply.disabled = true;
+        cancel.disabled = true;
+        autofillBtn.disabled = true;
+        choices.disabled = true;
+        note.textContent = "Saving selected fields…";
+        this.storyDnaRequester?.({ action: "apply_autofill", proposalId: proposal.id, fields: [...checked] }, (result) => {
+          if (!this.host.contains(review) || review.hidden)
+            return;
+          savingReview = false;
+          cancel.disabled = false;
+          autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+          if ("error" in result) {
+            note.textContent = result.error;
+            choices.disabled = false;
+            apply.disabled = false;
+            return;
+          }
+          if (!("saved" in result))
+            return;
+          for (const change of selected) {
+            const field = fields2.get(change.field);
+            if (!field)
+              continue;
+            const value = Array.isArray(change.after) ? change.after.join(", ") : change.after;
+            if (field.input.value === field.saved) {
+              field.input.value = value;
+              field.input.dispatchEvent(new Event("input"));
+            }
+            field.saved = value;
+          }
+          setAutofillStatus("Selected autofill fields saved.");
+          closeReview();
+        });
+      };
+      const actions = document.createElement("div");
+      actions.className = "story-dna-footer";
+      actions.append(cancel, apply);
+      review.replaceChildren(heading2, scope, evidence, choices, note, actions);
+      review.hidden = false;
+      heading2.focus({ preventScroll: true });
+    };
+    autofillBtn.onclick = () => {
+      if (!review.hidden)
+        closeReview();
+      const target2 = existingLoc ?? existingItem;
+      autofillBtn.disabled = true;
+      setAutofillStatus("Scanning revealed passages for suggestions…");
+      this.storyDnaRequester?.({
+        action: "review_autofill",
+        kind,
+        name: dossier.entity.name,
+        ...target2 ? { targetId: target2.id } : {}
+      }, (result) => {
+        if (!this.host.contains(wrap) || this.host.hidden)
+          return;
+        autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+        if ("error" in result)
+          setAutofillStatus(result.error);
+        else if ("proposal" in result) {
+          setAutofillStatus("");
+          showReview(result.proposal);
+        }
+      });
+    };
+    wrap.append(review, form, preview, footer);
     return wrap;
   }
   close() {
@@ -47145,6 +47370,20 @@ class VnStage {
     }
     this.showBondResonanceBanner(pending);
   }
+  getDirectorOutfits(subject) {
+    if (!subject)
+      return [];
+    const character = findCharacterDNA(this.characterDnaLibrary, subject);
+    if (!character)
+      return [];
+    return Object.entries(character.wardrobeStates ?? {}).filter(([key, outfit]) => key.trim() && outfit.trim()).map(([key, outfit]) => ({
+      charId: character.id,
+      charName: character.name,
+      key,
+      outfit,
+      active: character.activeWardrobeKey === key || character.activeOutfit === outfit
+    }));
+  }
   setCharacterDnaSaver(fn) {
     this.dnaSaveRequester = fn;
     this.dossiers.setCharacterDnaSaver(fn);
@@ -51680,6 +51919,22 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
   border-color: transparent;
   font-weight: 750;
 }
+.dir-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dir-target img {
+  width: 56px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.dir-controls { display: grid; gap: 10px; }
+.dir-sheet [hidden] { display: none; }
+.dir-pill:disabled { cursor: default; opacity: 0.6; }
 .dir-empty {
   font-size: 12px;
   color: var(--vn-shell-muted, #9cb5a8);
@@ -51699,6 +51954,14 @@ class QuickDirectorPopover {
   shadow;
   closeBtn;
   outfitRow;
+  picture;
+  targetStatus;
+  controls;
+  openArtworkBtn;
+  prepareBtn;
+  direction;
+  staged;
+  selectedButton;
   openState = false;
   opener = null;
   constructor(options) {
@@ -51725,6 +51988,8 @@ class QuickDirectorPopover {
     sheet.addEventListener("click", (event) => event.stopPropagation());
     sheet.addEventListener("keydown", (event) => {
       event.stopPropagation();
+      if (event.key === "Tab")
+        trapFocusWithin(sheet, event, this.shadow.activeElement);
       if (event.key === "Escape") {
         event.preventDefault();
         this.close();
@@ -51734,7 +51999,7 @@ class QuickDirectorPopover {
     head.className = "dir-head";
     const title = document.createElement("span");
     title.className = "dir-title";
-    title.textContent = "Steer / Reshoot Scene";
+    title.textContent = "Quick Director";
     this.closeBtn = document.createElement("button");
     this.closeBtn.type = "button";
     this.closeBtn.className = "dir-close";
@@ -51742,16 +52007,32 @@ class QuickDirectorPopover {
     this.closeBtn.textContent = "×";
     this.closeBtn.addEventListener("click", () => this.close());
     head.append(title, this.closeBtn);
+    const target2 = document.createElement("div");
+    target2.className = "dir-target";
+    this.picture = document.createElement("img");
+    this.picture.alt = "";
+    this.picture.hidden = true;
+    this.picture.addEventListener("error", () => {
+      this.picture.hidden = true;
+    });
+    this.targetStatus = document.createElement("span");
+    target2.append(this.picture, this.targetStatus);
+    this.openArtworkBtn = document.createElement("button");
+    this.openArtworkBtn.type = "button";
+    this.openArtworkBtn.className = "dir-pill";
+    this.openArtworkBtn.addEventListener("click", () => {
+      this.close(false);
+      this.options.onOpenArtwork();
+    });
     const regenRow = document.createElement("div");
     regenRow.className = "dir-row";
     const regenBtn = document.createElement("button");
     regenBtn.type = "button";
-    regenBtn.className = "dir-pill primary";
+    regenBtn.className = "dir-pill";
     regenBtn.dataset.dirAction = "regenerate";
-    regenBtn.textContent = "↻ Regenerate Scene";
+    regenBtn.textContent = "Fresh composition";
     regenBtn.addEventListener("click", () => {
-      this.options.onDirect({ kind: "regenerate", label: "Regenerate", guidance: "Fresh composition with stronger detail" });
-      this.close();
+      this.preview(regenBtn, { kind: "regenerate", label: "Fresh composition", guidance: "Fresh composition with stronger detail" });
     });
     regenRow.appendChild(regenBtn);
     const makeGroup = (heading, items) => {
@@ -51769,8 +52050,7 @@ class QuickDirectorPopover {
         btn.dataset.dirLabel = item.label;
         btn.textContent = item.label;
         btn.addEventListener("click", () => {
-          this.options.onDirect({ kind: item.kind, label: item.label, guidance: item.guidance });
-          this.close();
+          this.preview(btn, item);
         });
         row.appendChild(btn);
       }
@@ -51792,15 +52072,53 @@ class QuickDirectorPopover {
     const outfitWrap = document.createElement("div");
     const outfitLbl = document.createElement("div");
     outfitLbl.className = "dir-label";
-    outfitLbl.textContent = "Swap Outfit";
+    outfitLbl.textContent = "Outfit for this picture";
     this.outfitRow = document.createElement("div");
     this.outfitRow.className = "dir-row";
     outfitWrap.append(outfitLbl, this.outfitRow);
-    sheet.append(head, regenRow, shotGroup, relightGroup, outfitWrap);
+    this.controls = document.createElement("div");
+    this.controls.className = "dir-controls";
+    this.direction = document.createElement("div");
+    this.direction.className = "dir-empty";
+    this.direction.setAttribute("role", "status");
+    this.prepareBtn = document.createElement("button");
+    this.prepareBtn.type = "button";
+    this.prepareBtn.dataset.dirPrepare = "";
+    this.prepareBtn.className = "dir-pill primary";
+    this.prepareBtn.textContent = "Prepare revised prompt";
+    this.prepareBtn.addEventListener("click", () => {
+      const command = this.staged;
+      if (!command || this.controls.hidden)
+        return;
+      this.close();
+      this.options.onDirect(command);
+    });
+    this.controls.append(regenRow, shotGroup, relightGroup, outfitWrap, this.direction, this.prepareBtn);
+    sheet.append(head, target2, this.controls, this.openArtworkBtn);
     backdrop.appendChild(sheet);
     this.shadow.append(style, backdrop);
     options.mount.appendChild(this.host);
     this.setOutfits([]);
+  }
+  setPicture(picture) {
+    const unavailable = "unavailable" in picture;
+    this.controls.hidden = unavailable;
+    this.openArtworkBtn.hidden = !unavailable;
+    this.openArtworkBtn.textContent = unavailable ? picture.artworkLabel : "";
+    this.targetStatus.textContent = unavailable ? picture.unavailable : picture.label;
+    this.picture.hidden = unavailable;
+    if (unavailable)
+      this.picture.removeAttribute("src");
+    else
+      this.picture.src = picture.imageUrl;
+  }
+  preview(button, command) {
+    this.selectedButton?.setAttribute("aria-pressed", "false");
+    this.selectedButton = button;
+    button.setAttribute("aria-pressed", "true");
+    this.staged = command;
+    this.direction.textContent = command.guidance;
+    this.prepareBtn.disabled = false;
   }
   setOutfits(outfits) {
     this.outfitRow.replaceChildren();
@@ -51816,18 +52134,22 @@ class QuickDirectorPopover {
       btn.type = "button";
       btn.className = "dir-pill";
       btn.dataset.dirOutfit = opt.key;
-      btn.setAttribute("aria-pressed", opt.active ? "true" : "false");
+      btn.title = opt.active ? "Current saved outfit" : "";
       btn.textContent = `${opt.charName}: ${opt.key}`;
+      const guidance = "Change " + opt.charName + "'s outfit to: " + opt.outfit;
+      if (guidance.length > 400) {
+        btn.disabled = true;
+        btn.title = "This outfit is too long for Quick Director. Use Artwork Studio to edit the full prompt.";
+      }
       btn.addEventListener("click", () => {
-        this.options.onDirect({
+        this.preview(btn, {
           kind: "outfit",
           label: opt.key,
-          guidance: `Change ${opt.charName}'s outfit to: ${opt.outfit}`,
+          guidance,
           charId: opt.charId,
           wardrobeKey: opt.key,
           outfit: opt.outfit
         });
-        this.close();
       });
       this.outfitRow.appendChild(btn);
     }
@@ -51843,10 +52165,16 @@ class QuickDirectorPopover {
   }
   open(opener) {
     this.opener = opener ?? null;
+    this.staged = undefined;
+    this.selectedButton?.setAttribute("aria-pressed", "false");
+    this.selectedButton = undefined;
+    this.direction.textContent = "Choose a direction, then prepare a prompt for review.";
+    this.prepareBtn.disabled = true;
     this.openState = true;
     this.host.dataset.open = "true";
     this.host.style.display = "block";
     this.closeBtn.focus?.({ preventScroll: true });
+    this.options.onVisibility?.(true);
   }
   close(restoreFocus = true) {
     if (!this.openState)
@@ -51857,6 +52185,7 @@ class QuickDirectorPopover {
     if (restoreFocus)
       this.opener?.focus?.({ preventScroll: true });
     this.opener = null;
+    this.options.onVisibility?.(false);
   }
   destroy() {
     this.host.remove();
@@ -59185,6 +59514,3641 @@ var READER_SETTINGS_CSS = `
 :host([data-vn-workspace-tool]) [data-home] h1{font-size:1.5rem}
 `;
 
+// src/backend/runtime/prompt-budget.ts
+var SceneComplexitySchema = exports_external.enum([
+  "simple",
+  "standard",
+  "complex",
+  "dense"
+]);
+function classifySceneComplexity(options) {
+  const { brief, shotSpec, cue } = options;
+  if (brief.subjectMode === "none") {
+    if (shotSpec?.intent === "detail" || shotSpec?.camera.shotSize === "macro") {
+      return "simple";
+    }
+    const envLength = (brief.scene?.length ?? 0) + (brief.lighting?.length ?? 0);
+    return envLength > 300 ? "standard" : "simple";
+  }
+  if (brief.subjectMode === "ensemble") {
+    const memberLines = brief.subjects.split(`
+`).filter((line) => line.includes(":"));
+    const count2 = memberLines.length;
+    if (count2 >= 4)
+      return "dense";
+    if (count2 >= 2)
+      return "complex";
+    return "standard";
+  }
+  const hasAction = Boolean(brief.action && brief.action.length > 50);
+  const actionVal = cue?.action;
+  const hasProps = Boolean(typeof actionVal === "object" && actionVal !== null && "object" in actionVal && actionVal.object);
+  const isActionIntent = shotSpec?.intent === "action" || shotSpec?.intent === "confrontation";
+  const isDenseIntent = shotSpec?.intent === "manga-page" || shotSpec?.intent === "ensemble";
+  if (isDenseIntent)
+    return "dense";
+  if (isActionIntent && (hasAction || hasProps)) {
+    return "complex";
+  }
+  if (hasAction && hasProps) {
+    return "complex";
+  }
+  if (hasAction || brief.scene && brief.scene.length > 150) {
+    return "standard";
+  }
+  if (shotSpec?.intent === "portrait" || shotSpec?.intent === "reaction") {
+    return "simple";
+  }
+  return "standard";
+}
+function resolveUsefulPromptBudget(profile, complexity, promptExpansionEnabled, userBudgetOverride, detailLevel) {
+  const hardLimit = profile.hardMaxCharacters;
+  let softRange = [...profile.softBudgets[complexity]];
+  if (detailLevel === "detailed") {
+    softRange = [Math.round(softRange[0] * 1.2), Math.round(softRange[1] * 1.35)];
+  } else if (detailLevel === "compact") {
+    softRange = [Math.round(softRange[0] * 0.75), Math.round(softRange[1] * 0.8)];
+  }
+  if (profile.dialect === "qwen-image-3" && promptExpansionEnabled) {
+    softRange = [...softRange];
+  }
+  const headroom = Math.min(100, Math.floor(hardLimit * 0.05));
+  const safeHardCeiling = Math.max(100, hardLimit - headroom);
+  let targetMax = Math.min(softRange[1], safeHardCeiling);
+  let targetMin = Math.min(softRange[0], targetMax);
+  let userOverrideApplied = false;
+  if (typeof userBudgetOverride === "number" && userBudgetOverride > 0) {
+    userOverrideApplied = true;
+    targetMax = Math.min(userBudgetOverride, safeHardCeiling);
+    targetMin = Math.min(targetMin, targetMax);
+    softRange = [targetMin, targetMax];
+  }
+  let wordCountGuard;
+  if (profile.dialect === "seedream-5") {
+    wordCountGuard = 600;
+  }
+  return {
+    complexity,
+    softRange: [targetMin, targetMax],
+    hardLimit,
+    maxTarget: targetMax,
+    wordCountGuard,
+    userOverrideApplied
+  };
+}
+
+// src/shared/image-prompt-profile-v2.ts
+var PromptDialectIdSchema = exports_external.enum([
+  "flux3-klein",
+  "flux3",
+  "gpt-image-2.5",
+  "grok-imagine-2",
+  "qwen-image-3",
+  "nano-banana-2.1",
+  "seedream-5",
+  "anima",
+  "novelai",
+  "generic-prose",
+  "generic-tags",
+  "ideogram-v4"
+]);
+var NegativePolicySchema = exports_external.enum([
+  "native",
+  "positive-only",
+  "unknown"
+]);
+var SoftBudgetsSchema = exports_external.object({
+  simple: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)]),
+  standard: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)]),
+  complex: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)]),
+  dense: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)])
+}).strict();
+var ProfileFeaturesSchema = exports_external.object({
+  references: exports_external.boolean().optional(),
+  layoutBoxes: exports_external.boolean().optional(),
+  exactText: exports_external.boolean().optional(),
+  thinking: exports_external.boolean().optional()
+}).strict();
+var ImagePromptProfileV2Schema = exports_external.object({
+  version: exports_external.literal(2),
+  exactModel: exports_external.string().min(1).max(256),
+  family: exports_external.string().min(1).max(64),
+  dialect: PromptDialectIdSchema,
+  serializerRevision: exports_external.string().min(1).max(64),
+  hardMaxCharacters: exports_external.number().int().min(256).max(65000),
+  capabilitySource: exports_external.enum(["live", "catalogue", "fallback"]),
+  negativePolicy: NegativePolicySchema,
+  softBudgets: SoftBudgetsSchema,
+  promptExpansion: exports_external.object({
+    supported: exports_external.boolean(),
+    enabled: exports_external.boolean().optional()
+  }).strict().optional(),
+  features: ProfileFeaturesSchema,
+  ideogramMode: exports_external.enum(["json", "structured-prose"]).optional(),
+  outputCapabilities: ModelOutputCapabilitiesSchema.optional(),
+  guidance: exports_external.string().max(2400).optional()
+}).strict();
+var V2_SERIALIZER_REVISION = "2026.10-rev1";
+var DIALECT_BUDGETS = {
+  "flux3-klein": {
+    simple: [1100, 2600],
+    standard: [1400, 3200],
+    complex: [1800, 3600],
+    dense: [2100, 4200]
+  },
+  flux3: {
+    simple: [1000, 2400],
+    standard: [1300, 3000],
+    complex: [1700, 3500],
+    dense: [2000, 4000]
+  },
+  "gpt-image-2.5": {
+    simple: [950, 2300],
+    standard: [1300, 3000],
+    complex: [1650, 3500],
+    dense: [2000, 4200]
+  },
+  "grok-imagine-2": {
+    simple: [650, 1800],
+    standard: [950, 2400],
+    complex: [1200, 2900],
+    dense: [1500, 3400]
+  },
+  "qwen-image-3": {
+    simple: [350, 750],
+    standard: [480, 760],
+    complex: [580, 760],
+    dense: [640, 760]
+  },
+  "nano-banana-2.1": {
+    simple: [950, 2200],
+    standard: [1350, 2800],
+    complex: [1700, 3400],
+    dense: [2100, 4000]
+  },
+  "seedream-5": {
+    simple: [850, 2200],
+    standard: [1200, 2800],
+    complex: [1500, 3300],
+    dense: [1850, 3800]
+  },
+  anima: {
+    simple: [350, 1000],
+    standard: [550, 1350],
+    complex: [750, 1700],
+    dense: [950, 2100]
+  },
+  novelai: {
+    simple: [350, 1000],
+    standard: [550, 1350],
+    complex: [750, 1750],
+    dense: [950, 2100]
+  },
+  "generic-prose": {
+    simple: [850, 2200],
+    standard: [1250, 2800],
+    complex: [1550, 3200],
+    dense: [1850, 3600]
+  },
+  "generic-tags": {
+    simple: [350, 950],
+    standard: [500, 1300],
+    complex: [700, 1650],
+    dense: [850, 2000]
+  },
+  "ideogram-v4": {
+    simple: [800, 2500],
+    standard: [1500, 4500],
+    complex: [2500, 7000],
+    dense: [3500, 9500]
+  }
+};
+var QWEN3_NO_EXPANSION_BUDGETS = {
+  simple: [600, 1200],
+  standard: [750, 1500],
+  complex: [900, 1750],
+  dense: [1050, 2000]
+};
+function resolveRouteDialect(provider, modelId, parameters, settings) {
+  const normModel = modelId.trim().toLowerCase();
+  const normProvider = provider.trim().toLowerCase();
+  const ideogramMode = settings?.ideogramPromptMode ?? "auto";
+  const flux3KleinMode = settings?.flux3KleinPromptMode ?? "auto";
+  if (flux3KleinMode === "pup-caption") {
+    return {
+      dialect: "flux3-klein",
+      family: "flux",
+      negativePolicy: "positive-only",
+      features: { references: true, layoutBoxes: true, exactText: true }
+    };
+  }
+  if (ideogramMode === "json" || ideogramMode === "structured-prose") {
+    return {
+      dialect: "ideogram-v4",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
+  if (ideogramMode === "off" && normModel.includes("ideogram")) {
+    return {
+      dialect: "generic-prose",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (flux3KleinMode === "off" && (normModel === "blackforestlabs/flux-3/klein/text-to-image" || normModel === "blackforestlabs/flux-3/klein/edit-image" || normModel === "blackforestlabs/flux-3/klein/base/text-to-image" || normModel === "blackforestlabs/flux-3/klein/base/edit-image" || /(?:^|[\/._-])flux[-_.]?3.*klein/.test(normModel))) {
+    return {
+      dialect: "generic-prose",
+      family: "flux",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel.includes("ideogram")) {
+    return {
+      dialect: "ideogram-v4",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
+  if (normProvider === "novelai") {
+    return {
+      dialect: "novelai",
+      family: "novelai",
+      negativePolicy: "native",
+      features: { references: false }
+    };
+  }
+  if (normModel === "blackforestlabs/flux-3/klein/text-to-image" || normModel === "blackforestlabs/flux-3/klein/edit-image" || normModel === "blackforestlabs/flux-3/klein/base/text-to-image" || normModel === "blackforestlabs/flux-3/klein/base/edit-image" || /(?:^|[\/._-])flux[-_.]?3.*klein/.test(normModel)) {
+    return {
+      dialect: "flux3-klein",
+      family: "flux",
+      negativePolicy: "positive-only",
+      features: { references: true, layoutBoxes: true, exactText: true }
+    };
+  }
+  if (normModel === "black-forest-labs/flux-3/text-to-image" || normModel === "blackforestlabs/flux-3/pro/text-to-image" || normModel === "blackforestlabs/flux-3/dev/text-to-image" || /(?:^|[\/._-])flux[-_.]?3/.test(normModel)) {
+    return {
+      dialect: "flux3",
+      family: "flux",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel.includes("flux-2") || normModel.includes("flux")) {
+    return {
+      dialect: "generic-prose",
+      family: "flux",
+      negativePolicy: normModel.startsWith("flux-2-") ? "positive-only" : "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel === "openai/gpt-image-2.5/flare/text-to-image" || normModel === "openai/gpt-image-2.5/flare/edit" || normModel === "openai/gpt-image-2.5/sunburst/text-to-image" || normModel === "openai/gpt-image-2.5/sunburst/edit" || normModel.includes("gpt-image-2.5")) {
+    return {
+      dialect: "gpt-image-2.5",
+      family: "gpt-image",
+      negativePolicy: "positive-only",
+      features: { exactText: true, references: true }
+    };
+  }
+  if (!normModel.includes("animagine") && (normModel === "xai/grok-imagine-image/v2.0/text-to-image" || normModel === "xai/grok-imagine-image/v2.0/edit" || normModel === "grok-imagine-image/v2.0" || /(?:^|[\/._-])grok.*imagine.*(?:v?2|2\.0)/.test(normModel))) {
+    return {
+      dialect: "grok-imagine-2",
+      family: "grok",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel === "qwen-image-3" || normModel === "qwen-image-3-pro" || /^qwen-image-3(?:-pro)?$/.test(normModel)) {
+    const expansionEnabled = parameters?.prompt_expansion !== false;
+    return {
+      dialect: "qwen-image-3",
+      family: "qwen",
+      negativePolicy: "native",
+      features: { references: true, exactText: true },
+      promptExpansion: {
+        supported: true,
+        enabled: expansionEnabled
+      }
+    };
+  }
+  if (/qwen/.test(normModel)) {
+    return {
+      dialect: "generic-prose",
+      family: "qwen",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel === "nano-banana-2.1" || normModel === "gemini-nano-banana-2.1" || normModel === "google/nano-banana-2.1" || normModel.includes("nano-banana-2.1") || /^(?:google\/)?(?:gemini-)?nano-banana-2\.1(?:\/.*)?$/.test(normModel)) {
+    return {
+      dialect: "nano-banana-2.1",
+      family: "nano-banana",
+      negativePolicy: "positive-only",
+      features: { references: true, thinking: true, exactText: true }
+    };
+  }
+  if (normModel === "bytedance/seedream-v5.0-pro" || normModel === "bytedance/seedream-v5.0-pro/edit" || normModel === "seedream-5-alternative" || normModel === "seedream-5-alternative/edit" || /seedream[-_]?(?:v?5(?:\.0)?(?:-pro)?)/.test(normModel)) {
+    return {
+      dialect: "seedream-5",
+      family: "seedream",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel === "anima/text-to-image" || normModel === "anima/text-to-image-lora" || /^anima(?:\/|$)/.test(normModel)) {
+    return {
+      dialect: "anima",
+      family: "anima",
+      negativePolicy: "positive-only",
+      features: { references: false }
+    };
+  }
+  if (/(?:danbooru|pony|illustrious|animagine|aniflatmix|artiwaifu|wai-illustrious|hentai|anime|tags)/.test(normModel)) {
+    return {
+      dialect: "generic-tags",
+      family: normModel.includes("pony") ? "pony" : normModel.includes("illustrious") ? "illustrious" : "anime-generic",
+      negativePolicy: "unknown",
+      features: {}
+    };
+  }
+  if (/recraft/.test(normModel)) {
+    return {
+      dialect: "generic-prose",
+      family: "recraft",
+      negativePolicy: "positive-only",
+      features: { references: true, exactText: true }
+    };
+  }
+  return {
+    dialect: "generic-prose",
+    family: "generic",
+    negativePolicy: "unknown",
+    features: {}
+  };
+}
+function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits, liveOutputs, parameters) {
+  const p = provider?.trim().toLowerCase() ?? "";
+  const rawModel = model?.trim() ?? "unknown";
+  const id7 = rawModel;
+  const resolution = resolveRouteDialect(p, id7, parameters, settings);
+  const dialect = resolution.dialect;
+  const family2 = resolution.family;
+  const liveLimit = p === "nanogpt" ? liveLimits?.get(id7) : undefined;
+  const catalogueLimit = p === "nanogpt" && Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id7) ? NANOGPT_PROMPT_CAPABILITIES[id7] : undefined;
+  const providerLimit = liveLimit ?? catalogueLimit;
+  let capabilitySource = "fallback";
+  if (liveLimit !== undefined) {
+    capabilitySource = "live";
+  } else if (catalogueLimit !== undefined) {
+    capabilitySource = "catalogue";
+  }
+  const dialectFallbackCeiling = {
+    "flux3-klein": 3000,
+    flux3: 3000,
+    "gpt-image-2.5": 32000,
+    "grok-imagine-2": 8000,
+    "qwen-image-3": 800,
+    "nano-banana-2.1": 50000,
+    "seedream-5": 3000,
+    anima: 3000,
+    novelai: 3000,
+    "generic-prose": 3000,
+    "generic-tags": 3000,
+    "ideogram-v4": 1e4
+  };
+  const defaultCeiling = providerLimit ?? dialectFallbackCeiling[dialect] ?? 3000;
+  let hardMaxCharacters = defaultCeiling;
+  if (settings.imagePromptBudgetOverride && typeof settings.imagePromptBudget === "number" && Number.isFinite(settings.imagePromptBudget)) {
+    const manualBudget = Math.min(65000, Math.max(256, Math.trunc(settings.imagePromptBudget)));
+    hardMaxCharacters = providerLimit !== undefined ? Math.min(manualBudget, providerLimit) : manualBudget;
+  }
+  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id7) : undefined;
+  const catalogueOutput = p === "nanogpt" && Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id7) ? NANOGPT_OUTPUT_CAPABILITIES[id7] : undefined;
+  const outputCapabilities = liveOutput ?? catalogueOutput;
+  let softBudgets = DIALECT_BUDGETS[dialect];
+  if (dialect === "qwen-image-3" && resolution.promptExpansion?.enabled === false) {
+    softBudgets = QWEN3_NO_EXPANSION_BUDGETS;
+  }
+  return ImagePromptProfileV2Schema.parse({
+    version: 2,
+    exactModel: rawModel,
+    family: family2,
+    dialect,
+    serializerRevision: V2_SERIALIZER_REVISION,
+    hardMaxCharacters,
+    capabilitySource,
+    negativePolicy: resolution.negativePolicy,
+    softBudgets,
+    ...resolution.promptExpansion ? { promptExpansion: resolution.promptExpansion } : {},
+    features: resolution.features,
+    ...dialect === "ideogram-v4" ? { ideogramMode: settings.ideogramPromptMode === "structured-prose" ? "structured-prose" : "json" } : {},
+    ...outputCapabilities ? { outputCapabilities } : {},
+    guidance: `Dialect: ${dialect}. Model-aware Prompt Engine v2.`
+  });
+}
+
+// src/shared/prompt-document.ts
+var PromptPrioritySchema = exports_external.union([
+  exports_external.literal(0),
+  exports_external.literal(1),
+  exports_external.literal(2),
+  exports_external.literal(3)
+]);
+var PromptSectionSchema = exports_external.object({
+  id: exports_external.string().min(1).max(100),
+  priority: PromptPrioritySchema,
+  required: exports_external.boolean(),
+  compressible: exports_external.boolean(),
+  text: exports_external.string().max(65000)
+}).strict();
+var PromptDocumentSchema = exports_external.object({
+  dialect: PromptDialectIdSchema,
+  sections: exports_external.array(PromptSectionSchema).max(64),
+  negativeSections: exports_external.array(PromptSectionSchema).max(32),
+  parameterHints: exports_external.record(exports_external.string(), exports_external.unknown()).optional(),
+  warnings: exports_external.array(exports_external.string().max(1000)).max(64)
+}).strict();
+function createPromptDocument(dialect, sections = [], negativeSections = [], parameterHints, warnings = []) {
+  return PromptDocumentSchema.parse({
+    dialect,
+    sections,
+    negativeSections,
+    ...parameterHints ? { parameterHints } : {},
+    warnings
+  });
+}
+function assemblePromptSections(sections, separator = `
+
+`) {
+  return sections.map((s) => s.text.trim()).filter((text) => text.length > 0).join(separator);
+}
+
+// src/shared/character.ts
+var POSE_EXPRESSION_CATALOGUE = [
+  {
+    id: "idle",
+    suffix: "standing, relaxed posture, neutral expression"
+  },
+  {
+    id: "speak",
+    suffix: "talking, mouth slightly open, looking at viewer"
+  },
+  {
+    id: "smile",
+    suffix: "gentle smile, eyes relaxed"
+  },
+  {
+    id: "laugh",
+    suffix: "laughing, eyes closed, cheerful"
+  },
+  {
+    id: "think",
+    suffix: "hand on chin, looking off to the side, thoughtful"
+  },
+  {
+    id: "sad",
+    suffix: "sad expression, downcast eyes"
+  },
+  {
+    id: "angry",
+    suffix: "furrowed brow, angry expression"
+  },
+  {
+    id: "surprise",
+    suffix: "wide eyes, surprised expression"
+  },
+  {
+    id: "wave",
+    suffix: "one hand raised in a small wave, smiling"
+  },
+  {
+    id: "shy",
+    suffix: "blushing, glancing away, shy"
+  },
+  {
+    id: "listen",
+    suffix: "attentive listening expression, softly focused eyes"
+  },
+  {
+    id: "contempl",
+    suffix: "subtle contemplative gaze, slight tilt of the head"
+  },
+  {
+    id: "default",
+    suffix: "looking at viewer"
+  },
+  {
+    id: "standing",
+    suffix: "looking at viewer, arms at sides"
+  },
+  {
+    id: "acting_coy",
+    suffix: "looking at viewer, [[turning head, facing to the side]], {{blush}}, {{happy}}, shy, open mouth, raised eyebrows, half-closed eyes, {{hands on own cheeks, hands on own face, hands up}}"
+  },
+  {
+    id: "acting_cute",
+    suffix: "looking at viewer, fingers to cheeks, pointing at self, {{{happy}}}, tareme, puckered lips, puffy cheeks"
+  },
+  {
+    id: "admiring",
+    suffix: "looking at viewer, happy, smile, open mouth, head tilt, {{{{{{{{own hands together, own hands clasped}}}}}}}}, {{{hand on own face, hand on own cheek}}}"
+  },
+  {
+    id: "angry_smiling",
+    suffix: "{{{{closed eyes, ^ ^, >:)}}}}, {{angry}}, {{{{{{{shaded face}}}}}}}, furrowed brow, raised eyebrows, anger vein"
+  },
+  {
+    id: "annoyed",
+    suffix: "looking at viewer, {{half-closed eyes, {{annoyed}}, frown, {{parted lips}}}}, v-shaped eyebrows"
+  },
+  {
+    id: "aroused",
+    suffix: "looking at viewer, {{{{aroused}}}}, heavy breathing, {{{{blush}}}}, half-closed eyes, parted lips, {{furrowed brow}}"
+  },
+  {
+    id: "blushing_shyly",
+    suffix: "looking at viewer, embarrassed, full-face blush, half-closed eyes, {{raised eyebrows}}, {{{{{covering mouth, hand over own mouth, own hands together}}, clenched hands}}}"
+  },
+  {
+    id: "bored",
+    suffix: "looking at viewer, bored, hand on own cheek, {{annoyed}}, frown, {{{{disappointed, raised eyebrows, one eye closed}}}}, open mouth, jitome"
+  },
+  {
+    id: "bridling",
+    suffix: "looking at viewer, {{angry}}, shaded face, {{{{half-closed eyes}}}}, parted lips, clenched teeth, {{frown, sulking, v-shaped eyebrows, veins, arms at sides}}"
+  },
+  {
+    id: "childlike_whining",
+    suffix: "{{{{{{{{closed eyes}}}}}, {{{> <}}}}}}, :<, clenched hands, flying sweatdrops, blush, furrowed brow, [[own hands together]]"
+  },
+  {
+    id: "chuunibyou",
+    suffix: "looking at viewer, {{{{chuunibyou}}}}, {{{double \\m/, crossed wrists, hands up}}}, v-shaped eyebrows, :d, open mouth"
+  },
+  {
+    id: "confused",
+    suffix: "looking at viewer, confused, !?, {{parted lips, :o, furrowed brow, frown, {{raised eyebrows}}, hand on own chest}}, sweat"
+  },
+  {
+    id: "contemptuous",
+    suffix: "looking at viewer, {{{{disgust, expressionless, frown, {{shaded face}}, half-closed eyes, parted lips}}}}, {{arms at sides}}"
+  },
+  {
+    id: "coughing",
+    suffix: "{{{{{{{{closed eyes}}}}}}}}, frown, coughing, sick, {{{{{hand to own mouth}}}}}, open mouth, {{furrowed brow, raised eyebrows}}, {{wavy mouth}}"
+  },
+  {
+    id: "cozy",
+    suffix: "{{{{{{closed eyes}}}}}}, {{{{{{{= =}}}}}}}, happy, {{open mouth, :d}} {{{blush stickers}}}, flower symbol"
+  },
+  {
+    id: "crazy_smiling",
+    suffix: "looking at viewer, {{{{{{shaded face}}}}, crazy smile, constricted pupils, happy, crazy eyes, {{ringed eyes}}}}, open mouth, {{leaning forward}}"
+  },
+  {
+    id: "crying_with_eyes_closed",
+    suffix: "looking down, {{{{{{{{closed eyes}}}}, sad}}}}, frown, crying, tears, {{{{rubbing eyes, wiping tears, open mouth, wavy mouth}}}}, clenched hand"
+  },
+  {
+    id: "crying_with_eyes_open",
+    suffix: "looking at viewer, {{crying, crying with eyes open, tears}}, wavy mouth, {{parted lips, hand on own chest, {{raised eyebrows}}}}"
+  },
+  {
+    id: "curious",
+    suffix: "looking at viewer, curious, ?, :o, {{finger to mouth}}"
+  },
+  {
+    id: "depressed",
+    suffix: "{{looking down}}, half-closed eyes, depressed, frown, {{{{parted lips}}}}, {{shaded face}}, triangle mouth, wavy mouth, raised eyebrows, sad, {{hand to own arm, arm under breasts}}, arm at side, {{{{spoken squiggle}}}}"
+  },
+  {
+    id: "determined",
+    suffix: "looking at viewer, v-shaped eyebrows, smile, {{open mouth}}, clenched hand, arm at side"
+  },
+  {
+    id: "disappointed",
+    suffix: "looking at viewer, disappointed, {{raised eyebrows}}, sigh, {{half-closed eyes}}, annoyed, parted lips, wavy mouth, {{{hand on own arm, holding own arm, hand in own hair}}}, {{squiggle}}"
+  },
+  {
+    id: "disgusted",
+    suffix: "looking at viewer, {{{{{{{shaded face}}}, disgust}}}}, frown, {{{{half-closed eye, uneven eyes}}}}, {{{{{{{hand over own mouth, covering mouth}}}}}}}, {{furrowed brow, raised eyebrows}}, sweat"
+  },
+  {
+    id: "dozing_off",
+    suffix: "{{{{{{{{closed eyes}}}}}}}}, parted lips, drooling, mouth drool"
+  },
+  {
+    id: "embarrassed",
+    suffix: "looking at viewer, {{{embarrassed, @_@, raised eyebrows}}}, furrowed brow, blush, half-closed eyes, wavy mouth, open mouth, {{{{hand to own mouth}}}}"
+  },
+  {
+    id: "enraged",
+    suffix: "looking at viewer, shaded face, {{{{{tsurime}}, furious, constricted pupils, veins, narrowed eyes}}}, {{v-shaped eyebrows, {{furrowed brow}}}}, parted lips, wavy mouth, {{{{scowl}}}}, teeth"
+  },
+  {
+    id: "eureka",
+    suffix: "looking at viewer, {{{{spoken light bulb, sparkle}}}}, open mouth, happy, index finger raised, hand up"
+  },
+  {
+    id: "evil_smiling",
+    suffix: "looking at viewer, {{head down, {{shaded face}}, evil smile, half-closed eyes}}, parted lips, hand on own chin, clenched hand, head tilt"
+  },
+  {
+    id: "excited",
+    suffix: "looking at viewer, {{{{+_+, sparkling eyes}}}}, happy, smile, {{open mouth, :D}}, {{{{{{clenched hands, own hands together}}}}}}, [[hands on own chest]], excited, wide-eyed"
+  },
+  {
+    id: "exhausted",
+    suffix: "looking at viewer, {{exhausted}}, {{{{{bags under eyes}}}}}, [[shded face]], parted lips, wavy mouth, mouth drool, {{{{{sanpaku}}, half-closed eyes}}}, frown, raised eyebrows, messy hair"
+  },
+  {
+    id: "fidgeting_shyly",
+    suffix: "looking down, half-closed eyes, blush, embarrassed, closed mouth, {{{{{index fingers together, fidgeting}}}}}"
+  },
+  {
+    id: "flustered",
+    suffix: "looking at viewer, surprised, {{flustered, embarrassed, shy, blush, raised eyebrows, chestnut mouth}}, {{{{hand in own hair, playing with own hair, twirling hair}}}}, sweat, [[[from side]]]"
+  },
+  {
+    id: "forced_smiling",
+    suffix: "looking at viewer, half-closed eyes, {{closed mouth}}, {{frown, {{furrowed brow}}}}, raised eyebrows, {{{{{{{{smile, :>}}}}}}}}, sweat, nervous, nervous smile"
+  },
+  {
+    id: "full_face_blush",
+    suffix: "looking down, {{full-face blush}}, parted lips, wavy mouth, embarrassed, sweat, @_@, flying sweatdrops, {{{{{{hands on own face, covering face, head steam, steam}}}}}}"
+  },
+  {
+    id: "giggling",
+    suffix: "{{{happy, smile}}}, {{{closed eyes, {{^ ^, hand over own mouth, covering mouth}}}}}, {{+++}}"
+  },
+  {
+    id: "grudging",
+    suffix: "{{{looking to the side}}}, averting eyes, shaded face, sigh, raised eyebrows, jitome, frown, parted lips, {{false smile}}"
+  },
+  {
+    id: "guilty",
+    suffix: "{{looking down}}, half-closed eyes, {{{{{{sad}}, v arms}}}}"
+  },
+  {
+    id: "happy_smiling",
+    suffix: "looking at viewer, {{happy, open mouth, smile, closed eyes}}, {{{hand on own stomach}}}, happy aura"
+  },
+  {
+    id: "happy_tears",
+    suffix: "{{{{{closed eyes}}}}}, happy tears, tears, {{{{rubbing eyes, wiping tears, open mouth, happy, smile}}}}"
+  },
+  {
+    id: "head_bump",
+    suffix: "closed eyes, teardrop, open mouth, wavy mouth, furrowed brow, raised eyebrows, hands on own head, {{{{head bump}}}}, crossed bandaids, injury, head steam"
+  },
+  {
+    id: "indifferent",
+    suffix: "looking at viewer, expressionless, :/, {{{jitome}}}, arms at sides"
+  },
+  {
+    id: "jealous",
+    suffix: "looking at viewer, {{jealous}}, shaded face, anger vein, {{angry}}, expressionless, :<, crossed arms, {{{half-closed eyes}}}, from side, uneven eyes"
+  },
+  {
+    id: "joyful",
+    suffix: "{{{happy}}, closed eyes, smile}, open mouth, {{own hands together, {{palms together, praying}}}}, {{{{{{^ ^}}}}}}"
+  },
+  {
+    id: "laughing",
+    suffix: "{{happy, smile, laughing, closed eyes}}, open mouth, hand over own mouth, {{+++}}"
+  },
+  {
+    id: "looking_away_shyly",
+    suffix: "{{averting eyes}}, looking to the side, embarrassed, blush, closed mouth, shy, {{{finger to cheek, half-closed eyes}}}, averting eyes, raised eyebrows, arm at side"
+  },
+  {
+    id: "lovestruck",
+    suffix: "looking at viewer, blush, happy, smile, tareme, {{{{{{heart-shaped pupils}}}}}}, seductive smile, hand on own chest, {{spoken heart}}, open mouth, loving aura"
+  },
+  {
+    id: "lustful",
+    suffix: "looking at viewer, {{{{shaded face}}, half-closed eyes, glowing eyes}}, {{{{heart-shaped pupils}}}}, naughty face, closed mouth, licking lips, :p, seductive smile, finger to mouth, heavy breathing, arm at side, blush"
+  },
+  {
+    id: "melancholic",
+    suffix: "looking down, head rest, hand on own chin, {{{:<, sad}}}, narrowed eyes"
+  },
+  {
+    id: "middle_finger",
+    suffix: "looking at viewer, {{{{{middle finger}}}}}, furrowed brow, clenched teeth, parted lips, frown, angry, anger vein"
+  },
+  {
+    id: "nervous",
+    suffix: "looking at viewer, half-closed eyes, nervous, sweat, :<, raised eyebrows"
+  },
+  {
+    id: "nervous_pouting",
+    suffix: "looking at viewer, nervous, {{{clenched hands}}}, open mouth, wavy mouth, [[[[v-shaped eyebrows]]]], {{{{@ @}}}}, {{{{sweat}}}}, [[own hands together]]"
+  },
+  {
+    id: "overwhelmed",
+    suffix: "[[looking up]], {{{{@_@}}}}, :o, furrowed brow, {{half-closed eyes, raised eyebrows, drooling, aroused}}"
+  },
+  {
+    id: "play_dumb",
+    suffix: "{{{{looking to the side}}}}, {{wide-eyed}}, {{{{{puckered lips}}}}}, nervous, {{{{sweat}}}}"
+  },
+  {
+    id: "playful_winking",
+    suffix: "looking at viewer, one eye closed, open mouth, happy, smile, raised eyebrows, {{{{{{v over eye, peace sign, > o}}}}}}"
+  },
+  {
+    id: "pleading",
+    suffix: "{{{{palms together, own hands together, praying, {{closed eyes}}}}}}, furrowed brow, {{{{raised eyebrows}}}}, wavy mouth, head down, flying sweatdrops"
+  },
+  {
+    id: "pouting",
+    suffix: "looking at viewer, {{pout, crossed arms}}"
+  },
+  {
+    id: "proud",
+    suffix: "{{{{{{closed eyes}}}}}}, {{smug}}, v-shaped eyebrows, closed mouth, {{{{{hands on own hips}}}}}"
+  },
+  {
+    id: "relieved",
+    suffix: "{{{{{{closed eyes}}}}}}, {{{{{{u u}}}}}}, hands on own chest, own hands together, open mouth"
+  },
+  {
+    id: "scared",
+    suffix: "looking at viewer, {{{{turn pale, scared}}}}, shaded face, {{wavy mouth, open mouth}}, {{{own hands together, hands on own face}}}"
+  },
+  {
+    id: "scared_screaming",
+    suffix: "looking at viewer, {{{{{scared, turn pale, wide-eyed, constricted pupils, tears, teardrop, open mouth, rectangular mouth, jaw drop}}}}}, shaded face, wavy mouth, hands on own face"
+  },
+  {
+    id: "seductive_smiling",
+    suffix: "looking at viewer, seductive smile, {{blush, naughty face}}, {{{finger to mouth, half-closed eyes}}}"
+  },
+  {
+    id: "serious",
+    suffix: "looking at viewer, {{{serious}}}, closed mouth, v-shaped eyebrows, furrowed brow, expressionless"
+  },
+  {
+    id: "shocked",
+    suffix: "looking at viewer, furrowed brow, {{surprised, wide-eyed, confused, {{constricted pupils, hands up}}, open mouth, rectangular mouth, wavy mouth, shaded face, constricted pupils, ^^^, !?}}"
+  },
+  {
+    id: "sleepy",
+    suffix: "looking at viewer, {{{sleepy, rubbing eyes, :o, one eye closed, half-closed eyes}}}, arm at side"
+  },
+  {
+    id: "smiling",
+    suffix: "looking at viewer, smile, closed mouth, tareme"
+  },
+  {
+    id: "smirk",
+    suffix: "looking at viewer, {{smirk}}, furrowed brow, closed mouth, {{jitome}}"
+  },
+  {
+    id: "smug",
+    suffix: "looking at viewer, {{smug}}, smirk, :3, closed mouth, {{{crossed arms}}}, [[from side]]"
+  },
+  {
+    id: "sniggering",
+    suffix: "looking at viewer, smirk, {{{smile, {{wavy mouth}}}}}, half-closed eyes, tareme, closed mouth, hand over own mouth, covering mouth, raised eyebrows"
+  },
+  {
+    id: "spacey",
+    suffix: "looking at viewer, expressionless, {{{{o_o, white eyes, no pupils, blank eyes}}}}, :o, jitome, {{arms at sides}}"
+  },
+  {
+    id: "stretching",
+    suffix: "closed eyes, {{{{stretching, arms up}}, arm behind head}}, furrowed brow"
+  },
+  {
+    id: "stupefied",
+    suffix: "looking at viewer, {{open mouth, rectangular mouth, {{{mouth drool, jaw drop}}}, {{no pupils, white eyes, wide-eyed}}, {{furrowed brow}}}}, frown, confused, !?"
+  },
+  {
+    id: "surprised",
+    suffix: "looking at viewer, surprised, open mouth, {{wide-eyed, hand to own mouth, hand on own face, ^^^}}"
+  },
+  {
+    id: "suspicious",
+    suffix: "{{looking at viewer}}, {{{{jitome}}}}, :<, closed mouth, raised eyebrow, uneven eyes, frown, v-shaped eyebrows, furrowed brow, {{{stroking own chin}}}, hand on own chin"
+  },
+  {
+    id: "taunting",
+    suffix: "looking at viewer, doyagao, {{akanbe, eyelid pull, {{:p}}, tongue out}}, raised eyebrows"
+  },
+  {
+    id: "teary_pouting",
+    suffix: "looking at viewer, , tearing up, pout, :i, furrowed brow, raised eyebrows, {{{clenched hands, own hands together}}}"
+  },
+  {
+    id: "thinking",
+    suffix: "{{{looking up}}}, frown, {{{{hand on own chin}}, stroking own chin, thinking, furrowed brow}}, ..."
+  },
+  {
+    id: "tormented",
+    suffix: "{{black eyes, wavy eyes, {{squiggle eyes}}}}, constricted pupils, looking down, furrowed brow, {{{{shaded face, scared, trembling}}}}, {{hands on own face}}, parted lips, despair, {{tears, streaming tears, sweat}}, gloom (expression)"
+  },
+  {
+    id: "worried",
+    suffix: "looking at viewer, worried, confused, sweat, parted lips, wavy mouth, furrowed brow, {{{raised eyebrows, own hands together, {{{clenched hands}}}}}}"
+  }
+];
+var FALLBACK_POSE = POSE_EXPRESSION_CATALOGUE[0];
+var ANIME_EMOTICON_TAG_RE = /^(?:\^+(?:\s*\^+)*|!+\?+|\?+!+|!+|\?+|>+\s*<+|>+:\(|>+:\)|:<|;\)|:\)|:\(|~+|\*+|@_@|o_o|x_x)$/i;
+var ANIME_TROPES_FOR_PROSE_RE = /^(?:rectangular mouth|wavy mouth|dot mouth|triangle mouth|cat mouth|chestnut mouth|split mouth|sideways mouth|shaded face|anger vein|veins|flying sweatdrops|sweatdrop|sweat|tareme|jitome|tsurime|sanpaku|eyeball|constricted pupils|sparkling eyes|star-shaped pupils|heart-shaped pupils|symbol-shaped pupils|blank eyes|empty eyes|white pupils|horizontal pupils|slit pupils|ringed eyes|full-face blush|nosebleed|chibi)$/i;
+function sanitizePoseExpression(rawSuffix, options = {}) {
+  if (!rawSuffix || !rawSuffix.trim())
+    return "";
+  const {
+    keepWeightBrackets = false,
+    stripAnimeTropes = true,
+    hasActiveSceneAction = false
+  } = options;
+  const unwrapped = keepWeightBrackets ? rawSuffix : rawSuffix.replace(/[\{\}\[\]]+/g, "");
+  const seen = new Set;
+  const cleaned = [];
+  for (const part of unwrapped.split(",")) {
+    const token = part.replace(/[\{\}\[\]]+/g, "").trim();
+    if (!token)
+      continue;
+    if (ANIME_EMOTICON_TAG_RE.test(token))
+      continue;
+    if (stripAnimeTropes && ANIME_TROPES_FOR_PROSE_RE.test(token))
+      continue;
+    if (hasActiveSceneAction && /^looking at viewer$/i.test(token))
+      continue;
+    const norm = token.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(norm))
+      continue;
+    seen.add(norm);
+    cleaned.push(keepWeightBrackets ? part.trim() : token);
+  }
+  return cleaned.join(", ");
+}
+
+// src/backend/runtime/prompt-serializers/helpers.ts
+function cleanActionAndDirection(rawAction, rawDirection) {
+  let act = (rawAction ?? "").trim();
+  const dir = (rawDirection ?? "").trim();
+  if (/\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(act)) {
+    const segments2 = act.split(/\s*;\s*/).filter(Boolean);
+    const cleanedSegments = [];
+    const seenSegs = new Set;
+    for (const seg of segments2) {
+      const cleanedSeg = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(seg) ? sanitizePoseExpression(seg, {
+        keepWeightBrackets: false,
+        stripAnimeTropes: true,
+        hasActiveSceneAction: segments2.length > 1 && segments2[0].length > 40
+      }) : seg.trim();
+      if (!cleanedSeg)
+        continue;
+      const norm = cleanedSeg.toLowerCase();
+      if (seenSegs.has(norm))
+        continue;
+      seenSegs.add(norm);
+      cleanedSegments.push(cleanedSeg);
+    }
+    act = cleanedSegments.join("; ");
+  }
+  const cleanDir = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(dir) ? sanitizePoseExpression(dir, {
+    keepWeightBrackets: false,
+    stripAnimeTropes: true,
+    hasActiveSceneAction: act.length > 40
+  }) : dir;
+  if (!act && !cleanDir)
+    return;
+  if (!cleanDir)
+    return act;
+  if (!act)
+    return cleanDir;
+  const actLower = act.toLowerCase();
+  const dirLower = cleanDir.toLowerCase();
+  if (actLower === dirLower || actLower.endsWith(`; ${dirLower}`) || actLower.endsWith(`, ${dirLower}`)) {
+    return act;
+  }
+  return `${act}, ${cleanDir}`;
+}
+function sanitizeQuoteAndUnitNotation(text) {
+  if (!text)
+    return "";
+  return text.replace(/\b(\d+)'\s*(\d+)(?:"|''|’’)?\b/g, "$1 ft $2 in").replace(/\b(\d+)'\b/g, "$1 ft").replace(/\b(\d+)"\b/g, "$1 inches").replace(/"/g, "'").replace(/,\s*\./g, ".").replace(/;\s*\./g, ".").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").trim();
+}
+function formatSceneProse(sceneText) {
+  if (!sceneText)
+    return "";
+  return sanitizeQuoteAndUnitNotation(sceneText).split(/\s*;\s*/).map((part) => part.trim().replace(/\.+$/, "")).filter(Boolean).join(", ").replace(/,\s*\./g, ".").replace(/\s+/g, " ").trim();
+}
+function parseSubjectsFromBrief(brief, cue) {
+  if (brief.subjectMode === "none")
+    return [];
+  const isNarrativeUndressed = /\b(?:naked|nude|undressed|bare skin|unclothed|topless|stripping|in the bath|in the shower)\b/i.test(`${brief.action} ${brief.scene}`);
+  if (brief.subjectMode === "ensemble") {
+    const lines = brief.subjects.split(`
+`).filter((line) => line.includes(":"));
+    if (lines.length > 0) {
+      return lines.map((line) => {
+        const colon = line.indexOf(":");
+        const name2 = line.slice(0, colon).trim();
+        const rawRest = line.slice(colon + 1).trim();
+        const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
+        const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
+        let appearance = sanitizedRest;
+        let attire2 = undefined;
+        if (wearingMatch) {
+          appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
+          attire2 = wearingMatch[1].trim();
+        } else {
+          const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
+          if (!hasClothing && !isNarrativeUndressed) {
+            attire2 = "scene-appropriate casual clothing";
+          }
+        }
+        return {
+          name: name2,
+          appearance,
+          attire: attire2
+        };
+      });
+    }
+    if (brief.subjects.trim()) {
+      const names = brief.subjects.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+      if (names.length > 0) {
+        return names.map((name2) => ({
+          name: name2,
+          appearance: "distinct physical features",
+          attire: isNarrativeUndressed ? undefined : "scene-appropriate casual clothing"
+        }));
+      }
+    }
+  }
+  const name = brief.subjectPreparation?.name || cue?.character || "Subject";
+  const rawAppearance = brief.subjectPreparation?.identity || cue?.resolvedIdentity || brief.subjects;
+  const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
+  let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
+  if (!attire) {
+    const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedAppearance);
+    if (!hasClothing && !isNarrativeUndressed) {
+      attire = "everyday clothing suitable for the scene";
+    }
+  }
+  const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
+  return [{
+    name,
+    appearance: sanitizedAppearance,
+    attire,
+    action: action ? sanitizeQuoteAndUnitNotation(action) : undefined
+  }];
+}
+function formatCameraFraming(shotSpec, styleDNA) {
+  const parts = [];
+  const customStyleText = [styleDNA?.prefix, styleDNA?.suffix].filter(Boolean).join(" ").toLowerCase();
+  const hasCustomLens = Boolean(customStyleText && /\b(?:\d+mm|wide-angle|wide angle|smartphone lens|telephoto|fisheye)\b/i.test(customStyleText));
+  const hasCustomDof = Boolean(customStyleText && /\b(?:depth of field|deep focus|shallow focus|background remains in focus|without cinematic lens blur|no bokeh)\b/i.test(customStyleText));
+  const hasCustomAngle = Boolean(customStyleText && /\b(?:eye-level|eye level|tilted horizon|off-center framing|low-angle|high-angle|overhead)\b/i.test(customStyleText));
+  const sizeMap = {
+    "extreme-close-up": "extreme close-up shot",
+    "close-up": "close-up shot",
+    "medium-close-up": "medium close-up framing",
+    medium: "medium shot",
+    "medium-wide": "medium-wide shot",
+    "full-body": "full-body shot",
+    wide: "wide shot",
+    establishing: "wide establishing shot",
+    macro: "macro detail close-up"
+  };
+  parts.push(sizeMap[shotSpec.camera.shotSize] || `${shotSpec.camera.shotSize} shot`);
+  if (!hasCustomAngle) {
+    const angleMap = {
+      "eye-level": "eye-level angle",
+      "low-angle": "low-angle viewpoint",
+      "high-angle": "high-angle viewpoint",
+      overhead: "overhead bird's-eye view",
+      "ground-level": "ground-level low perspective",
+      "three-quarter": "three-quarter view",
+      profile: "side profile view",
+      "over-the-shoulder": "over-the-shoulder perspective"
+    };
+    parts.push(angleMap[shotSpec.camera.angle] || shotSpec.camera.angle);
+  }
+  if (!hasCustomLens && shotSpec.camera.lens && shotSpec.camera.lens !== "unspecified") {
+    const lensMap = {
+      ultrawide: "ultrawide lens feel",
+      wide: "wide-angle lens",
+      normal: "natural 50mm lens perspective",
+      portrait: "portrait focal length",
+      telephoto: "telephoto lens compression",
+      macro: "macro lens magnification"
+    };
+    parts.push(lensMap[shotSpec.camera.lens] || `${shotSpec.camera.lens} lens`);
+  }
+  if (!hasCustomDof && shotSpec.camera.depthOfField) {
+    const dofMap = {
+      shallow: "shallow depth of field with gentle background blur",
+      moderate: "moderate depth of field",
+      deep: "deep focus across all layers",
+      selective: "selective crisp focus on the main subject"
+    };
+    parts.push(dofMap[shotSpec.camera.depthOfField] || `${shotSpec.camera.depthOfField} depth of field`);
+  }
+  if (shotSpec.crop) {
+    parts.push(shotSpec.crop);
+  }
+  return parts.join(", ");
+}
+function formatSpatialPlacements(shotSpec) {
+  const placements = shotSpec.composition.subjectPlacements;
+  if (!placements || placements.length <= 1) {
+    return "";
+  }
+  const hasRichBlocking = Boolean(shotSpec.composition.stagingNote) || placements.some((p) => Boolean(p.blocking));
+  if (!hasRichBlocking) {
+    const descriptions2 = placements.map((p) => {
+      const posParts = [];
+      if (p.depth)
+        posParts.push(`in the ${p.depth}`);
+      if (p.horizontal)
+        posParts.push(`on the ${p.horizontal.replace("-", " ")}`);
+      return `${p.subject} positioned ${posParts.join(", ")}`;
+    });
+    return descriptions2.join("; ");
+  }
+  const descriptions = placements.map((p) => {
+    const depthText = p.depth ? `in the ${p.depth}` : "in the scene";
+    const horizText = p.horizontal ? ` (${p.horizontal.replace("-", " ")})` : "";
+    const blockingText = p.blocking ? `: ${p.blocking.replace(/\.+$/, "")}` : "";
+    return `${p.subject} ${depthText}${horizText}${blockingText}`;
+  });
+  const staging = shotSpec.composition.stagingNote ? `. ${shotSpec.composition.stagingNote.replace(/\.+$/, "")}` : "";
+  return `${descriptions.join("; ")}${staging}`;
+}
+function formatDialogueSafeArea(shotSpec) {
+  if (!shotSpec.safeArea)
+    return null;
+  const edge = shotSpec.safeArea.edge;
+  const pct = Math.round(shotSpec.safeArea.fraction * 100);
+  return `Keep faces, hands and key focal action above the ${edge} ${pct}% of the frame; reserve that region as quiet visual space for the dialogue overlay.`;
+}
+function formatStyleDNAProse(styleDNA) {
+  const parts = [];
+  const cleanMedium = styleDNA.medium?.replace(/[,;:\s]+$/, "").trim();
+  const cleanPrefix = styleDNA.prefix?.replace(/[,;:\s]+$/, "").trim();
+  if (cleanMedium && cleanMedium !== cleanPrefix) {
+    parts.push(cleanMedium);
+  }
+  if (styleDNA.rendering && styleDNA.rendering.length > 0)
+    parts.push(...styleDNA.rendering);
+  if (styleDNA.linework && styleDNA.linework.length > 0)
+    parts.push(...styleDNA.linework);
+  if (styleDNA.shading && styleDNA.shading.length > 0)
+    parts.push(...styleDNA.shading);
+  if (styleDNA.realism && styleDNA.realism.length > 0)
+    parts.push(...styleDNA.realism);
+  if (styleDNA.surface && styleDNA.surface.length > 0)
+    parts.push(...styleDNA.surface);
+  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0)
+    parts.push(...styleDNA.atmosphere);
+  if (styleDNA.lightingOverlay?.type)
+    parts.push(styleDNA.lightingOverlay.type);
+  if (styleDNA.palette && styleDNA.palette.length > 0)
+    parts.push(`palette of ${styleDNA.palette.join(", ")}`);
+  if (styleDNA.texture && styleDNA.texture.length > 0)
+    parts.push(...styleDNA.texture);
+  return parts.join(", ");
+}
+function formatReferenceDirectives(referencePlan) {
+  if (!referencePlan || !referencePlan.references || referencePlan.references.length === 0) {
+    return [];
+  }
+  const hasWireIndices = referencePlan.references.some((ref) => typeof ref.wireIndex === "number");
+  const activeRefs = hasWireIndices ? referencePlan.references.filter((ref) => typeof ref.wireIndex === "number") : referencePlan.references;
+  return activeRefs.map((ref, idx) => {
+    const num = typeof ref.wireIndex === "number" ? ref.wireIndex : idx + 1;
+    if (ref.role === "identity" && ref.subject) {
+      return `Use reference image ${num} specifically for ${ref.subject}'s facial identity and hair; follow the scene prompt for current pose, outfit, and setting.`;
+    }
+    if (ref.role === "clothing" && ref.subject) {
+      return `Use reference image ${num} for ${ref.subject}'s clothing details.`;
+    }
+    if (ref.role === "style") {
+      return `Use reference image ${num} for overall artistic rendering style.`;
+    }
+    return `Use reference image ${num} as a visual reference.`;
+  });
+}
+
+// src/backend/runtime/prompt-serializers/flux3-klein.ts
+function resolveKleinPlacement(placement, idx) {
+  const depth = placement?.depth ?? (idx === 0 ? "foreground" : idx === 1 ? "midground" : "background");
+  const horiz = placement?.horizontal ?? (idx === 0 ? "left" : idx === 1 ? "right" : "center");
+  const xCenterMap = {
+    "far-left": 0.18,
+    left: 0.29,
+    center: 0.5,
+    right: 0.71,
+    "far-right": 0.82
+  };
+  const depthBand = {
+    foreground: [0.16, 0.9, 0.34],
+    midground: [0.22, 0.78, 0.26],
+    background: [0.14, 0.58, 0.18]
+  };
+  const [yMin, yMax, width] = depthBand[depth];
+  const centerX = xCenterMap[horiz] ?? 0.5;
+  const xMin = Number(Math.max(0.04, Math.min(0.96 - width, centerX - width / 2)).toFixed(2));
+  const xMax = Number(Math.min(0.96, xMin + width).toFixed(2));
+  const horizPhrase = horiz === "center" ? "in the center" : `on the ${horiz.replace("-", " ")}`;
+  const baseAnchor = `In the ${depth} ${horizPhrase}`;
+  const anchor2 = placement?.blocking ? `${baseAnchor} (${placement.blocking.replace(/\.+$/, "")})` : baseAnchor;
+  return {
+    anchor: anchor2,
+    box: { x_min: xMin, y_min: yMin, x_max: xMax, y_max: yMax }
+  };
+}
+function isPhotographicMedium(styleDNA, brief) {
+  const text = `${styleDNA?.medium || ""} ${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
+  if (/\b(?:photo|photograph|candid|35mm|film|dslr|smartphone|camera roll|snapshot|raw photo)\b/.test(text)) {
+    return true;
+  }
+  if (/\b(?:illustration|anime|manga|cel[- ]shaded|drawing|digital art|painting|watercolor|gouache|comic)\b/.test(text)) {
+    return false;
+  }
+  return false;
+}
+function extractQuotedText(text) {
+  const match = text.match(/['"]([^'"]{1,50})['"]/);
+  return match && match[1] ? match[1].trim() : null;
+}
+function resolveKleinMediumPrefix(isPhoto, styleDNA, brief, shotSize) {
+  if (isPhoto) {
+    const text = `${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
+    if (shotSize === "close-up" || shotSize === "macro" || shotSize === "extreme-close-up") {
+      return "Close-up photograph";
+    }
+    if (/\b(?:smartphone|candid|phone|snapshot|casual|camera roll)\b/.test(text)) {
+      return "Candid handheld smartphone photograph";
+    }
+    if (/\b(?:studio|portrait session|backdrop)\b/.test(text)) {
+      return "Studio photograph";
+    }
+    if (/\b(?:outside|outdoor|nature|street|garden|forest|park|beach|sky|harbor|alley|road)\b/.test(text)) {
+      return "Full-color outdoor photograph";
+    }
+    if (/\b(?:room|loft|library|indoor|interior|kitchen|bedroom|parlor|cafe|laundromat|hall)\b/.test(text)) {
+      return "Full-color indoor photograph";
+    }
+    return "Full-color photograph";
+  }
+  const medium = styleDNA?.medium?.trim();
+  const prefix = styleDNA?.prefix?.trim();
+  if (prefix) {
+    return sanitizeQuoteAndUnitNotation(prefix);
+  }
+  if (medium) {
+    if (/\bwatercolor\b/i.test(medium))
+      return `${medium} on rough cold-press watercolor paper`;
+    if (/\bgouache\b/i.test(medium))
+      return `${medium} on textured cardstock with crisp ink linework`;
+    if (/\boil\b/i.test(medium))
+      return `${medium} on coarse linen canvas`;
+    return `${medium} on fine archival paper`;
+  }
+  return "Editorial visual novel digital illustration with clean cel-shaded linework";
+}
+function serializeFlux3Klein(input2) {
+  const { brief, shotSpec, styleDNA, profile, referencePlan, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const parameterHints = {};
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  const isPhoto = isPhotographicMedium(styleDNA, brief);
+  const cleanScene = formatSceneProse(brief.scene);
+  const shotSize = shotSpec?.camera?.shotSize || "medium";
+  const mediumPrefix = resolveKleinMediumPrefix(isPhoto, styleDNA, brief, shotSize);
+  const sceneAtmosphere = brief.lighting ? sanitizeQuoteAndUnitNotation(brief.lighting).replace(/\.+$/, "") : "natural ambient lighting";
+  const isShallow = shotSpec?.camera?.depthOfField === "shallow" || /\b(?:shallow|bokeh|f\/1\.4|portrait lens)\b/i.test(`${styleDNA?.prefix || ""} ${brief.composition || ""}`);
+  const opticsText = isShallow ? "shallow depth of field, shot at f/1.4, background rendered as soft circular bokeh shapes and color silhouettes" : "deep edge-to-edge focus across all depth planes from foreground to background";
+  const realismGrounding = isPhoto ? "Subtle fabric creases, natural skin texture, and fine surface reflections." : "Rich volumetric shading and authentic textural contrast.";
+  const openingClause = `${mediumPrefix}, set in ${cleanScene || "the scene"}. Illuminated by ${sceneAtmosphere}. ${opticsText}. ${realismGrounding}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
+  sections.push({
+    id: "medium-optics-opening",
+    priority: 1,
+    required: true,
+    compressible: true,
+    text: openingClause
+  });
+  const layoutBoxes = [];
+  if (brief.subjectMode === "none" || subjects.length === 0) {
+    const focus = cue?.visualFocus || (brief.action ? sanitizeQuoteAndUnitNotation(brief.action) : "an open architectural setting");
+    sections.push({
+      id: "subject-action",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: `An empty scene with no people present, centering on ${focus}.`
+    });
+  } else if (subjects.length === 1) {
+    const s = subjects[0];
+    const label = `subject_${s.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+    const attireStr = s.attire ? `, wearing ${s.attire}` : "";
+    const actionStr = s.action || (brief.action ? sanitizeQuoteAndUnitNotation(brief.action) : "standing poised in the scene");
+    const placement0 = shotSpec.composition.subjectPlacements?.[0];
+    const resolved0 = placement0 ? resolveKleinPlacement(placement0, 0) : undefined;
+    const rawBox = resolved0?.box ?? { x_min: 0.25, y_min: 0.15, x_max: 0.75, y_max: 0.9 };
+    const singleBox = {
+      ...rawBox,
+      y_max: shotSpec.safeArea ? Math.min(rawBox.y_max, 0.78) : rawBox.y_max
+    };
+    layoutBoxes.push({
+      label,
+      description: `${s.name}: ${s.appearance}${attireStr}`,
+      box: singleBox
+    });
+    const subjectAnchor = resolved0?.anchor ?? "In the center foreground";
+    const stagingSuffix = shotSpec.composition.stagingNote ? ` ${sanitizeQuoteAndUnitNotation(shotSpec.composition.stagingNote.trim().replace(/\.+$/, ""))}.` : "";
+    const subjectClause = `${subjectAnchor}, <${label}> ${s.name} (${s.appearance}${attireStr}) is ${actionStr.replace(/\.+$/, "")}.${stagingSuffix}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
+    sections.push({
+      id: "subject-action",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: subjectClause
+    });
+  } else {
+    const placements = shotSpec.composition.subjectPlacements || [];
+    const hasDirectedPlacements = placements.length >= 2;
+    const isOts = shotSpec.camera.angle === "over-the-shoulder";
+    const primarySubjects = subjects.slice(0, 3);
+    const charWidth = Number((0.85 / Math.min(primarySubjects.length, 3)).toFixed(2));
+    const ensembleClauses = [];
+    primarySubjects.forEach((s, i) => {
+      const slug = s.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || `subject_${i + 1}`;
+      const label = `character_${slug}`;
+      const attireStr = s.attire ? `, wearing ${s.attire}` : "";
+      const otsRole = isOts && i === 0 ? "; in out-of-focus foreground frame edge, dorsal over-the-shoulder silhouette" : isOts && i === 1 ? "; tack-sharp midground focal subject facing camera" : "";
+      if (hasDirectedPlacements) {
+        const matchedPlacement = placements.find((p) => p.subject.trim().toLowerCase() === s.name.trim().toLowerCase()) ?? placements[i];
+        const resolved = resolveKleinPlacement(matchedPlacement, i);
+        const clampedBox = shotSpec.safeArea ? { ...resolved.box, y_max: Math.min(resolved.box.y_max, 0.78) } : resolved.box;
+        layoutBoxes.push({
+          label,
+          description: `${s.name}: ${s.appearance}${attireStr}`,
+          box: clampedBox
+        });
+        ensembleClauses.push(`${resolved.anchor}, <${label}> ${s.name} (${s.appearance}${attireStr}${otsRole})`);
+      } else {
+        const xMin = Number((0.08 + i * charWidth).toFixed(2));
+        const xMax = Number(Math.min(0.95, xMin + charWidth - 0.04).toFixed(2));
+        const anchor2 = i === 0 ? "Frame-left in the foreground" : i === 1 ? "Frame-right in the foreground" : "In the center midground";
+        layoutBoxes.push({
+          label,
+          description: `${s.name}: ${s.appearance}${attireStr}`,
+          box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: shotSpec.safeArea ? 0.78 : 0.9 }
+        });
+        ensembleClauses.push(`${anchor2}, <${label}> ${s.name} (${s.appearance}${attireStr}${otsRole})`);
+      }
+    });
+    if (subjects.length > 3) {
+      const backgroundNames = subjects.slice(3).map((s) => `${s.name}${s.attire ? ` in ${s.attire}` : ""}`).join(", ");
+      ensembleClauses.push(`Background group further back in the scene: ${backgroundNames}`);
+    }
+    const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ""))}.` : ".";
+    const stagingText = shotSpec.composition.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, "")}.` : "";
+    const ensembleText = `${ensembleClauses.join("; ")}${actionText}${stagingText}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
+    sections.push({
+      id: "ensemble-subjects",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: ensembleText
+    });
+  }
+  const quoted = extractQuotedText(`${brief.action} ${cue?.visualFocus || ""}`);
+  if (quoted) {
+    const typographyLabel = "scene_typography";
+    layoutBoxes.push({
+      label: typographyLabel,
+      description: `Typography reading "${quoted}"`,
+      box: { x_min: 0.2, y_min: 0.08, x_max: 0.8, y_max: 0.25 }
+    });
+    sections.push({
+      id: "typography-lock",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Above, <${typographyLabel}> displays clean legible lettering that reads exactly "${quoted}", the only text in the scene.`
+    });
+  }
+  const cameraText = formatCameraFraming(shotSpec, styleDNA);
+  if (cameraText) {
+    sections.push({
+      id: "camera-framing",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Shot composition: ${cameraText}.`
+    });
+  }
+  const rawStyleText = formatStyleDNAProse(styleDNA);
+  if (rawStyleText) {
+    const styleText = isPhoto ? rawStyleText.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawStyleText;
+    sections.push({
+      id: "visual-style",
+      priority: styleDNA.preserve ? 1 : 2,
+      required: false,
+      compressible: !styleDNA.preserve,
+      text: `Visual treatment: ${styleText}.`
+    });
+  }
+  if (cleanScene) {
+    const backgroundDesc = `In the background, ${cleanScene} forms silhouettes and environmental shapes against ambient atmospheric light gradients.`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
+    sections.push({
+      id: "background-sixth",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: backgroundDesc
+    });
+  }
+  const constraints = [];
+  const safeAreaText = formatDialogueSafeArea(shotSpec);
+  if (safeAreaText) {
+    constraints.push(safeAreaText);
+  }
+  const refDirectives = formatReferenceDirectives(referencePlan);
+  if (refDirectives.length > 0) {
+    constraints.push(...refDirectives);
+  }
+  if (constraints.length > 0) {
+    sections.push({
+      id: "constraints",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: constraints.join(" ")
+    });
+  }
+  if (layoutBoxes.length > 0) {
+    parameterHints["layout_boxes"] = layoutBoxes;
+  }
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
+  if (prompt.length < 250 && input2.complexity !== "simple") {
+    warnings.push("FLUX.3 Klein prompt is short for the scene complexity; Klein produces best results with 140–250 word File-Level captions.");
+  }
+  const document2 = createPromptDocument(profile.dialect, sections, [], Object.keys(parameterHints).length > 0 ? parameterHints : undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt: undefined,
+    parameterHints: Object.keys(parameterHints).length > 0 ? parameterHints : undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/flux3.ts
+function serializeFlux3(input2) {
+  const { brief, shotSpec, styleDNA, profile, referencePlan, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  let subjectText = "";
+  if (brief.subjectMode === "none") {
+    const focus = cue?.visualFocus || brief.action || "scenic view";
+    subjectText = `A detailed view featuring ${focus}.`;
+  } else if (brief.subjectMode === "ensemble") {
+    subjectText = `An ensemble scene with ${subjects.length} characters: ${subjects.map((s) => s.name).join(", ")}. ${brief.action || ""}`.trim();
+  } else {
+    const main = subjects[0];
+    if (main) {
+      subjectText = `${main.name}, ${main.action || brief.action || "in scene"}.`.trim();
+    }
+  }
+  sections.push({
+    id: "subject-action",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: subjectText
+  });
+  if (subjects.length > 0) {
+    const appearanceText = subjects.map((s) => {
+      const parts = [s.appearance];
+      if (s.attire)
+        parts.push(`attired in ${s.attire}`);
+      return `${s.name} has ${parts.join(", ")}`;
+    }).join(". ") + ".";
+    sections.push({
+      id: "appearance-wardrobe",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: appearanceText
+    });
+  }
+  const spatialText = formatSpatialPlacements(shotSpec);
+  if (spatialText) {
+    sections.push({
+      id: "spatial-relationships",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: `${spatialText}.`
+    });
+  }
+  if (brief.scene) {
+    sections.push({
+      id: "environment-setting",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Set in ${brief.scene.trim()}.`
+    });
+  }
+  const cameraText = formatCameraFraming(shotSpec);
+  if (cameraText) {
+    sections.push({
+      id: "camera-framing",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Shot composition: ${cameraText}.`
+    });
+  }
+  if (brief.lighting) {
+    sections.push({
+      id: "scene-lighting",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Lighting is ${brief.lighting.trim()}.`
+    });
+  }
+  const styleText = formatStyleDNAProse(styleDNA);
+  if (styleText) {
+    sections.push({
+      id: "visual-style",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `Art style: ${styleText}.`
+    });
+  }
+  const safeAreaText = formatDialogueSafeArea(shotSpec);
+  const refDirectives = formatReferenceDirectives(referencePlan);
+  const extras = [...safeAreaText ? [safeAreaText] : [], ...refDirectives];
+  if (extras.length > 0) {
+    sections.push({
+      id: "constraints",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: extras.join(" ")
+    });
+  }
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/gpt-image-25.ts
+function serializeGptImage25(input2) {
+  const { brief, shotSpec, styleDNA, profile, referencePlan, complexity, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  const useSections = complexity === "complex" || complexity === "dense";
+  if (!useSections) {
+    let subjectProse = "";
+    if (brief.subjectMode === "none") {
+      subjectProse = `A high quality visual of ${cue?.visualFocus || brief.action || "the scene"}.`;
+    } else {
+      const main = subjects[0];
+      if (main) {
+        const parts = [main.appearance];
+        if (main.attire)
+          parts.push(`dressed in ${main.attire}`);
+        const act = (main.action || brief.action || "shown in the scene").trim();
+        const firstName = main.name.split(" ")[0] || main.name;
+        const nameRegex = new RegExp(`^(?:${main.name}|${firstName})\\s+`, "i");
+        const cleanAct = nameRegex.test(act) ? act.replace(nameRegex, "") : act;
+        if (/^(?:is|stands|standing|sits|sitting|walking|running|looking|holding|clutching|reaching|wearing|facing|turned)\b/i.test(cleanAct)) {
+          subjectProse = `${main.name} (${parts.join(", ")}) ${cleanAct}.`.replace(/\.\.+$/, ".");
+        } else {
+          subjectProse = `${main.name} (${parts.join(", ")}) is ${cleanAct}.`.replace(/\.\.+$/, ".");
+        }
+      }
+    }
+    sections.push({
+      id: "subject-action",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: subjectProse
+    });
+    const cameraText2 = formatCameraFraming(shotSpec);
+    const envText = brief.scene ? `in ${brief.scene.trim()}` : "";
+    const lightingText = brief.lighting ? `lit by ${brief.lighting.trim()}` : "";
+    if (cameraText2 || envText || lightingText) {
+      const sceneSentence = [
+        cameraText2 ? `Captured with a ${cameraText2}` : "",
+        envText,
+        lightingText
+      ].filter(Boolean).join(" ") + ".";
+      sections.push({
+        id: "camera-environment",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: sceneSentence
+      });
+    }
+    const styleText2 = formatStyleDNAProse(styleDNA);
+    if (styleText2) {
+      sections.push({
+        id: "visual-treatment",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: `Illustrated in ${styleText2}.`
+      });
+    }
+    const safeArea2 = formatDialogueSafeArea(shotSpec);
+    const refs2 = formatReferenceDirectives(referencePlan);
+    const constraints = [...safeArea2 ? [safeArea2] : [], ...refs2];
+    if (constraints.length > 0) {
+      sections.push({
+        id: "constraints",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: constraints.join(" ")
+      });
+    }
+    const prompt2 = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
+    const document3 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+    return { document: document3, prompt: prompt2, negativePrompt: undefined, warnings };
+  }
+  const orientation = shotSpec.output.actualRatio || shotSpec.output.requestedRatio || "scene";
+  sections.push({
+    id: "sec-image",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `IMAGE
+A complete ${orientation} visual scene illustrating ${brief.action || "the story moment"}.`
+  });
+  let subjectsText = `SUBJECTS
+`;
+  if (brief.subjectMode === "none") {
+    subjectsText += "No human characters present; focus is entirely on the environment and featured objects.";
+  } else {
+    subjectsText += subjects.map((s) => {
+      const parts = [s.appearance];
+      if (s.attire)
+        parts.push(`attire: ${s.attire}`);
+      return `• ${s.name}: ${parts.join(", ")}`;
+    }).join(`
+`);
+  }
+  sections.push({
+    id: "sec-subjects",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: subjectsText
+  });
+  const actionText = brief.action ? brief.action.trim() : "Present in the scene.";
+  sections.push({
+    id: "sec-moment",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: `MOMENT
+${actionText}`
+  });
+  const cameraText = formatCameraFraming(shotSpec);
+  const spatialText = formatSpatialPlacements(shotSpec);
+  const compLines = [
+    `Framing: ${cameraText}.`,
+    spatialText ? `Placements: ${spatialText}.` : ""
+  ].filter(Boolean);
+  sections.push({
+    id: "sec-composition",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `COMPOSITION
+${compLines.join(`
+`)}`
+  });
+  if (brief.lighting || brief.scene) {
+    sections.push({
+      id: "sec-lighting",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `LIGHTING & ENVIRONMENT
+Setting: ${brief.scene || "unspecified"}
+Lighting: ${brief.lighting || "natural scene illumination"}`
+    });
+  }
+  const styleText = formatStyleDNAProse(styleDNA);
+  if (styleText) {
+    sections.push({
+      id: "sec-visual-treatment",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `VISUAL TREATMENT
+${styleText}`
+    });
+  }
+  const constraintsList = [];
+  const safeArea = formatDialogueSafeArea(shotSpec);
+  if (safeArea)
+    constraintsList.push(`• Dialogue overlay: ${safeArea}`);
+  const refs = formatReferenceDirectives(referencePlan);
+  refs.forEach((r) => constraintsList.push(`• Reference: ${r}`));
+  constraintsList.push("• Maintain crisp anatomy, cohesive spatial coherence, and clean focus without extraneous clutter.");
+  sections.push({
+    id: "sec-constraints",
+    priority: 2,
+    required: false,
+    compressible: true,
+    text: `CONSTRAINTS
+${constraintsList.join(`
+`)}`
+  });
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(`
+
+`);
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/grok-imagine-2.ts
+function serializeGrokImagine2(input2) {
+  const { brief, shotSpec, styleDNA, profile, referencePlan, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  let countDescription = "";
+  if (brief.subjectMode === "none") {
+    countDescription = "A focused scene with no people.";
+  } else if (brief.subjectMode === "ensemble") {
+    const memberList = subjects.map((s) => {
+      const parts = [s.appearance];
+      if (s.attire)
+        parts.push(`wearing ${s.attire}`);
+      return `${s.name} (${parts.join(", ")})`;
+    }).join(" and ");
+    countDescription = `${subjects.length} visible characters: ${memberList}.`;
+  } else {
+    const main = subjects[0];
+    const cat = cue?.subjectCategory || "character";
+    const label = cat === "female" ? "One visible woman" : cat === "male" ? "One visible man" : "One visible person";
+    countDescription = `${label}, named ${main?.name || "the subject"}, with ${main?.appearance || "distinct features"}${main?.attire ? `, wearing ${main.attire}` : ""}.`;
+  }
+  sections.push({
+    id: "subject",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: countDescription
+  });
+  const actionText = brief.action ? brief.action.trim() : "";
+  if (actionText) {
+    sections.push({
+      id: "focal-action",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: `Action: ${actionText}.`
+    });
+  }
+  if (brief.scene) {
+    sections.push({
+      id: "environment-materials",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Surroundings and physical textures: ${brief.scene.trim()}.`
+    });
+  }
+  const artParts = [];
+  if (styleDNA.medium)
+    artParts.push(styleDNA.medium);
+  if (styleDNA.rendering?.length)
+    artParts.push(...styleDNA.rendering);
+  if (styleDNA.shading?.length)
+    artParts.push(...styleDNA.shading);
+  if (artParts.length > 0) {
+    sections.push({
+      id: "art-direction",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `Art direction: ${artParts.join(", ")}.`
+    });
+  }
+  if (brief.lighting) {
+    sections.push({
+      id: "light",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Lighting: ${brief.lighting.trim()}.`
+    });
+  }
+  if (styleDNA.palette && styleDNA.palette.length > 0) {
+    sections.push({
+      id: "color",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `Color palette: ${styleDNA.palette.join(", ")}.`
+    });
+  }
+  const spatialText = brief.subjectMode === "ensemble" ? formatSpatialPlacements(shotSpec) : "";
+  const cameraText = formatCameraFraming(shotSpec);
+  const safeAreaText = formatDialogueSafeArea(shotSpec);
+  const compParts = [
+    spatialText ? `${spatialText}.` : "",
+    cameraText ? `Camera framing: ${cameraText}.` : "",
+    safeAreaText ? safeAreaText : ""
+  ].filter(Boolean);
+  if (compParts.length > 0) {
+    sections.push({
+      id: "composition-camera",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: compParts.join(" ")
+    });
+  }
+  const refs = formatReferenceDirectives(referencePlan);
+  if (refs.length > 0) {
+    sections.push({
+      id: "references",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: refs.join(" ")
+    });
+  }
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/qwen-image-3.ts
+function serializeQwenImage3(input2) {
+  const { brief, shotSpec, styleDNA, profile, referencePlan, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const negativeSections = [];
+  const expansionOn = profile.promptExpansion?.enabled ?? true;
+  const isQwen21 = profile.exactModel.includes("2.1") || profile.family.includes("2.1");
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  if (expansionOn) {
+    let subjectText = "";
+    if (brief.subjectMode === "none") {
+      subjectText = `${cue?.visualFocus || brief.action || "scenic view"}, no people`;
+    } else if (brief.subjectMode === "ensemble") {
+      subjectText = `${subjects.length} characters (${subjects.map((s) => `${s.name}: ${s.appearance}`).join(", ")}), ${brief.action || ""}`.trim();
+    } else {
+      const main = subjects[0];
+      const attire = main?.attire ? `, wearing ${main.attire}` : "";
+      subjectText = `${main?.name || "character"} (${main?.appearance || ""}${attire}), ${main?.action || brief.action || "in scene"}`.trim();
+    }
+    sections.push({
+      id: "subject-action-compact",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: subjectText
+    });
+    const spatialText = brief.subjectMode === "ensemble" ? formatSpatialPlacements(shotSpec) : "";
+    if (spatialText) {
+      sections.push({
+        id: "spatial",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: spatialText
+      });
+    }
+    const cameraText = formatCameraFraming(shotSpec);
+    if (cameraText) {
+      sections.push({
+        id: "camera",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: cameraText
+      });
+    }
+    if (brief.scene) {
+      sections.push({
+        id: "setting",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: brief.scene.trim()
+      });
+    }
+    if (brief.lighting) {
+      sections.push({
+        id: "lighting",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `lighting: ${brief.lighting.trim()}`
+      });
+    }
+    const compactStyleParts = [
+      styleDNA.medium,
+      styleDNA.linework?.[0],
+      styleDNA.shading?.[0],
+      styleDNA.palette?.[0]
+    ].map((s) => s?.trim()).filter(Boolean);
+    const styleText = (compactStyleParts.length > 0 ? compactStyleParts.join(", ") : formatStyleDNAProse(styleDNA)).trim();
+    if (styleText) {
+      sections.push({
+        id: "style",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: styleText
+      });
+    }
+    const safeArea = formatDialogueSafeArea(shotSpec);
+    if (safeArea) {
+      sections.push({
+        id: "safe-area",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: safeArea
+      });
+    }
+    const refs = formatReferenceDirectives(referencePlan);
+    if (refs.length > 0) {
+      sections.push({
+        id: "references",
+        priority: 1,
+        required: false,
+        compressible: false,
+        text: refs.join(" ")
+      });
+    }
+  } else {
+    let subjectText = "";
+    if (brief.subjectMode === "none") {
+      subjectText = `A detailed composition featuring ${cue?.visualFocus || brief.action || "the scene"} without people.`;
+    } else if (brief.subjectMode === "ensemble") {
+      subjectText = `An ensemble of ${subjects.length} characters: ${subjects.map((s) => `${s.name} (${s.appearance}${s.attire ? `, wearing ${s.attire}` : ""})`).join("; ")}. Current action: ${brief.action || "standing in scene"}.`;
+    } else {
+      const main = subjects[0];
+      const parts = [main?.appearance];
+      if (main?.attire)
+        parts.push(`attired in ${main.attire}`);
+      subjectText = `${main?.name || "The subject"} is featured with ${parts.join(", ")}. Action: ${main?.action || brief.action || "present in the scene"}.`;
+    }
+    sections.push({
+      id: "subject-action-full",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: subjectText
+    });
+    const spatialText = formatSpatialPlacements(shotSpec);
+    if (spatialText) {
+      sections.push({
+        id: "spatial",
+        priority: 0,
+        required: true,
+        compressible: false,
+        text: `${spatialText}.`
+      });
+    }
+    const cameraText = formatCameraFraming(shotSpec);
+    if (cameraText) {
+      sections.push({
+        id: "camera",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `Framing and camera: ${cameraText}.`
+      });
+    }
+    if (brief.scene) {
+      sections.push({
+        id: "environment",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `Environment: ${brief.scene.trim()}.`
+      });
+    }
+    if (brief.lighting) {
+      sections.push({
+        id: "lighting",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `Lighting: ${brief.lighting.trim()}.`
+      });
+    }
+    const styleText = formatStyleDNAProse(styleDNA);
+    if (styleText) {
+      sections.push({
+        id: "style",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: `Visual style: ${styleText}.`
+      });
+    }
+    const safeArea = formatDialogueSafeArea(shotSpec);
+    const refs = formatReferenceDirectives(referencePlan);
+    if (safeArea) {
+      sections.push({
+        id: "safe-area",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: safeArea
+      });
+    }
+    if (refs.length > 0) {
+      sections.push({
+        id: "references",
+        priority: 1,
+        required: false,
+        compressible: false,
+        text: refs.join(" ")
+      });
+    }
+  }
+  let negativePrompt = undefined;
+  if (!isQwen21 && profile.negativePolicy === "native") {
+    negativeSections.push({
+      id: "native-negative",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: "blurry, low quality, distorted anatomy, extra limbs, malformed hands, oversaturated, bad proportions"
+    });
+    negativePrompt = negativeSections.map((s) => s.text.trim()).join(", ");
+  }
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(expansionOn ? ", " : " ");
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/nano-banana-21.ts
+function serializeNanoBanana21(input2) {
+  const { brief, shotSpec, styleDNA, profile, referencePlan, complexity, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  const useStructuredLayout = complexity === "complex" || complexity === "dense";
+  if (!useStructuredLayout) {
+    let subjectAction = "";
+    if (brief.subjectMode === "none") {
+      subjectAction = `A detailed view featuring ${cue?.visualFocus || brief.action || "the scene"}, free of any bystanders or extra people.`;
+    } else {
+      const main = subjects[0];
+      const attire = main?.attire ? `wearing ${main.attire}` : "";
+      subjectAction = `${main?.name || "The subject"}, distinguished by ${main?.appearance || "unique characteristics"} and ${attire || "regular clothes"}, is ${main?.action || brief.action || "standing in the scene"}.`;
+    }
+    sections.push({
+      id: "subject-action",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: subjectAction
+    });
+    const cameraText2 = formatCameraFraming(shotSpec);
+    if (cameraText2) {
+      sections.push({
+        id: "camera",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `Camera perspective: ${cameraText2}.`
+      });
+    }
+    if (brief.scene) {
+      sections.push({
+        id: "setting",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `Environment and background: ${brief.scene.trim()}.`
+      });
+    }
+    if (brief.lighting) {
+      sections.push({
+        id: "lighting",
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `Lighting atmosphere: ${brief.lighting.trim()}.`
+      });
+    }
+    const styleText2 = formatStyleDNAProse(styleDNA);
+    if (styleText2) {
+      sections.push({
+        id: "style",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: `Render style: ${styleText2}.`
+      });
+    }
+    const safeArea2 = formatDialogueSafeArea(shotSpec);
+    const refs2 = formatReferenceDirectives(referencePlan);
+    const constraints = [...safeArea2 ? [safeArea2] : [], ...refs2];
+    if (constraints.length > 0) {
+      sections.push({
+        id: "constraints",
+        priority: 2,
+        required: false,
+        compressible: true,
+        text: constraints.join(" ")
+      });
+    }
+    const prompt2 = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
+    const document3 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+    return { document: document3, prompt: prompt2, negativePrompt: undefined, warnings };
+  }
+  const ratio2 = shotSpec.output.actualRatio || shotSpec.output.requestedRatio || "scene";
+  sections.push({
+    id: "header",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `Create one coherent ${ratio2} scene.`
+  });
+  const placements = shotSpec.composition.subjectPlacements || [];
+  const fg = placements.filter((p) => p.depth === "foreground").map((p) => p.subject).join(", ");
+  const mg = placements.filter((p) => p.depth === "midground").map((p) => p.subject).join(", ");
+  const bg = placements.filter((p) => p.depth === "background").map((p) => p.subject).join(", ");
+  sections.push({
+    id: "foreground",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `Foreground:
+${fg ? `${fg} in the foreground with focal clarity.` : "Clean foreground leading into the scene."}`
+  });
+  sections.push({
+    id: "midground",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `Midground:
+${mg ? `${mg} in the midground.` : "Main focal area."}`
+  });
+  sections.push({
+    id: "background",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `Background:
+${bg ? `${bg} positioned in the background.` : ""} ${brief.scene || "atmospheric background depth"}`.trim()
+  });
+  if (brief.action) {
+    sections.push({
+      id: "action-moment",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: `Action:
+${brief.action.trim()}`
+    });
+  }
+  let charactersText = `Characters:
+`;
+  if (brief.subjectMode === "none") {
+    charactersText += "Empty scene with no human figures or characters.";
+  } else {
+    charactersText += subjects.map((s) => {
+      const parts = [s.appearance];
+      if (s.attire)
+        parts.push(`attired in ${s.attire}`);
+      return `• ${s.name}: ${parts.join(", ")}`;
+    }).join(`
+`);
+  }
+  sections.push({
+    id: "characters",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: charactersText
+  });
+  const cameraText = formatCameraFraming(shotSpec);
+  sections.push({
+    id: "camera",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `Camera:
+${cameraText}.`
+  });
+  if (brief.lighting) {
+    sections.push({
+      id: "lighting",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Lighting:
+${brief.lighting.trim()}.`
+    });
+  }
+  const styleText = formatStyleDNAProse(styleDNA);
+  if (styleText) {
+    sections.push({
+      id: "style",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `Visual medium & style:
+${styleText}.`
+    });
+  }
+  const safeArea = formatDialogueSafeArea(shotSpec);
+  const refs = formatReferenceDirectives(referencePlan);
+  const preserveLines = [
+    safeArea ? safeArea : "",
+    ...refs,
+    "Semantic negative: an uncluttered scene free of stray artifacts, deformed limbs, or extra unlisted characters."
+  ].filter(Boolean);
+  sections.push({
+    id: "preserve",
+    priority: 2,
+    required: false,
+    compressible: true,
+    text: `Preserve:
+${preserveLines.join(`
+`)}`
+  });
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(`
+
+`);
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/seedream-5.ts
+function serializeSeedream5(input2) {
+  const { brief, shotSpec, styleDNA, profile, referencePlan, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  let subjectActionText = "";
+  if (brief.subjectMode === "none") {
+    subjectActionText = `A clear view of ${cue?.visualFocus || brief.action || "the scene"}, without people.`;
+  } else if (brief.subjectMode === "ensemble") {
+    const list = subjects.map((s) => `${s.name} (${s.appearance}${s.attire ? `, wearing ${s.attire}` : ""})`).join("; ");
+    subjectActionText = `An ensemble featuring ${list}. Current action: ${brief.action || "standing in the scene"}.`;
+  } else {
+    const main = subjects[0];
+    const attire = main?.attire ? `, wearing ${main.attire}` : "";
+    subjectActionText = `${main?.name || "The subject"}, having ${main?.appearance || "distinct features"}${attire}, is ${main?.action || brief.action || "shown in the scene"}.`;
+  }
+  sections.push({
+    id: "subject-action",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: subjectActionText
+  });
+  const spatialText = formatSpatialPlacements(shotSpec);
+  if (spatialText) {
+    sections.push({
+      id: "spatial-layout",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: `Spatial layout: ${spatialText}.`
+    });
+  }
+  if (brief.scene) {
+    sections.push({
+      id: "environment",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Setting: ${brief.scene.trim()}.`
+    });
+  }
+  const cameraText = formatCameraFraming(shotSpec);
+  if (cameraText) {
+    sections.push({
+      id: "camera",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Framing: ${cameraText}.`
+    });
+  }
+  if (brief.lighting) {
+    sections.push({
+      id: "lighting",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Lighting: ${brief.lighting.trim()}.`
+    });
+  }
+  const styleText = formatStyleDNAProse(styleDNA);
+  if (styleText) {
+    sections.push({
+      id: "visual-treatment",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `Style: ${styleText}.`
+    });
+  }
+  const safeArea = formatDialogueSafeArea(shotSpec);
+  const refs = formatReferenceDirectives(referencePlan);
+  const extras = [...safeArea ? [safeArea] : [], ...refs];
+  if (extras.length > 0) {
+    sections.push({
+      id: "constraints",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: extras.join(" ")
+    });
+  }
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
+  const wordCount = prompt.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 600) {
+    warnings.push(`Seedream 5 Pro prompt word count (${wordCount}) exceeds the recommended 600-word limit; attention may be scattered.`);
+  }
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/anima.ts
+function serializeAnima(input2) {
+  const { brief, shotSpec, styleDNA, profile, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  const styleTags = [];
+  if (styleDNA.medium) {
+    styleTags.push(styleDNA.medium.toLowerCase());
+  } else if (styleDNA.realism && styleDNA.realism.length > 0) {
+    styleTags.push("photographic");
+  } else if (!styleDNA.prefix?.trim() && (!styleDNA.rendering || styleDNA.rendering.length === 0)) {
+    styleTags.push("anime illustration");
+  }
+  if (styleDNA.rendering && styleDNA.rendering.length > 0) {
+    styleTags.push(...styleDNA.rendering.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.shading && styleDNA.shading.length > 0) {
+    styleTags.push(...styleDNA.shading.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.linework && styleDNA.linework.length > 0) {
+    styleTags.push(...styleDNA.linework.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.palette && styleDNA.palette.length > 0) {
+    styleTags.push(...styleDNA.palette.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0) {
+    styleTags.push(...styleDNA.atmosphere.map((s) => s.toLowerCase()));
+  }
+  if (styleTags.length > 0) {
+    sections.push({
+      id: "style-tags",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: [...new Set(styleTags)].join(", ")
+    });
+  }
+  const appearanceTags = [];
+  if (brief.subjectMode === "none") {
+    appearanceTags.push("no humans", "scenery");
+  } else if (brief.subjectMode === "ensemble") {
+    appearanceTags.push(`${subjects.length}characters`, "multiple people");
+    subjects.forEach((s) => {
+      const parts = [s.appearance];
+      if (s.attire)
+        parts.push(s.attire);
+      appearanceTags.push(`[${s.name}: ${parts.join(", ")}]`);
+    });
+  } else {
+    const main = subjects[0];
+    const cat = cue?.subjectCategory;
+    const isFemale = cat === "female" || /\b(woman|girl|female)\b/i.test(brief.subjects);
+    const isMale = cat === "male" || /\b(man|boy|male)\b/i.test(brief.subjects);
+    const countTag = isFemale ? "1girl" : isMale ? "1boy" : "1person";
+    appearanceTags.push(countTag, "solo");
+    if (main?.appearance) {
+      appearanceTags.push(main.appearance.replace(/;\s*|\n+/g, ", "));
+    }
+  }
+  sections.push({
+    id: "subject-tags",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: appearanceTags.join(", ")
+  });
+  if (brief.subjectMode !== "ensemble") {
+    const main = subjects[0];
+    if (main?.attire) {
+      sections.push({
+        id: "clothing-tags",
+        priority: 0,
+        required: true,
+        compressible: false,
+        text: main.attire.replace(/;\s*|\n+/g, ", ")
+      });
+    }
+  }
+  if (brief.action) {
+    sections.push({
+      id: "action-tags",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: brief.action.replace(/;\s*|\n+/g, ", ")
+    });
+  }
+  const cameraTags = [];
+  const shotMap = {
+    "extreme-close-up": "extreme close-up",
+    "close-up": "close-up",
+    "medium-close-up": "upper body",
+    medium: "cowboy shot",
+    "medium-wide": "medium shot",
+    "full-body": "full body",
+    wide: "wide shot",
+    establishing: "establishing shot",
+    macro: "macro focus"
+  };
+  cameraTags.push(shotMap[shotSpec.camera.shotSize] || shotSpec.camera.shotSize);
+  const angleMap = {
+    "eye-level": "straight-on",
+    "low-angle": "from below, low angle",
+    "high-angle": "from above, high angle",
+    overhead: "overhead shot",
+    "ground-level": "ground level",
+    "three-quarter": "from side",
+    profile: "profile",
+    "over-the-shoulder": "over the shoulder"
+  };
+  if (shotSpec.camera.angle !== "eye-level") {
+    cameraTags.push(angleMap[shotSpec.camera.angle] || shotSpec.camera.angle);
+  }
+  sections.push({
+    id: "framing-tags",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: cameraTags.join(", ")
+  });
+  if (brief.scene) {
+    sections.push({
+      id: "scene-tags",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: brief.scene.replace(/;\s*|\n+/g, ", ")
+    });
+  }
+  if (brief.lighting) {
+    sections.push({
+      id: "lighting-tags",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: brief.lighting.replace(/;\s*|\n+/g, ", ")
+    });
+  }
+  const spatialText = formatSpatialPlacements(shotSpec);
+  const safeAreaText = formatDialogueSafeArea(shotSpec);
+  const refDirectives = formatReferenceDirectives(input2.referencePlan);
+  const proseParts = [spatialText, safeAreaText, ...refDirectives].filter(Boolean);
+  if (proseParts.length > 0) {
+    sections.push({
+      id: "spatial-prose",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `[Layout: ${proseParts.join("; ")}]`
+    });
+  }
+  negativeSections.push({
+    id: "negative-tags",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: "worst quality, low quality, deformed anatomy, bad hands, missing limbs"
+  });
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(", ");
+  const negativePrompt = negativeSections.map((s) => s.text.trim()).join(", ");
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/generic-prose.ts
+function serializeGenericProse(input2) {
+  const { brief, shotSpec, styleDNA, profile, cue } = input2;
+  const warnings = ["Model-specific prompting profile unavailable; using conservative generic prompting."];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  let subjectText = "";
+  if (brief.subjectMode === "none") {
+    subjectText = `A view of ${cue?.visualFocus || brief.action || "the scene"}, no people visible.`;
+  } else if (brief.subjectMode === "ensemble") {
+    subjectText = `A group of ${subjects.length} people: ${subjects.map((s) => `${s.name} (${s.appearance})`).join(", ")}. Action: ${brief.action || "together"}.`;
+  } else {
+    const main = subjects[0];
+    const attire = main?.attire ? `, wearing ${main.attire}` : "";
+    const rawAct = (main?.action || brief.action || "in scene").trim();
+    const firstName = main?.name ? main.name.split(" ")[0] || main.name : "";
+    const nameRegex = firstName ? new RegExp(`^(?:${main?.name}|${firstName})\\s+`, "i") : null;
+    const cleanAct = nameRegex && nameRegex.test(rawAct) ? rawAct.replace(nameRegex, "") : rawAct;
+    const isNarrativeBlock = cleanAct.includes(". ") || cleanAct.length > 120 || /^[A-Z]/.test(cleanAct);
+    if (isNarrativeBlock) {
+      subjectText = `Subject: ${main?.name || "Character"} (${main?.appearance || "distinct traits"}${attire}). Scene action: ${cleanAct}.`.replace(/\.\.+$/, ".");
+    } else {
+      subjectText = `${main?.name || "Character"} with ${main?.appearance || "distinct traits"}${attire}, currently ${cleanAct}.`.replace(/\.\.+$/, ".");
+    }
+  }
+  sections.push({
+    id: "subject-action",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: subjectText
+  });
+  if (shotSpec.composition.stagingNote || shotSpec.composition.subjectPlacements.some((p) => p.blocking)) {
+    const spatialText = formatSpatialPlacements(shotSpec);
+    if (spatialText) {
+      sections.push({
+        id: "spatial-staging",
+        priority: 0,
+        required: false,
+        compressible: true,
+        text: `Scene staging: ${spatialText}.`
+      });
+    }
+  }
+  const cameraText = formatCameraFraming(shotSpec, styleDNA);
+  if (cameraText) {
+    sections.push({
+      id: "camera",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Framing: ${cameraText}.`
+    });
+  }
+  if (brief.scene) {
+    sections.push({
+      id: "environment",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Setting: ${brief.scene.trim()}.`
+    });
+  }
+  if (brief.lighting) {
+    sections.push({
+      id: "lighting",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Lighting: ${brief.lighting.trim()}.`
+    });
+  }
+  const styleText = formatStyleDNAProse(styleDNA);
+  if (styleText) {
+    sections.push({
+      id: "style",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `Art style: ${styleText}.`
+    });
+  }
+  const safeArea = formatDialogueSafeArea(shotSpec);
+  const refs = formatReferenceDirectives(input2.referencePlan);
+  const constraints = [...safeArea ? [safeArea] : [], ...refs];
+  if (constraints.length > 0) {
+    sections.push({
+      id: "constraints",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: constraints.join(" ")
+    });
+  }
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/generic-tags.ts
+function serializeGenericTags(input2) {
+  const { brief, shotSpec, styleDNA, profile, cue } = input2;
+  const warnings = ["Model-specific prompting profile unavailable; using conservative generic prompting."];
+  const sections = [];
+  const negativeSections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  const tags = [];
+  if (brief.subjectMode === "none") {
+    tags.push("no humans", "scenery");
+  } else if (brief.subjectMode === "ensemble") {
+    tags.push(`${subjects.length}characters`, "multiple people");
+    subjects.forEach((s) => tags.push(s.name, s.appearance));
+  } else {
+    const main = subjects[0];
+    const cat = cue?.subjectCategory;
+    const countTag = cat === "female" ? "1girl" : cat === "male" ? "1boy" : "1person";
+    tags.push(countTag);
+    if (main?.appearance)
+      tags.push(main.appearance.replace(/;\s*|\n+/g, ", "));
+    if (main?.attire)
+      tags.push(main.attire.replace(/;\s*|\n+/g, ", "));
+  }
+  sections.push({
+    id: "subjects",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: tags.join(", ")
+  });
+  if (brief.action) {
+    sections.push({
+      id: "action",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: brief.action.replace(/;\s*|\n+/g, ", ")
+    });
+  }
+  sections.push({
+    id: "camera",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: `${shotSpec.camera.shotSize}, ${shotSpec.camera.angle}`
+  });
+  if (brief.scene) {
+    sections.push({
+      id: "scene",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: brief.scene.replace(/;\s*|\n+/g, ", ")
+    });
+  }
+  if (brief.lighting) {
+    sections.push({
+      id: "lighting",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: brief.lighting.replace(/;\s*|\n+/g, ", ").toLowerCase()
+    });
+  }
+  const styleTags = [];
+  if (styleDNA.medium)
+    styleTags.push(styleDNA.medium.toLowerCase());
+  else if (styleDNA.realism && styleDNA.realism.length > 0)
+    styleTags.push("photographic");
+  if (styleDNA.rendering && styleDNA.rendering.length > 0) {
+    styleTags.push(...styleDNA.rendering.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.linework && styleDNA.linework.length > 0) {
+    styleTags.push(...styleDNA.linework.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.shading && styleDNA.shading.length > 0) {
+    styleTags.push(...styleDNA.shading.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.palette && styleDNA.palette.length > 0) {
+    styleTags.push(...styleDNA.palette.map((s) => s.toLowerCase()));
+  }
+  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0) {
+    styleTags.push(...styleDNA.atmosphere.map((s) => s.toLowerCase()));
+  }
+  if (styleTags.length > 0) {
+    sections.push({
+      id: "style",
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: [...new Set(styleTags)].join(", ")
+    });
+  }
+  negativeSections.push({
+    id: "negative",
+    priority: 1,
+    required: false,
+    compressible: true,
+    text: "worst quality, low quality, deformed, extra limbs"
+  });
+  const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(", ");
+  const negativePrompt = negativeSections.map((s) => s.text.trim()).join(", ");
+  const document2 = createPromptDocument(profile.dialect, sections, negativeSections, undefined, warnings);
+  return {
+    document: document2,
+    prompt,
+    negativePrompt,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/ideogram-v4.ts
+var COLOR_NAME_TO_HEX = {
+  black: "#0A0A0A",
+  white: "#FFFFFF",
+  silver: "#E2E8F0",
+  grey: "#64748B",
+  gray: "#64748B",
+  red: "#DC2626",
+  crimson: "#991B1B",
+  ruby: "#BE123C",
+  blue: "#2563EB",
+  navy: "#1E3A8A",
+  cyan: "#06B6D4",
+  teal: "#0D9488",
+  green: "#16A34A",
+  emerald: "#059669",
+  forest: "#14532D",
+  gold: "#D97706",
+  golden: "#F59E0B",
+  amber: "#D97706",
+  yellow: "#FACC15",
+  orange: "#EA580C",
+  purple: "#9333EA",
+  violet: "#7C3AED",
+  magenta: "#D946EF",
+  pink: "#EC4899",
+  rose: "#F43F5E",
+  brown: "#78350F",
+  bronze: "#92400E",
+  brass: "#CA8A04",
+  copper: "#B45309"
+};
+function extractIdeogramPalette(brief, styleDNA) {
+  if (styleDNA?.palette && Array.isArray(styleDNA.palette)) {
+    const hexes = [];
+    for (const c of styleDNA.palette) {
+      const trimmed = c.trim().toUpperCase();
+      if (/^#[0-9A-F]{6}$/i.test(trimmed)) {
+        if (!hexes.includes(trimmed))
+          hexes.push(trimmed);
+      } else {
+        const lower = c.toLowerCase();
+        for (const [name, hex3] of Object.entries(COLOR_NAME_TO_HEX)) {
+          if (new RegExp(`\\b${name}\\b`).test(lower) && !hexes.includes(hex3)) {
+            hexes.push(hex3);
+          }
+        }
+      }
+    }
+    if (hexes.length >= 3) {
+      return hexes.slice(0, 6);
+    }
+  }
+  const text = `${brief.lighting || ""} ${brief.scene || ""}`.toLowerCase();
+  if (/\b(?:night|midnight|moon|dark|shadow|rain|storm)\b/.test(text)) {
+    return ["#0B1021", "#1C2541", "#3A86FF", "#60A5FA", "#E2E8F0"];
+  }
+  if (/\b(?:sunset|dusk|twilight|golden hour|evening)\b/.test(text)) {
+    return ["#1C1917", "#7C2D12", "#D97706", "#F59E0B", "#FEF3C7"];
+  }
+  if (/\b(?:neon|cyber|cyberpunk|scifi|sci-fi)\b/.test(text)) {
+    return ["#0D0221", "#0F084B", "#FF2A85", "#00F0FF", "#F4F4F9"];
+  }
+  if (/\b(?:forest|nature|wood|tree|garden|autumn)\b/.test(text)) {
+    return ["#052E16", "#14532D", "#16A34A", "#CA8A04", "#FEF08A"];
+  }
+  if (/\b(?:indoor|candle|lamp|warm|interior|library|parlor)\b/.test(text)) {
+    return ["#18181B", "#3F3F46", "#B45309", "#F59E0B", "#FEF08A"];
+  }
+  if (/\b(?:dawn|morning|sun|sunny|bright|day)\b/.test(text)) {
+    return ["#0F172A", "#1E3A8A", "#38BDF8", "#FDE047", "#F8FAFC"];
+  }
+  return ["#0F172A", "#334155", "#64748B", "#94A3B8", "#F8FAFC"];
+}
+function isPhotographicMedium2(styleDNA, brief) {
+  const medium = (styleDNA?.medium || "").toLowerCase();
+  const prefix = (styleDNA?.prefix || "").toLowerCase();
+  const combined = `${medium} ${prefix}`;
+  if (/\b(?:photo|photograph|35mm|film|dslr|candid|cinematic realism|raw photo)\b/.test(combined)) {
+    return true;
+  }
+  if (/\b(?:anime|illustration|drawing|manga|digital art|painting|comic|vector)\b/.test(combined)) {
+    return false;
+  }
+  return false;
+}
+function extractVisibleLettering(text) {
+  const cue = /\b(?:sign(?:age|board)?|poster|plaque|label|banner|billboard|lettering|inscription|written text|printed text)\b(?:\s+(?:that\s+)?(?:reads?|says?|reading|bearing|displaying|lettered|labeled|labelled))?\s*:?\s*/giu;
+  const quote = /^(?:"([^"\r\n]{1,40})"|“([^”\r\n]{1,40})”|'((?:[^'\r\n]|(?<=\w)'(?=\w)){1,40})'(?!\w)|‘((?:[^’\r\n]|(?<=\w)’(?=\w)){1,40})’(?!\w))/iu;
+  for (const match of text.matchAll(cue)) {
+    const literal2 = quote.exec(text.slice(match.index + match[0].length));
+    const wording = literal2?.slice(1).find((value) => value !== undefined)?.trim();
+    if (wording)
+      return wording;
+  }
+  return;
+}
+function findPlacementForSubject(subjectName, shotSpec) {
+  const placements = shotSpec?.composition?.subjectPlacements;
+  if (!placements || placements.length <= 1)
+    return;
+  const target2 = subjectName.trim().toLowerCase();
+  return placements.find((p) => p.subject.trim().toLowerCase() === target2) ?? placements.find((p) => target2.includes(p.subject.trim().toLowerCase()) || p.subject.trim().toLowerCase().includes(target2));
+}
+function resolveIdeogramEnsembleBbox(placement, index, total) {
+  const defaultDepths = total === 2 ? ["foreground", "midground"] : ["foreground", "midground", "background"];
+  const defaultHoriz = ["left", "right", "center", "far-right", "far-left"];
+  const depth = placement?.depth ?? defaultDepths[index % defaultDepths.length];
+  const horizontal = placement?.horizontal ?? defaultHoriz[index % defaultHoriz.length];
+  const xCenterMap = {
+    "far-left": 185,
+    left: 285,
+    center: 500,
+    right: 715,
+    "far-right": 815
+  };
+  const yBandMap = {
+    foreground: [160, 880, 320],
+    midground: [230, 790, 250],
+    background: [155, 590, 180]
+  };
+  const centerX = xCenterMap[horizontal] ?? 500;
+  const [yMin, yMax, width] = yBandMap[depth];
+  const halfW = Math.floor(width / 2);
+  const xMin = Math.max(40, Math.min(960 - width, centerX - halfW));
+  const xMax = Math.min(960, xMin + width);
+  return [yMin, xMin, yMax, xMax];
+}
+function serializeIdeogramV4(input2) {
+  const { brief, shotSpec, styleDNA, profile, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  const palette = extractIdeogramPalette(brief, styleDNA);
+  const rolePalette = (first, second) => [palette[first % palette.length], palette[second % palette.length]];
+  const lettering = extractVisibleLettering(cue?.visualFocus ?? "") ?? extractVisibleLettering(brief.action);
+  const isPhoto = isPhotographicMedium2(styleDNA, brief);
+  const isDirectJson = profile.ideogramMode !== "structured-prose";
+  const cameraText = formatCameraFraming(shotSpec, styleDNA) || "medium shot";
+  const prefix = styleDNA?.prefix?.trim() ? `${styleDNA.prefix.trim()}. ` : "";
+  const suffix = styleDNA?.suffix?.trim() || "";
+  const medium = styleDNA?.medium?.trim() || "";
+  const cleanScene = formatSceneProse(brief.scene);
+  if (isDirectJson) {
+    let subjectSummary = "";
+    if (brief.subjectMode === "none") {
+      subjectSummary = `a cinematic view of ${cue?.visualFocus || brief.action || "the scene"}, with no visible people`;
+    } else if (brief.subjectMode === "ensemble" || subjects.length > 1) {
+      const charCountPhrase = subjects.length === 1 ? "1 visible character" : `${subjects.length} visible characters`;
+      const charDetails = subjects.map((s) => {
+        const attireStr = s.attire ? `, wearing ${s.attire}` : "";
+        const hasDna = s.appearance && s.appearance !== s.name && !/^one visible/i.test(s.appearance) && s.appearance !== "appearance not established";
+        const traits = hasDna ? ` (${s.appearance}${attireStr})` : attireStr ? ` (${attireStr.replace(/^,\s*/, "")})` : "";
+        return `${s.name}${traits}`;
+      }).join(" and ");
+      subjectSummary = `an ensemble scene with ${charCountPhrase}: ${charDetails}`;
+    } else {
+      const main = subjects[0];
+      const attire = main?.attire ? ` wearing ${main.attire}` : "";
+      const hasDna = main?.appearance && main.appearance !== main.name && !/^one visible/i.test(main.appearance) && main.appearance !== "appearance not established";
+      const traits = hasDna ? ` (${main.appearance}${attire})` : attire ? ` (${attire.trim()})` : "";
+      subjectSummary = `${main?.name || "a character"}${traits}`;
+    }
+    const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ""))}.` : "";
+    const stagingDirective = shotSpec?.composition?.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, "")}.` : "";
+    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${medium || (isPhoto ? "photograph" : "illustration")} of ${subjectSummary} in ${cleanScene}.${actionText}${stagingDirective}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
+    const styleDescription = {};
+    if (isPhoto) {
+      styleDescription.aesthetics = [prefix, "Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.", suffix].filter(Boolean).join(" ").trim();
+      styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, providing natural directional fill and soft ambient falloff.` : "Natural ambient lighting with soft directional fill and atmospheric bounce.";
+      styleDescription.photo = `Shot on a full-frame sensor with a ${shotSpec?.camera?.lens || "35mm"} prime lens, f/1.8 aperture, tack-sharp focal plane, and natural depth of field.`;
+      styleDescription.medium = "photograph";
+      styleDescription.color_palette = palette;
+    } else {
+      styleDescription.aesthetics = [prefix, "Intricate visual novel illustration with expressive character artistry, clean silhouette definition, and rich environmental depth."].filter(Boolean).join(" ").trim();
+      styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, creating gentle rim lighting and volumetric atmospheric mood.` : "Cinematic atmospheric lighting with gentle rim accents and balanced contrast.";
+      styleDescription.medium = "digital_illustration";
+      styleDescription.art_style = [medium ? `${medium} style.` : "", "Crisp refined line art combined with layered volumetric shading, clean material textures, and painterly environmental depth.", suffix].filter(Boolean).join(" ").trim();
+      styleDescription.color_palette = palette;
+    }
+    const elements = [];
+    let overflowCastDescriptions = "";
+    if (brief.subjectMode === "ensemble" && subjects.length >= 2) {
+      const featured = subjects.slice(0, 3);
+      const overflow = subjects.slice(3);
+      if (overflow.length > 0) {
+        overflowCastDescriptions = ` Also present in the scene: ${overflow.map((sub, oIdx) => {
+          const placement = findPlacementForSubject(sub.name, shotSpec);
+          const attireStr = sub.attire ? `, wearing ${sub.attire}` : "";
+          const blocking = placement?.blocking ? ` (${placement.blocking})` : ` in the ${placement?.depth ?? "background"}`;
+          return `${sub.name} (${sub.appearance || "distinct physical features"}${attireStr})${blocking || (oIdx >= 0 ? "" : "")}`;
+        }).join("; ")}.`;
+      }
+      featured.forEach((sub, i) => {
+        const placement = findPlacementForSubject(sub.name, shotSpec);
+        const bbox = resolveIdeogramEnsembleBbox(placement, i, subjects.length);
+        const attireStr = sub.attire ? `, wearing ${sub.attire}` : "";
+        const hasDna = sub.appearance && sub.appearance !== sub.name && !/^one visible/i.test(sub.appearance) && sub.appearance !== "appearance not established";
+        const appearanceDesc = hasDna ? sub.appearance : "distinct physical features";
+        const depthLabel = placement?.depth ?? (i === 0 ? "foreground" : i === 1 ? "midground" : "background");
+        const horizLabel = (placement?.horizontal ?? (i === 0 ? "left" : i === 1 ? "right" : "center")).replace("-", " ");
+        const stagingClause = placement?.blocking ? `${placement.blocking.replace(/\.+$/, "")}, situated in the ${depthLabel} (${horizLabel}).` : `Staged naturally in the ${depthLabel} (${horizLabel}) of the scene in active posture, not facing the camera in a row.`;
+        elements.push({
+          type: "obj",
+          bbox,
+          desc: `${sub.name}: ${appearanceDesc}${attireStr}. ${stagingClause}`,
+          color_palette: rolePalette(i, i + 1)
+        });
+      });
+    } else if (subjects.length === 1 && brief.subjectMode !== "none") {
+      const main = subjects[0];
+      const attireStr = main.attire ? `, wearing ${main.attire}` : "";
+      const hasDna = main.appearance && main.appearance !== main.name && !/^one visible/i.test(main.appearance) && main.appearance !== "appearance not established";
+      const appearanceDesc = hasDna ? main.appearance : "distinct physical features";
+      elements.push({
+        type: "obj",
+        bbox: [120, 200, 880, 800],
+        desc: `${main.name}: ${appearanceDesc}${attireStr}, ${main.action || brief.action || "featured in the scene"}.`,
+        color_palette: rolePalette(0, 1)
+      });
+      elements.push({
+        type: "obj",
+        bbox: [480, 320, 800, 680],
+        desc: cue?.visualFocus ? `Featured focal element: ${cue.visualFocus}.` : "Featured interaction prop and immediate environmental details.",
+        color_palette: rolePalette(2, 3)
+      });
+    } else {
+      elements.push({
+        type: "obj",
+        bbox: [180, 150, 820, 850],
+        desc: cue?.visualFocus ? `Central focus: ${cue.visualFocus}.` : "Central focal scenery and primary architectural features.",
+        color_palette: rolePalette(0, 1)
+      });
+    }
+    elements.push({
+      type: "obj",
+      bbox: [760, 40, 960, 960],
+      desc: "Immediate foreground floor plane with detailed material textures, reflections, and spatial perspective.",
+      color_palette: rolePalette(0, 1)
+    });
+    const midgroundBackdrop = cleanScene.slice(0, 500).replace(/[,\s]+$/, "").trim();
+    elements.push({
+      type: "obj",
+      bbox: [180, 40, 740, 960],
+      desc: `Midground environmental backdrop: ${midgroundBackdrop}.${overflowCastDescriptions}`,
+      color_palette: rolePalette(2, 3)
+    });
+    elements.push({
+      type: "obj",
+      bbox: [20, 40, 360, 960],
+      desc: "Upper ceiling structure, sky gradient, and atmospheric volumetric light spill overhead.",
+      color_palette: rolePalette(3, 4)
+    });
+    if (lettering && elements.length < 6) {
+      elements.unshift({
+        type: "text",
+        bbox: [80, 150, 200, 850],
+        text: lettering.slice(0, 35),
+        desc: "Sharp, elegant typography displayed cleanly on an environmental sign or surface.",
+        color_palette: rolePalette(1, 4)
+      });
+    }
+    const payload = {
+      high_level_description: highLevel,
+      style_description: styleDescription,
+      compositional_deconstruction: {
+        background: cleanScene ? `${cleanScene}. Atmospheric depth with detailed environmental surfaces.`.replace(/,\s*\./g, ".") : "An evocative, detailed scene environment with natural architectural depth and rich surfaces.",
+        elements: elements.slice(0, 6)
+      }
+    };
+    const minifiedJson = JSON.stringify(payload);
+    sections.push({
+      id: "ideogram-json",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: minifiedJson
+    });
+    return {
+      document: createPromptDocument("ideogram-v4", sections, [], undefined, warnings),
+      prompt: minifiedJson,
+      negativePrompt: undefined,
+      warnings
+    };
+  }
+  const shotMediumText = `${prefix ? `${prefix} ` : ""}A ${cameraText} ${medium || (isPhoto ? "photograph" : "digital illustration")} of`;
+  let subjectsText = "";
+  if (brief.subjectMode === "none") {
+    subjectsText = `the environment featuring ${cue?.visualFocus || brief.action || "the scenery"}, with no people present`;
+  } else if (brief.subjectMode === "ensemble" || subjects.length > 1) {
+    const list = subjects.map((s, idx) => {
+      const placement = findPlacementForSubject(s.name, shotSpec);
+      const depth = placement?.depth ?? (idx === 0 ? "foreground" : idx === 1 ? "midground" : "background");
+      const horiz = (placement?.horizontal ?? (idx === 0 ? "left" : idx === 1 ? "right" : "center")).replace("-", " ");
+      const pos = placement?.blocking ? `${placement.blocking.replace(/\.+$/, "")} in the ${depth} (${horiz})` : `staged in the ${depth} (${horiz})`;
+      const attire = s.attire ? `, wearing ${s.attire}` : "";
+      return `${s.name} (${s.appearance}${attire}), ${pos}`;
+    }).join("; ");
+    const staging = shotSpec?.composition?.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, "")}.` : "";
+    subjectsText = `a natural full-scene ensemble of ${subjects.length} characters: ${list}. Action: ${brief.action || "interacting naturally within the scene"}${staging}`;
+  } else {
+    const main = subjects[0];
+    const attire = main?.attire ? `, wearing ${main.attire}` : "";
+    subjectsText = `${main?.name || "Character"} (${main?.appearance || "distinct traits"}${attire}), ${main?.action || brief.action || "in the scene"}`;
+  }
+  const textClause = lettering ? ` featuring clean typography reading '${lettering}'` : "";
+  const backgroundText = `Behind, ${cleanScene}.`;
+  const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ""}${isPhoto ? "shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus" : "clean linework, rich volumetric shading, and painterly depth"}${suffix ? `, ${suffix}` : ""}.`;
+  const paletteText = `color palette ${palette.join(", ")}`;
+  const structuredPrompt = `${shotMediumText} ${subjectsText}${textClause}. ${backgroundText} ${lightingSpecs} ${paletteText}`;
+  sections.push({
+    id: "ideogram-structured-prose",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: structuredPrompt
+  });
+  return {
+    document: createPromptDocument("ideogram-v4", sections, [], undefined, warnings),
+    prompt: structuredPrompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+
+// src/backend/runtime/prompt-serializers/index.ts
+var SERIALIZER_MAP = {
+  "flux3-klein": serializeFlux3Klein,
+  flux3: serializeFlux3,
+  "gpt-image-2.5": serializeGptImage25,
+  "grok-imagine-2": serializeGrokImagine2,
+  "qwen-image-3": serializeQwenImage3,
+  "nano-banana-2.1": serializeNanoBanana21,
+  "seedream-5": serializeSeedream5,
+  anima: serializeAnima,
+  novelai: serializeAnima,
+  "generic-prose": serializeGenericProse,
+  "generic-tags": serializeGenericTags,
+  "ideogram-v4": serializeIdeogramV4
+};
+function getPromptSerializer(dialect) {
+  return SERIALIZER_MAP[dialect] ?? serializeGenericProse;
+}
+
+// src/backend/runtime/prompt-fit-v2.ts
+var PROTECTED_STYLE_IDS = new Set([
+  "style",
+  "style-tags",
+  "visual-style",
+  "visual-treatment",
+  "art-direction",
+  "sec-visual-treatment"
+]);
+function deduplicateAndBoundText(raw, maxChars) {
+  const trimmed = raw.trim();
+  if (!trimmed)
+    return "";
+  const looksLikeTagList = trimmed.includes(",") && !/[.!?](?:\s|$)/.test(trimmed);
+  if (looksLikeTagList) {
+    const tags = trimmed.split(/,\s*/).map((t) => t.trim()).filter(Boolean);
+    const seen2 = new Set;
+    const kept = [];
+    for (const tag of tags) {
+      const norm = tag.toLowerCase();
+      if (seen2.has(norm))
+        continue;
+      seen2.add(norm);
+      const next = kept.length ? `${kept.join(", ")}, ${tag}` : tag;
+      if (next.length <= maxChars)
+        kept.push(tag);
+    }
+    return kept.join(", ");
+  }
+  const parts = trimmed.split(/(?<=[.!?])\s+|\s*;\s*/).map((p) => p.trim()).filter(Boolean);
+  const uniqueParts = [];
+  const seen = new Set;
+  for (const part of parts) {
+    const cleanPart = part.replace(/\.{2,}$/, ".");
+    const normalized = cleanPart.replace(/^(?:Setting|Environment|Background|Lighting|Style|Visual medium):\s*/i, "").replace(/[.!?,;:\s]+$/g, "").toLowerCase();
+    if (!normalized || seen.has(normalized))
+      continue;
+    seen.add(normalized);
+    uniqueParts.push(cleanPart);
+  }
+  const deduped = (uniqueParts.length > 0 ? uniqueParts.join(" ") : trimmed).replace(/\s+/g, " ").trim();
+  if (deduped.length <= maxChars)
+    return deduped;
+  if (maxChars <= 24)
+    return "";
+  const slice = deduped.slice(0, maxChars);
+  const sentenceBreak = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("; "), slice.lastIndexOf(", "));
+  if (sentenceBreak > Math.floor(maxChars * 0.45)) {
+    return slice.slice(0, sentenceBreak + 1).replace(/[,;\s]+$/, "").trim();
+  }
+  const wordBreak = slice.lastIndexOf(" ");
+  return (wordBreak > Math.floor(maxChars * 0.4) ? slice.slice(0, wordBreak) : slice).replace(/[,;\s]+$/, "").trim();
+}
+function resolveSeparator(dialect, sections) {
+  if (dialect === "anima" || dialect === "generic-tags" || dialect === "novelai") {
+    return ", ";
+  }
+  if (dialect === "gpt-image-2.5" || dialect === "nano-banana-2.1") {
+    const hasLabeledSections = sections.some((s) => s.text.includes(`
+`));
+    if (hasLabeledSections)
+      return `
+
+`;
+  }
+  return " ";
+}
+function fitPromptDocumentToBudget(document2, maxBudget) {
+  const warnings = [...document2.warnings];
+  const separator = resolveSeparator(document2.dialect, document2.sections);
+  let currentSections = [...document2.sections];
+  let prompt = assemblePromptSections(currentSections, separator);
+  if (prompt.length <= maxBudget) {
+    return {
+      document: document2,
+      prompt,
+      fitted: false,
+      warnings
+    };
+  }
+  const hadP3 = currentSections.some((s) => s.priority === 3);
+  if (hadP3) {
+    currentSections = currentSections.filter((s) => s.priority !== 3);
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by removing non-essential decorative detail (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document2, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+  const oversizeThreshold = Math.max(180, Math.floor(maxBudget * 0.28));
+  const bloatedIndices = currentSections.map((s, idx) => ({ s, idx })).filter(({ s }) => s.compressible && !s.required && s.priority !== 0 && !PROTECTED_STYLE_IDS.has(s.id) && s.text.length > oversizeThreshold);
+  if (bloatedIndices.length > 0) {
+    const excess = prompt.length - maxBudget;
+    let remainingReduction = excess;
+    const adjusted = currentSections.map((s) => ({ ...s }));
+    bloatedIndices.sort((a, b) => b.s.text.length - a.s.text.length);
+    for (const { idx } of bloatedIndices) {
+      if (remainingReduction <= 0)
+        break;
+      const sec = adjusted[idx];
+      const minKeep = Math.max(90, Math.floor(maxBudget * 0.14));
+      const desired = Math.max(minKeep, sec.text.length - remainingReduction - 8);
+      const compacted = deduplicateAndBoundText(sec.text, desired);
+      if (compacted && compacted.length < sec.text.length) {
+        remainingReduction -= sec.text.length - compacted.length;
+        sec.text = compacted;
+      }
+    }
+    const candidatePrompt = assemblePromptSections(adjusted, separator);
+    if (candidatePrompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by condensing oversized environment or secondary details while preserving style and lighting (${candidatePrompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document2, sections: adjusted, warnings },
+        prompt: candidatePrompt,
+        fitted: true,
+        warnings
+      };
+    }
+    currentSections = adjusted;
+    prompt = candidatePrompt;
+  }
+  const nonStyleP2 = currentSections.filter((s) => !(s.priority === 2 && s.compressible && !PROTECTED_STYLE_IDS.has(s.id)));
+  if (nonStyleP2.length < currentSections.length) {
+    currentSections = nonStyleP2;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by compressing secondary visual treatment while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document2, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+  const longStyleIdx = currentSections.findIndex((s) => s.priority === 2 && s.compressible && PROTECTED_STYLE_IDS.has(s.id) && s.text.length > 140);
+  if (longStyleIdx !== -1 && prompt.length - maxBudget > 0) {
+    const styleSec = currentSections[longStyleIdx];
+    const trimmedStyle = deduplicateAndBoundText(styleSec.text, Math.max(100, styleSec.text.length - (prompt.length - maxBudget) - 8));
+    if (trimmedStyle && trimmedStyle.length < styleSec.text.length) {
+      currentSections = currentSections.map((s, idx) => idx === longStyleIdx ? { ...s, text: trimmedStyle } : s);
+      prompt = assemblePromptSections(currentSections, separator);
+      if (prompt.length <= maxBudget) {
+        warnings.push(`Prompt fitted by condensing style phrasing to stay within budget (${prompt.length}/${maxBudget} chars).`);
+        return {
+          document: { ...document2, sections: currentSections, warnings },
+          prompt,
+          fitted: true,
+          warnings
+        };
+      }
+    }
+  }
+  const withoutUnprotectedP2 = currentSections.filter((s) => s.priority !== 2 || PROTECTED_STYLE_IDS.has(s.id));
+  if (withoutUnprotectedP2.length < currentSections.length) {
+    currentSections = withoutUnprotectedP2;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by removing non-essential secondary sections while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document2, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+  const withoutCompressibleP1 = currentSections.filter((s) => !(s.priority === 1 && s.compressible && !PROTECTED_STYLE_IDS.has(s.id)));
+  if (withoutCompressibleP1.length < currentSections.length) {
+    currentSections = withoutCompressibleP1;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by condensing camera and environment details while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document2, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+  const reservedStyleIdx = currentSections.findIndex((s) => PROTECTED_STYLE_IDS.has(s.id) && s.compressible && s.text.length > 48);
+  if (reservedStyleIdx !== -1 && prompt.length > maxBudget) {
+    const styleSec = currentSections[reservedStyleIdx];
+    const minStyleSlice = Math.max(48, Math.floor(maxBudget * 0.16));
+    const trimmedStyle = deduplicateAndBoundText(styleSec.text, Math.max(minStyleSlice, styleSec.text.length - (prompt.length - maxBudget) - 8));
+    if (trimmedStyle && trimmedStyle.length < styleSec.text.length) {
+      currentSections = currentSections.map((s, idx) => idx === reservedStyleIdx ? { ...s, text: trimmedStyle } : s);
+      prompt = assemblePromptSections(currentSections, separator);
+      if (prompt.length <= maxBudget) {
+        warnings.push(`Prompt fitted with reserved style slice (${prompt.length}/${maxBudget} chars).`);
+        return {
+          document: { ...document2, sections: currentSections, warnings },
+          prompt,
+          fitted: true,
+          warnings
+        };
+      }
+    }
+  }
+  currentSections = currentSections.filter((s) => s.priority !== 2);
+  prompt = assemblePromptSections(currentSections, separator);
+  if (prompt.length <= maxBudget) {
+    warnings.push(`Prompt fitted by removing remaining secondary style sections (${prompt.length}/${maxBudget} chars).`);
+    return {
+      document: { ...document2, sections: currentSections, warnings },
+      prompt,
+      fitted: true,
+      warnings
+    };
+  }
+  currentSections = currentSections.filter((s) => s.priority === 0);
+  prompt = assemblePromptSections(currentSections, separator);
+  if (prompt.length <= maxBudget) {
+    warnings.push(`Prompt fitted to essential core identity, cast, and action only (${prompt.length}/${maxBudget} chars).`);
+    return {
+      document: { ...document2, sections: currentSections, warnings },
+      prompt,
+      fitted: true,
+      warnings
+    };
+  }
+  warnings.push(`Essential character identity and scene anchors (${prompt.length} chars) exceed budget ceiling (${maxBudget} chars). Hold for user review.`);
+  return {
+    document: { ...document2, sections: currentSections, warnings },
+    prompt,
+    fitted: true,
+    warnings
+  };
+}
+
+// src/shared/prompt-lint.ts
+function lintCompiledPrompt(options) {
+  const { prompt, negativePrompt, profile, referencePlan } = options;
+  const brief = options.brief ?? { subjectMode: "none", subjects: "" };
+  const errors3 = [];
+  const warnings = [];
+  const totalLength = prompt.length + (negativePrompt?.length ?? 0);
+  if (totalLength > profile.hardMaxCharacters) {
+    errors3.push(`Hard prompt character limit exceeded: ${totalLength} / ${profile.hardMaxCharacters} characters.`);
+  }
+  if (profile.negativePolicy === "positive-only" && negativePrompt && negativePrompt.trim().length > 0) {
+    warnings.push(`Model "${profile.exactModel}" uses a positive-only policy, but a separate negative prompt was provided.`);
+  }
+  if (brief.subjectMode === "ensemble" && brief.subjects) {
+    const lines = brief.subjects.split(`
+`).filter((line) => line.includes(":"));
+    for (const line of lines) {
+      const name = line.slice(0, line.indexOf(":")).trim();
+      if (name && !prompt.toLowerCase().includes(name.toLowerCase())) {
+        warnings.push(`Ensemble character "${name}" was not found in the compiled prompt.`);
+      }
+    }
+  }
+  if (brief.subjectMode === "ensemble") {
+    const memberCount = brief.subjects.split(`
+`).filter((line) => line.includes(":")).length;
+    if (memberCount > 1 && /\b(solo|1girl|1boy|1person)\b/i.test(prompt)) {
+      warnings.push(`Ensemble scene with ${memberCount} characters contains a solo/single-subject tag.`);
+    }
+  }
+  if (profile.dialect === "grok-imagine-2") {
+    const trimmed = prompt.trim().toLowerCase();
+    const bannedStyleStarters = [
+      "cinematic",
+      "masterpiece",
+      "anime illustration",
+      "oil painting",
+      "photograph",
+      "digital art",
+      "film grain",
+      "atmospheric illustration",
+      "2d anime"
+    ];
+    for (const starter of bannedStyleStarters) {
+      if (trimmed.startsWith(starter)) {
+        warnings.push(`Grok Imagine 2.0 prompt begins with style "${starter}"; xAI guidelines require subject-first ordering.`);
+        break;
+      }
+    }
+  }
+  if (profile.dialect === "flux3-klein" && prompt.length < 250 && brief.subjectMode !== "none") {
+    warnings.push(`FLUX.3 Klein prompt is short (${prompt.length} chars); BFL guidelines recommend full scene captions.`);
+  }
+  if (profile.dialect === "anima" && prompt.length > 1200 && !prompt.includes(",")) {
+    warnings.push(`Anima prompt is long uninterrupted prose (${prompt.length} chars); Anima expects tag-first hybrid syntax.`);
+  }
+  if (profile.dialect === "seedream-5") {
+    const wordCount = prompt.split(/\s+/).filter(Boolean).length;
+    if (wordCount > 600) {
+      warnings.push(`Seedream 5 Pro prompt word count (${wordCount}) exceeds the recommended 600-word limit; attention may be scattered.`);
+    }
+  }
+  const referencesAttached = referencePlan?.references && referencePlan.references.length > 0;
+  if (options.referenceAttachmentKnown !== false && !referencesAttached && /reference image \d+|use the reference/i.test(prompt)) {
+    warnings.push("Prompt refers to reference images, but no reference images are attached to this request.");
+  }
+  const lower = prompt.toLowerCase();
+  if (lower.includes("close-up") && lower.includes("wide establishing shot")) {
+    warnings.push("Prompt contains contradictory camera framing directions (close-up and wide establishing shot).");
+  }
+  if (lower.includes("overhead") && lower.includes("ground-level")) {
+    warnings.push("Prompt contains contradictory camera angle directions (overhead and ground-level).");
+  }
+  if (profile.dialect === "qwen-image-3" && profile.promptExpansion?.enabled && prompt.length > 1000) {
+    warnings.push(`Qwen Image 3 prompt is long (${prompt.length} chars) with prompt expansion enabled; double expansion may occur.`);
+  }
+  return {
+    valid: errors3.length === 0,
+    errors: errors3,
+    warnings
+  };
+}
+// src/backend/runtime/model-prompt-compiler.ts
+function resolveSubjectPromptMode(input2) {
+  if (!input2.profile.features.references)
+    return "full-prose";
+  if (/\/text-to-image$/i.test(input2.modelId ?? ""))
+    return "full-prose";
+  if (input2.profile.dialect === "novelai" || input2.profile.dialect === "anima")
+    return "full-prose";
+  if (typeof input2.denoiseStrength === "number" && input2.denoiseStrength >= 0.5)
+    return "full-prose";
+  const hasWiredIdentity = Boolean(input2.referencePlan?.references.some((ref) => ref.role === "identity" && typeof ref.wireIndex === "number" && ref.wireIndex >= 1 && Boolean(ref.dataUrl)));
+  if (!hasWiredIdentity)
+    return "full-prose";
+  const occlusionText = `${input2.brief.action ?? ""} ${input2.cue?.visualDescription ?? ""}`;
+  if (/\b(?:silhouette|back[- ]?view|turned away|from behind|shadowed face)\b/i.test(occlusionText)) {
+    return "full-prose";
+  }
+  return "delta-only";
+}
+function applyDeltaOnlySubjectBrief(brief, referencePlan) {
+  const wiredIdentityRefs = (referencePlan?.references ?? []).filter((ref) => ref.role === "identity" && typeof ref.wireIndex === "number" && ref.wireIndex >= 1 && Boolean(ref.dataUrl));
+  if (wiredIdentityRefs.length === 0)
+    return brief;
+  const primaryRef = wiredIdentityRefs[0];
+  if (brief.subjectMode === "one" && brief.subjectPreparation) {
+    const attire = brief.subjectPreparation.attire?.trim();
+    const subjectName = brief.subjectPreparation.name || primaryRef.subject || "subject";
+    const deltaIdentity = attire ? `matching Reference Image ${primaryRef.wireIndex}'s facial identity and hair; wearing ${attire}` : `matching Reference Image ${primaryRef.wireIndex}'s facial identity and hair`;
+    return {
+      ...brief,
+      subjects: `${subjectName}, ${deltaIdentity}`,
+      subjectPreparation: {
+        ...brief.subjectPreparation,
+        identity: deltaIdentity
+      }
+    };
+  }
+  if (brief.subjectMode === "ensemble" && brief.subjects) {
+    const lines = brief.subjects.split(`
+`).map((line) => {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx <= 0)
+        return line;
+      const name = line.slice(0, colonIdx).trim();
+      const matched = wiredIdentityRefs.find((r) => r.subject && r.subject.trim().toLowerCase() === name.toLowerCase());
+      if (!matched)
+        return line;
+      const body2 = line.slice(colonIdx + 1);
+      const attireMatch = body2.match(/;\s*(?:wearing|attired in)\s+([^;\n]+)/i);
+      const attireClause = attireMatch?.[1] ? `; wearing ${attireMatch[1].trim()}` : "";
+      return `${name}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
+    });
+    return { ...brief, subjects: lines.join(`
+`) };
+  }
+  return brief;
+}
+var STYLE_SECTION_IDS = new Set([
+  "style",
+  "visual-style",
+  "visual-treatment",
+  "art-direction",
+  "sec-visual-treatment",
+  "style-tags"
+]);
+function extractTemplateDirective(template) {
+  if (!template)
+    return {};
+  const builtin = BUILTIN_IMAGE_TEMPLATES.find((b) => b.id === template.id);
+  let positiveDirective;
+  let negativeDirective;
+  if (!builtin || template.positive !== builtin.positive) {
+    const stripped = template.positive.replace(/\{\{(?:style|scene|subjects|action|composition|lighting|suffix|negative)\}\}/gi, "").replace(/^\s*(?:SUBJECT|CAST|SETTING|ACTION|MOMENT|INTERACTION|LIGHTING|SCENE):\s*$/gim, "").split(`
+`).map((line) => line.trim()).filter((line) => line.length > 0).join(" ").trim();
+    if (stripped.length > 0) {
+      positiveDirective = stripped;
+    }
+  }
+  if (!builtin || template.negative !== builtin.negative) {
+    const strippedNeg = template.negative.replace(/\{\{negative\}\}/gi, "").split(/[,;\n]+/).map((part) => part.trim()).filter((part) => part.length > 0).join(", ").trim();
+    if (strippedNeg.length > 0) {
+      negativeDirective = strippedNeg;
+    }
+  }
+  return {
+    ...positiveDirective !== undefined ? { positiveDirective } : {},
+    ...negativeDirective !== undefined ? { negativeDirective } : {}
+  };
+}
+function formatProseSentence(raw, capitalizeStart = false) {
+  let cleaned = raw.trim().replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "").trim();
+  if (!cleaned)
+    return "";
+  if (capitalizeStart && /^[a-z]/.test(cleaned)) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  if (!/[.!?]$/.test(cleaned)) {
+    cleaned += ".";
+  }
+  return cleaned;
+}
+function compileModelPrompt(input2) {
+  const {
+    brief,
+    shotSpec,
+    styleDNA = {},
+    profile,
+    outputPlan,
+    referencePlan,
+    detailLevel = "auto",
+    promptExpansionEnabled = profile.promptExpansion?.enabled,
+    userBudgetOverride,
+    cue,
+    modelId,
+    denoiseStrength,
+    originalReference,
+    originalCreationName
+  } = input2;
+  const subjectPromptMode = resolveSubjectPromptMode({
+    profile,
+    referencePlan,
+    brief,
+    cue,
+    modelId,
+    denoiseStrength
+  });
+  const effectiveBrief = subjectPromptMode === "delta-only" ? applyDeltaOnlySubjectBrief(brief, referencePlan) : brief;
+  const complexity = classifySceneComplexity({ brief: effectiveBrief, shotSpec, cue });
+  const budgetPlan = resolveUsefulPromptBudget(profile, complexity, promptExpansionEnabled, userBudgetOverride, detailLevel);
+  const serializer = getPromptSerializer(profile.dialect);
+  const serialized = serializer({
+    brief: effectiveBrief,
+    shotSpec,
+    styleDNA,
+    profile,
+    outputPlan,
+    referencePlan,
+    complexity,
+    detailLevel,
+    cue
+  });
+  const isTagDialect = profile.dialect === "anima" || profile.dialect === "generic-tags" || profile.dialect === "novelai";
+  let sections = serialized.document.sections.map((sec) => {
+    if (!STYLE_SECTION_IDS.has(sec.id))
+      return sec;
+    return styleDNA.preserve ? { ...sec, priority: 1, compressible: false } : { ...sec, priority: 1, compressible: true };
+  });
+  const rawPrefix = styleDNA.prefix?.trim() ?? "";
+  const cleanPrefix = profile.dialect === "flux3-klein" ? rawPrefix.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawPrefix;
+  const isIdeogramJson = profile.dialect === "ideogram-v4" && profile.ideogramMode !== "structured-prose";
+  const kleinConsumedPrefix = profile.dialect === "flux3-klein" && sections.some((s) => s.id === "medium-optics-opening" && s.text.toLowerCase().startsWith(cleanPrefix.toLowerCase()));
+  if (cleanPrefix && !isIdeogramJson && !kleinConsumedPrefix) {
+    const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, "") : formatProseSentence(cleanPrefix, false);
+    if (prefixText) {
+      sections = [
+        {
+          id: "style-prefix",
+          priority: 0,
+          required: true,
+          compressible: false,
+          text: prefixText
+        },
+        ...sections
+      ];
+    }
+  }
+  const activeTemplate = input2.template ?? cue?.imageTemplate;
+  const templateDirective = extractTemplateDirective(activeTemplate);
+  if (templateDirective.positiveDirective && !isIdeogramJson) {
+    const directiveText = isTagDialect ? templateDirective.positiveDirective.replace(/[,;:\s]+$/, "") : formatProseSentence(templateDirective.positiveDirective, true);
+    if (directiveText) {
+      sections = [
+        ...sections.slice(0, cleanPrefix ? 1 : 0),
+        {
+          id: "template-directive",
+          priority: 0,
+          required: true,
+          compressible: false,
+          text: directiveText
+        },
+        ...sections.slice(cleanPrefix ? 1 : 0)
+      ];
+    }
+  }
+  if (originalReference && !isIdeogramJson) {
+    const cleanOrig = originalCreationName?.trim();
+    const origText = isTagDialect ? cleanOrig ? `original, ${cleanOrig}` : "original" : cleanOrig ? `Original creation: ${cleanOrig}.` : "Original character and world design.";
+    sections = [
+      ...sections,
+      {
+        id: "original-reference",
+        priority: 1,
+        required: false,
+        compressible: false,
+        text: origText
+      }
+    ];
+  }
+  const rawSuffix = styleDNA.suffix?.trim() ?? "";
+  const cleanSuffix = profile.dialect === "flux3-klein" ? rawSuffix.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawSuffix;
+  if (cleanSuffix && !isIdeogramJson) {
+    const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "") : formatProseSentence(cleanSuffix, false);
+    if (suffixText) {
+      const constraintsIdx = sections.findIndex((s) => s.id === "constraints" || s.id === "sec-constraints" || s.id === "references");
+      const suffixSection = {
+        id: "style-suffix",
+        priority: 0,
+        required: true,
+        compressible: false,
+        text: suffixText
+      };
+      if (constraintsIdx >= 0) {
+        sections = [
+          ...sections.slice(0, constraintsIdx),
+          suffixSection,
+          ...sections.slice(constraintsIdx)
+        ];
+      } else {
+        sections = [...sections, suffixSection];
+      }
+    }
+  }
+  const enrichedDocument = {
+    ...serialized.document,
+    sections
+  };
+  let effectiveNegativePrompt = serialized.negativePrompt;
+  if (profile.negativePolicy !== "positive-only") {
+    const customNeg = styleDNA.negative?.trim();
+    if (customNeg) {
+      effectiveNegativePrompt = effectiveNegativePrompt ? `${customNeg}, ${effectiveNegativePrompt}` : customNeg;
+    }
+    if (templateDirective.negativeDirective) {
+      effectiveNegativePrompt = effectiveNegativePrompt ? `${templateDirective.negativeDirective}, ${effectiveNegativePrompt}` : templateDirective.negativeDirective;
+    }
+  }
+  const negativeLen = effectiveNegativePrompt ? effectiveNegativePrompt.length : 0;
+  const positiveTarget = Math.max(100, Math.min(budgetPlan.maxTarget, profile.hardMaxCharacters - negativeLen));
+  const fitted = fitPromptDocumentToBudget(enrichedDocument, positiveTarget);
+  const lint = lintCompiledPrompt({
+    prompt: fitted.prompt,
+    negativePrompt: effectiveNegativePrompt,
+    document: fitted.document,
+    profile,
+    brief,
+    shotSpec,
+    referencePlan,
+    cue
+  });
+  const warnings = [...new Set([
+    ...serialized.warnings,
+    ...fitted.warnings,
+    ...lint.warnings
+  ])];
+  return {
+    document: fitted.document,
+    prompt: fitted.prompt,
+    negativePrompt: effectiveNegativePrompt,
+    parameterHints: serialized.parameterHints,
+    warnings,
+    budgetPlan,
+    lint
+  };
+}
+
 // src/shared/image-usage.ts
 var ImageActivityKindSchema = exports_external.enum(["provider-start", "provider-success", "provider-failure", "cancel-unknown", "held", "skipped", "cache-reuse", "restore"]);
 var ImageActivityEventSchema = exports_external.object({ key: TurnKeySchema, jobId: exports_external.string().min(1).max(256), requestId: exports_external.string().max(256).optional(), attemptId: exports_external.string().max(256).optional(), kind: ImageActivityKindSchema, at: exports_external.string().max(64) }).strict();
@@ -59530,443 +63494,6 @@ class PromptHistory {
     this.time = -Infinity;
     return this.current;
   }
-}
-
-// src/shared/prompt-lint.ts
-function lintCompiledPrompt(options) {
-  const { prompt, negativePrompt, profile, referencePlan } = options;
-  const brief = options.brief ?? { subjectMode: "none", subjects: "" };
-  const errors3 = [];
-  const warnings = [];
-  const totalLength = prompt.length + (negativePrompt?.length ?? 0);
-  if (totalLength > profile.hardMaxCharacters) {
-    errors3.push(`Hard prompt character limit exceeded: ${totalLength} / ${profile.hardMaxCharacters} characters.`);
-  }
-  if (profile.negativePolicy === "positive-only" && negativePrompt && negativePrompt.trim().length > 0) {
-    warnings.push(`Model "${profile.exactModel}" uses a positive-only policy, but a separate negative prompt was provided.`);
-  }
-  if (brief.subjectMode === "ensemble" && brief.subjects) {
-    const lines = brief.subjects.split(`
-`).filter((line) => line.includes(":"));
-    for (const line of lines) {
-      const name = line.slice(0, line.indexOf(":")).trim();
-      if (name && !prompt.toLowerCase().includes(name.toLowerCase())) {
-        warnings.push(`Ensemble character "${name}" was not found in the compiled prompt.`);
-      }
-    }
-  }
-  if (brief.subjectMode === "ensemble") {
-    const memberCount = brief.subjects.split(`
-`).filter((line) => line.includes(":")).length;
-    if (memberCount > 1 && /\b(solo|1girl|1boy|1person)\b/i.test(prompt)) {
-      warnings.push(`Ensemble scene with ${memberCount} characters contains a solo/single-subject tag.`);
-    }
-  }
-  if (profile.dialect === "grok-imagine-2") {
-    const trimmed = prompt.trim().toLowerCase();
-    const bannedStyleStarters = [
-      "cinematic",
-      "masterpiece",
-      "anime illustration",
-      "oil painting",
-      "photograph",
-      "digital art",
-      "film grain",
-      "atmospheric illustration",
-      "2d anime"
-    ];
-    for (const starter of bannedStyleStarters) {
-      if (trimmed.startsWith(starter)) {
-        warnings.push(`Grok Imagine 2.0 prompt begins with style "${starter}"; xAI guidelines require subject-first ordering.`);
-        break;
-      }
-    }
-  }
-  if (profile.dialect === "flux3-klein" && prompt.length < 250 && brief.subjectMode !== "none") {
-    warnings.push(`FLUX.3 Klein prompt is short (${prompt.length} chars); BFL guidelines recommend full scene captions.`);
-  }
-  if (profile.dialect === "anima" && prompt.length > 1200 && !prompt.includes(",")) {
-    warnings.push(`Anima prompt is long uninterrupted prose (${prompt.length} chars); Anima expects tag-first hybrid syntax.`);
-  }
-  if (profile.dialect === "seedream-5") {
-    const wordCount = prompt.split(/\s+/).filter(Boolean).length;
-    if (wordCount > 600) {
-      warnings.push(`Seedream 5 Pro prompt word count (${wordCount}) exceeds the recommended 600-word limit; attention may be scattered.`);
-    }
-  }
-  const referencesAttached = referencePlan?.references && referencePlan.references.length > 0;
-  if (options.referenceAttachmentKnown !== false && !referencesAttached && /reference image \d+|use the reference/i.test(prompt)) {
-    warnings.push("Prompt refers to reference images, but no reference images are attached to this request.");
-  }
-  const lower = prompt.toLowerCase();
-  if (lower.includes("close-up") && lower.includes("wide establishing shot")) {
-    warnings.push("Prompt contains contradictory camera framing directions (close-up and wide establishing shot).");
-  }
-  if (lower.includes("overhead") && lower.includes("ground-level")) {
-    warnings.push("Prompt contains contradictory camera angle directions (overhead and ground-level).");
-  }
-  if (profile.dialect === "qwen-image-3" && profile.promptExpansion?.enabled && prompt.length > 1000) {
-    warnings.push(`Qwen Image 3 prompt is long (${prompt.length} chars) with prompt expansion enabled; double expansion may occur.`);
-  }
-  return {
-    valid: errors3.length === 0,
-    errors: errors3,
-    warnings
-  };
-}
-
-// src/shared/image-prompt-profile-v2.ts
-var PromptDialectIdSchema = exports_external.enum([
-  "flux3-klein",
-  "flux3",
-  "gpt-image-2.5",
-  "grok-imagine-2",
-  "qwen-image-3",
-  "nano-banana-2.1",
-  "seedream-5",
-  "anima",
-  "novelai",
-  "generic-prose",
-  "generic-tags",
-  "ideogram-v4"
-]);
-var NegativePolicySchema = exports_external.enum([
-  "native",
-  "positive-only",
-  "unknown"
-]);
-var SoftBudgetsSchema = exports_external.object({
-  simple: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)]),
-  standard: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)]),
-  complex: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)]),
-  dense: exports_external.tuple([exports_external.number().int().min(1), exports_external.number().int().min(1)])
-}).strict();
-var ProfileFeaturesSchema = exports_external.object({
-  references: exports_external.boolean().optional(),
-  layoutBoxes: exports_external.boolean().optional(),
-  exactText: exports_external.boolean().optional(),
-  thinking: exports_external.boolean().optional()
-}).strict();
-var ImagePromptProfileV2Schema = exports_external.object({
-  version: exports_external.literal(2),
-  exactModel: exports_external.string().min(1).max(256),
-  family: exports_external.string().min(1).max(64),
-  dialect: PromptDialectIdSchema,
-  serializerRevision: exports_external.string().min(1).max(64),
-  hardMaxCharacters: exports_external.number().int().min(256).max(65000),
-  capabilitySource: exports_external.enum(["live", "catalogue", "fallback"]),
-  negativePolicy: NegativePolicySchema,
-  softBudgets: SoftBudgetsSchema,
-  promptExpansion: exports_external.object({
-    supported: exports_external.boolean(),
-    enabled: exports_external.boolean().optional()
-  }).strict().optional(),
-  features: ProfileFeaturesSchema,
-  ideogramMode: exports_external.enum(["json", "structured-prose"]).optional(),
-  outputCapabilities: ModelOutputCapabilitiesSchema.optional(),
-  guidance: exports_external.string().max(2400).optional()
-}).strict();
-var V2_SERIALIZER_REVISION = "2026.10-rev1";
-var DIALECT_BUDGETS = {
-  "flux3-klein": {
-    simple: [1100, 2600],
-    standard: [1400, 3200],
-    complex: [1800, 3600],
-    dense: [2100, 4200]
-  },
-  flux3: {
-    simple: [1000, 2400],
-    standard: [1300, 3000],
-    complex: [1700, 3500],
-    dense: [2000, 4000]
-  },
-  "gpt-image-2.5": {
-    simple: [950, 2300],
-    standard: [1300, 3000],
-    complex: [1650, 3500],
-    dense: [2000, 4200]
-  },
-  "grok-imagine-2": {
-    simple: [650, 1800],
-    standard: [950, 2400],
-    complex: [1200, 2900],
-    dense: [1500, 3400]
-  },
-  "qwen-image-3": {
-    simple: [350, 750],
-    standard: [480, 760],
-    complex: [580, 760],
-    dense: [640, 760]
-  },
-  "nano-banana-2.1": {
-    simple: [950, 2200],
-    standard: [1350, 2800],
-    complex: [1700, 3400],
-    dense: [2100, 4000]
-  },
-  "seedream-5": {
-    simple: [850, 2200],
-    standard: [1200, 2800],
-    complex: [1500, 3300],
-    dense: [1850, 3800]
-  },
-  anima: {
-    simple: [350, 1000],
-    standard: [550, 1350],
-    complex: [750, 1700],
-    dense: [950, 2100]
-  },
-  novelai: {
-    simple: [350, 1000],
-    standard: [550, 1350],
-    complex: [750, 1750],
-    dense: [950, 2100]
-  },
-  "generic-prose": {
-    simple: [850, 2200],
-    standard: [1250, 2800],
-    complex: [1550, 3200],
-    dense: [1850, 3600]
-  },
-  "generic-tags": {
-    simple: [350, 950],
-    standard: [500, 1300],
-    complex: [700, 1650],
-    dense: [850, 2000]
-  },
-  "ideogram-v4": {
-    simple: [800, 2500],
-    standard: [1500, 4500],
-    complex: [2500, 7000],
-    dense: [3500, 9500]
-  }
-};
-var QWEN3_NO_EXPANSION_BUDGETS = {
-  simple: [600, 1200],
-  standard: [750, 1500],
-  complex: [900, 1750],
-  dense: [1050, 2000]
-};
-function resolveRouteDialect(provider, modelId, parameters, settings) {
-  const normModel = modelId.trim().toLowerCase();
-  const normProvider = provider.trim().toLowerCase();
-  const ideogramMode = settings?.ideogramPromptMode ?? "auto";
-  const flux3KleinMode = settings?.flux3KleinPromptMode ?? "auto";
-  if (flux3KleinMode === "pup-caption") {
-    return {
-      dialect: "flux3-klein",
-      family: "flux",
-      negativePolicy: "positive-only",
-      features: { references: true, layoutBoxes: true, exactText: true }
-    };
-  }
-  if (ideogramMode === "json" || ideogramMode === "structured-prose") {
-    return {
-      dialect: "ideogram-v4",
-      family: "ideogram",
-      negativePolicy: "positive-only",
-      features: { references: true, exactText: true, layoutBoxes: true }
-    };
-  }
-  if (ideogramMode === "off" && normModel.includes("ideogram")) {
-    return {
-      dialect: "generic-prose",
-      family: "ideogram",
-      negativePolicy: "positive-only",
-      features: { references: true }
-    };
-  }
-  if (flux3KleinMode === "off" && (normModel === "blackforestlabs/flux-3/klein/text-to-image" || normModel === "blackforestlabs/flux-3/klein/edit-image" || normModel === "blackforestlabs/flux-3/klein/base/text-to-image" || normModel === "blackforestlabs/flux-3/klein/base/edit-image" || /(?:^|[\/._-])flux[-_.]?3.*klein/.test(normModel))) {
-    return {
-      dialect: "generic-prose",
-      family: "flux",
-      negativePolicy: "positive-only",
-      features: { references: true }
-    };
-  }
-  if (normModel.includes("ideogram")) {
-    return {
-      dialect: "ideogram-v4",
-      family: "ideogram",
-      negativePolicy: "positive-only",
-      features: { references: true, exactText: true, layoutBoxes: true }
-    };
-  }
-  if (normProvider === "novelai") {
-    return {
-      dialect: "novelai",
-      family: "novelai",
-      negativePolicy: "native",
-      features: { references: false }
-    };
-  }
-  if (normModel === "blackforestlabs/flux-3/klein/text-to-image" || normModel === "blackforestlabs/flux-3/klein/edit-image" || normModel === "blackforestlabs/flux-3/klein/base/text-to-image" || normModel === "blackforestlabs/flux-3/klein/base/edit-image" || /(?:^|[\/._-])flux[-_.]?3.*klein/.test(normModel)) {
-    return {
-      dialect: "flux3-klein",
-      family: "flux",
-      negativePolicy: "positive-only",
-      features: { references: true, layoutBoxes: true, exactText: true }
-    };
-  }
-  if (normModel === "black-forest-labs/flux-3/text-to-image" || normModel === "blackforestlabs/flux-3/pro/text-to-image" || normModel === "blackforestlabs/flux-3/dev/text-to-image" || /(?:^|[\/._-])flux[-_.]?3/.test(normModel)) {
-    return {
-      dialect: "flux3",
-      family: "flux",
-      negativePolicy: "positive-only",
-      features: { references: true }
-    };
-  }
-  if (normModel.includes("flux-2") || normModel.includes("flux")) {
-    return {
-      dialect: "generic-prose",
-      family: "flux",
-      negativePolicy: normModel.startsWith("flux-2-") ? "positive-only" : "positive-only",
-      features: { references: true }
-    };
-  }
-  if (normModel === "openai/gpt-image-2.5/flare/text-to-image" || normModel === "openai/gpt-image-2.5/flare/edit" || normModel === "openai/gpt-image-2.5/sunburst/text-to-image" || normModel === "openai/gpt-image-2.5/sunburst/edit" || normModel.includes("gpt-image-2.5")) {
-    return {
-      dialect: "gpt-image-2.5",
-      family: "gpt-image",
-      negativePolicy: "positive-only",
-      features: { exactText: true, references: true }
-    };
-  }
-  if (!normModel.includes("animagine") && (normModel === "xai/grok-imagine-image/v2.0/text-to-image" || normModel === "xai/grok-imagine-image/v2.0/edit" || normModel === "grok-imagine-image/v2.0" || /(?:^|[\/._-])grok.*imagine.*(?:v?2|2\.0)/.test(normModel))) {
-    return {
-      dialect: "grok-imagine-2",
-      family: "grok",
-      negativePolicy: "positive-only",
-      features: { references: true }
-    };
-  }
-  if (normModel === "qwen-image-3" || normModel === "qwen-image-3-pro" || /^qwen-image-3(?:-pro)?$/.test(normModel)) {
-    const expansionEnabled = parameters?.prompt_expansion !== false;
-    return {
-      dialect: "qwen-image-3",
-      family: "qwen",
-      negativePolicy: "native",
-      features: { references: true, exactText: true },
-      promptExpansion: {
-        supported: true,
-        enabled: expansionEnabled
-      }
-    };
-  }
-  if (/qwen/.test(normModel)) {
-    return {
-      dialect: "generic-prose",
-      family: "qwen",
-      negativePolicy: "positive-only",
-      features: { references: true }
-    };
-  }
-  if (normModel === "nano-banana-2.1" || normModel === "gemini-nano-banana-2.1" || normModel === "google/nano-banana-2.1" || normModel.includes("nano-banana-2.1") || /^(?:google\/)?(?:gemini-)?nano-banana-2\.1(?:\/.*)?$/.test(normModel)) {
-    return {
-      dialect: "nano-banana-2.1",
-      family: "nano-banana",
-      negativePolicy: "positive-only",
-      features: { references: true, thinking: true, exactText: true }
-    };
-  }
-  if (normModel === "bytedance/seedream-v5.0-pro" || normModel === "bytedance/seedream-v5.0-pro/edit" || normModel === "seedream-5-alternative" || normModel === "seedream-5-alternative/edit" || /seedream[-_]?(?:v?5(?:\.0)?(?:-pro)?)/.test(normModel)) {
-    return {
-      dialect: "seedream-5",
-      family: "seedream",
-      negativePolicy: "positive-only",
-      features: { references: true }
-    };
-  }
-  if (normModel === "anima/text-to-image" || normModel === "anima/text-to-image-lora" || /^anima(?:\/|$)/.test(normModel)) {
-    return {
-      dialect: "anima",
-      family: "anima",
-      negativePolicy: "positive-only",
-      features: { references: false }
-    };
-  }
-  if (/(?:danbooru|pony|illustrious|animagine|aniflatmix|artiwaifu|wai-illustrious|hentai|anime|tags)/.test(normModel)) {
-    return {
-      dialect: "generic-tags",
-      family: normModel.includes("pony") ? "pony" : normModel.includes("illustrious") ? "illustrious" : "anime-generic",
-      negativePolicy: "unknown",
-      features: {}
-    };
-  }
-  if (/recraft/.test(normModel)) {
-    return {
-      dialect: "generic-prose",
-      family: "recraft",
-      negativePolicy: "positive-only",
-      features: { references: true, exactText: true }
-    };
-  }
-  return {
-    dialect: "generic-prose",
-    family: "generic",
-    negativePolicy: "unknown",
-    features: {}
-  };
-}
-function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits, liveOutputs, parameters) {
-  const p = provider?.trim().toLowerCase() ?? "";
-  const rawModel = model?.trim() ?? "unknown";
-  const id8 = rawModel;
-  const resolution = resolveRouteDialect(p, id8, parameters, settings);
-  const dialect = resolution.dialect;
-  const family2 = resolution.family;
-  const liveLimit = p === "nanogpt" ? liveLimits?.get(id8) : undefined;
-  const catalogueLimit = p === "nanogpt" && Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id8) ? NANOGPT_PROMPT_CAPABILITIES[id8] : undefined;
-  const providerLimit = liveLimit ?? catalogueLimit;
-  let capabilitySource = "fallback";
-  if (liveLimit !== undefined) {
-    capabilitySource = "live";
-  } else if (catalogueLimit !== undefined) {
-    capabilitySource = "catalogue";
-  }
-  const dialectFallbackCeiling = {
-    "flux3-klein": 3000,
-    flux3: 3000,
-    "gpt-image-2.5": 32000,
-    "grok-imagine-2": 8000,
-    "qwen-image-3": 800,
-    "nano-banana-2.1": 50000,
-    "seedream-5": 3000,
-    anima: 3000,
-    novelai: 3000,
-    "generic-prose": 3000,
-    "generic-tags": 3000,
-    "ideogram-v4": 1e4
-  };
-  const defaultCeiling = providerLimit ?? dialectFallbackCeiling[dialect] ?? 3000;
-  let hardMaxCharacters = defaultCeiling;
-  if (settings.imagePromptBudgetOverride && typeof settings.imagePromptBudget === "number" && Number.isFinite(settings.imagePromptBudget)) {
-    const manualBudget = Math.min(65000, Math.max(256, Math.trunc(settings.imagePromptBudget)));
-    hardMaxCharacters = providerLimit !== undefined ? Math.min(manualBudget, providerLimit) : manualBudget;
-  }
-  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id8) : undefined;
-  const catalogueOutput = p === "nanogpt" && Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id8) ? NANOGPT_OUTPUT_CAPABILITIES[id8] : undefined;
-  const outputCapabilities = liveOutput ?? catalogueOutput;
-  let softBudgets = DIALECT_BUDGETS[dialect];
-  if (dialect === "qwen-image-3" && resolution.promptExpansion?.enabled === false) {
-    softBudgets = QWEN3_NO_EXPANSION_BUDGETS;
-  }
-  return ImagePromptProfileV2Schema.parse({
-    version: 2,
-    exactModel: rawModel,
-    family: family2,
-    dialect,
-    serializerRevision: V2_SERIALIZER_REVISION,
-    hardMaxCharacters,
-    capabilitySource,
-    negativePolicy: resolution.negativePolicy,
-    softBudgets,
-    ...resolution.promptExpansion ? { promptExpansion: resolution.promptExpansion } : {},
-    features: resolution.features,
-    ...dialect === "ideogram-v4" ? { ideogramMode: settings.ideogramPromptMode === "structured-prose" ? "structured-prose" : "json" } : {},
-    ...outputCapabilities ? { outputCapabilities } : {},
-    guidance: `Dialect: ${dialect}. Model-aware Prompt Engine v2.`
-  });
 }
 
 // src/frontend/image-review/picture-explanation.ts
@@ -60386,7 +63913,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.14-beta.185";
+var LUMIGLYPHICS_VERSION = "0.2.15-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -60536,7 +64063,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px calc(max(12px,env(safe-area-inset-bottom)) + var(--reader-keyboard-inset,0px));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
 var INSPECTOR_CSS = `
-:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.025));padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:var(--vn-shell-field,rgba(255,255,255,.04));border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.03))),rgba(0,0,0,.18));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.07)));font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:var(--vn-shell-field,rgba(255,255,255,.05));display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:var(--vn-shell-field,rgba(255,255,255,.025));border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--edge);background:var(--vn-shell-button,#252632);color:var(--vn-shell-text,#eee);font-weight:650;justify-content:center}[data-studio-footer] button[data-skip],[data-studio-footer] button[data-reset],[data-studio-footer] button[data-copy]{background:transparent;border-color:var(--edge)}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);border-color:var(--accent);font-weight:750}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.025));padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:var(--vn-shell-field,rgba(255,255,255,.04));border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.03))),rgba(0,0,0,.18));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.07)));font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{position:relative;padding:0;cursor:zoom-in;width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:var(--vn-shell-field,rgba(255,255,255,.05));display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:var(--vn-shell-field,rgba(255,255,255,.025));border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--edge);background:var(--vn-shell-button,#252632);color:var(--vn-shell-text,#eee);font-weight:650;justify-content:center}[data-studio-footer] button[data-skip],[data-studio-footer] button[data-reset],[data-studio-footer] button[data-copy]{background:transparent;border-color:var(--edge)}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);border-color:var(--accent);font-weight:750}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
 .studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:10px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
 .studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:color-mix(in srgb,var(--accent) 10%,var(--vn-shell-button,rgba(255,255,255,.08)));color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
@@ -61261,8 +64788,9 @@ class ImageStudio {
     const body2 = this.el("[data-studio-body]");
     const context = document.createElement("div");
     context.dataset.context = "";
-    context.innerHTML = '<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><div data-preview-safe-curtain hidden class="studio-vf-safe-curtain" style="font-size:8.5px;letter-spacing:0">SAFE ZONE</div><span aria-hidden="true" style="position:absolute;bottom:4px;right:4px;width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.28);background:rgba(0,0,0,0.68);color:#fff;font-size:12px;display:grid;place-items:center;pointer-events:none;line-height:1">⛶</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
-    const openHeroFullscreen = () => {
+    context.innerHTML = '<button type="button" data-thumbnail disabled aria-label="View selected artwork fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><span data-preview-safe-curtain hidden class="studio-vf-safe-curtain" style="font-size:8.5px;letter-spacing:0">SAFE ZONE</span><span aria-hidden="true" style="position:absolute;bottom:4px;right:4px;width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.28);background:rgba(0,0,0,0.68);color:#fff;font-size:12px;display:grid;place-items:center;pointer-events:none;line-height:1">⛶</span></button><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    const opener = context.querySelector("[data-thumbnail]");
+    const openHeroFullscreen = (trigger) => {
       const img = this.el("[data-preview]");
       if (!img.src || img.hidden)
         return;
@@ -61276,10 +64804,11 @@ class ImageStudio {
         subtitle,
         prompt: record2?.prompt,
         negativePrompt: record2?.negativePrompt,
-        themeSource: this.host
+        themeSource: this.host,
+        opener: trigger
       });
     };
-    context.querySelector("[data-thumbnail]").addEventListener("click", openHeroFullscreen);
+    opener.addEventListener("click", () => openHeroFullscreen(opener));
     context.querySelector("[data-context-text]").append(this.el("[data-scene]"));
     const heroActions = document.createElement("div");
     heroActions.className = "studio-hero-actions";
@@ -61301,7 +64830,7 @@ class ImageStudio {
     fsHeroBtn.type = "button";
     fsHeroBtn.dataset.heroFullscreen = "";
     fsHeroBtn.textContent = "⛶ Fullscreen";
-    fsHeroBtn.onclick = openHeroFullscreen;
+    fsHeroBtn.onclick = () => openHeroFullscreen(fsHeroBtn);
     const compareHeroBtn = document.createElement("button");
     compareHeroBtn.type = "button";
     compareHeroBtn.dataset.hubCompareBtn = "";
@@ -61344,6 +64873,13 @@ class ImageStudio {
       const element = this.el(selector);
       editor.append(element.tagName?.toUpperCase() === "TEXTAREA" ? element.closest("label") : element);
     }
+    const dialectPreview = document.createElement("details");
+    dialectPreview.dataset.dialectPreview = "";
+    dialectPreview.hidden = true;
+    dialectPreview.innerHTML = "<summary>Prompt format preview</summary>" + '<label>Format<select data-preview-format aria-label="Prompt preview format">' + '<option value="current">Current draft</option><option value="prose">Generic prose</option>' + '<option value="tags">Generic tags</option><option value="ideogram-json">Ideogram JSON</option>' + '<option value="ideogram-prose">Ideogram structured prose</option></select></label>' + '<p data-preview-format-status role="status"></p>' + "<label>Preview text<textarea data-preview-format-text readonly></textarea></label>";
+    dialectPreview.ontoggle = () => this.renderDialectPreview();
+    dialectPreview.querySelector("select").onchange = () => this.renderDialectPreview();
+    editor.append(dialectPreview);
     const enrichSection = document.createElement("div");
     enrichSection.dataset.enrichSection = "";
     enrichSection.style.cssText = "margin:12px 0 8px;padding:12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);display:flex;flex-direction:column;gap:8px;";
@@ -62380,6 +65916,71 @@ class ImageStudio {
     target2.scrollIntoView({ block: "nearest" });
     target2.focus({ preventScroll: true });
   }
+  renderDialectPreview() {
+    const preview = this.root.querySelector("[data-dialect-preview]");
+    if (!preview)
+      return;
+    const record2 = this.record();
+    preview.hidden = !record2 || Boolean(this.planningChat) || this.turn?.status === "planning";
+    if (!record2 || preview.hidden)
+      return;
+    const select = this.el("[data-preview-format]");
+    const key = this.draftKey(record2);
+    if (preview.dataset.record !== key) {
+      preview.dataset.record = key;
+      select.value = "current";
+    }
+    const metadata = record2.imagePromptMetadata;
+    const shotSpec = record2.shotSpec ?? metadata?.shotSpec;
+    const outputPlan = record2.outputPlan ?? metadata?.outputPlan;
+    const canCompare = Boolean(metadata?.brief && shotSpec && outputPlan);
+    for (const option of Array.from(select.children)) {
+      option.disabled = option.value !== "current" && !canCompare;
+    }
+    if (!preview.open)
+      return;
+    const status = this.el("[data-preview-format-status]");
+    const output2 = this.el("[data-preview-format-text]");
+    if (select.value === "current" || !metadata || !shotSpec || !outputPlan) {
+      const draft = this.editSnapshot();
+      const profile2 = record2.promptProfileV2 ?? resolveImagePromptProfileV2(record2.provider, record2.model);
+      const maximum = record2.promptProfileV2?.hardMaxCharacters ?? record2.promptProfile?.maxCharacters ?? profile2.hardMaxCharacters;
+      const total = draft.prompt.length + draft.negativePrompt.length;
+      status.textContent = record2.provider + " · " + record2.model + " · " + profile2.dialect + " · " + total.toLocaleString() + " / " + maximum.toLocaleString() + " draft characters. " + (profile2.negativePolicy === "positive-only" ? "This format uses a positive prompt only. " : "") + (canCompare ? "" : "This picture has no saved scene data for alternate format previews.");
+      output2.value = [
+        "Positive prompt",
+        draft.prompt,
+        "Negative prompt",
+        draft.negativePrompt,
+        "Parameters (as edited)",
+        draft.parametersText
+      ].join(`
+
+`);
+      return;
+    }
+    const format = select.value;
+    const alternate = resolveImagePromptProfileV2("preview", undefined, format.startsWith("ideogram") ? { ideogramPromptMode: format === "ideogram-json" ? "json" : "structured-prose" } : {});
+    const profile = format === "tags" ? { ...alternate, dialect: "generic-tags" } : alternate;
+    try {
+      const result = compileModelPrompt({
+        brief: metadata.brief,
+        shotSpec,
+        outputPlan,
+        profile,
+        styleDNA: record2.styleSnapshot ?? metadata.styleSnapshot ?? {}
+      });
+      const count3 = result.prompt.length + (result.negativePrompt?.length ?? 0);
+      status.textContent = count3.toLocaleString() + " / " + profile.hardMaxCharacters.toLocaleString() + " characters in this example. Compiled from the saved scene without local wording edits or attached references. Choosing a format here makes no request.";
+      output2.value = result.negativePrompt ? result.prompt + `
+
+Negative prompt
+` + result.negativePrompt : result.prompt;
+    } catch {
+      status.textContent = "This saved scene couldn’t be previewed in the selected format.";
+      output2.value = "";
+    }
+  }
   editSnapshot() {
     return { prompt: this.el("[data-positive]").value, negativePrompt: this.el("[data-negative]").value, parametersText: this.el("[data-parameters]").value };
   }
@@ -62492,6 +66093,7 @@ class ImageStudio {
       error61 = cause instanceof Error ? cause.message : String(cause);
     }
     this.el("[data-combined-count]").textContent = `${total.toLocaleString()} / ${maximum.toLocaleString()} combined characters${error61 ? " — blocked draft; repair required" : ""}`;
+    this.renderDialectPreview();
     const promptHubSub = this.root.querySelector('[data-hub-sub="prompt"]');
     if (promptHubSub)
       promptHubSub.textContent = `${total.toLocaleString()} / ${maximum.toLocaleString()} chars`;
@@ -62800,6 +66402,30 @@ class ImageStudio {
   }
   mobileLayout() {
     return isMobileWidth(this.host);
+  }
+  hasDraftForPicture(jobId) {
+    const hasSavedImage = this.turn?.assets.some((asset) => asset.jobId === jobId && asset.imageId && !asset.previousImage);
+    return this.drafts.has("job:" + jobId) || Boolean(this.turn?.imageRequests?.some((record2) => record2.jobId === jobId && (record2.state === "review" || record2.state === "prepared" && !hasSavedImage || this.drafts.has(this.draftKey(record2)))));
+  }
+  openPicture(jobId) {
+    this.open();
+    if (!this.turn?.assets.some((asset) => asset.jobId === jobId) || this.selectedJob === jobId)
+      return;
+    this.selectedJob = jobId;
+    this.selectedRequest = "";
+    this.render();
+  }
+  prepareDirectedPicture(request) {
+    this.openPicture(request.jobId);
+    if (this.preparing.has(request.jobId) || this.hasDraftForPicture(request.jobId))
+      return;
+    this.beginPreparation(request.jobId);
+    this.render();
+    try {
+      this.send(request);
+    } catch (error61) {
+      this.showError(error61 instanceof Error ? error61.message : String(error61));
+    }
   }
   open() {
     if (!this.el("section").hidden)
@@ -63363,7 +66989,8 @@ ${metadata.presentationRuleTrace.summary}`;
     this.el("[data-meta]").hidden = !record2 || planning;
     this.el("[data-prompt-editor]").hidden = !record2 && !asset || planning;
     this.el("[data-picture-tools]").hidden = !asset || planning;
-    this.el("[data-thumbnail]").hidden = !asset || planning;
+    const thumbnail = this.el("[data-thumbnail]");
+    thumbnail.hidden = !asset || planning;
     this.el("[data-model-help]").hidden = !record2 || planning || !this.el("[data-model-help]").textContent;
     this.el("[data-turn-recovery]").hidden = planning || !this.turn;
     if (planning)
@@ -63376,6 +67003,7 @@ ${metadata.presentationRuleTrace.summary}`;
       this.previewKey = key;
       const controller = new AbortController;
       this.previewLoad = controller;
+      thumbnail.disabled = true;
       image.hidden = true;
       image.removeAttribute("src");
       this.el("[data-placeholder]").hidden = false;
@@ -63386,6 +67014,7 @@ ${metadata.presentationRuleTrace.summary}`;
           image.src = url3;
           image.alt = asset?.previousImage ? "Previous picture while replacement is pending" : "Selected picture";
           image.hidden = false;
+          thumbnail.disabled = false;
           this.el("[data-placeholder]").hidden = true;
         }).catch(() => {
           if (!controller.signal.aborted) {
@@ -63427,17 +67056,17 @@ ${metadata.presentationRuleTrace.summary}`;
           btn.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:8px;background:var(--vn-shell-field,rgba(0,0,0,0.3));border:1px solid var(--edge);cursor:pointer;flex-shrink:0;width:76px;text-align:center;color:inherit;font-size:10px;";
           btn.disabled = ver.restorable === false;
           btn.title = ver.restoreNotice ?? `Version ${idx + 1}. Click to restore as active picture.`;
-          const thumbnail = document.createElement("img");
-          thumbnail.src = `/api/v1/images/${encodeURIComponent(ver.imageId)}`;
-          thumbnail.style.cssText = "width:64px;height:74px;object-fit:cover;border-radius:6px;display:block";
-          thumbnail.alt = `v${idx + 1}`;
+          const thumbnail2 = document.createElement("img");
+          thumbnail2.src = `/api/v1/images/${encodeURIComponent(ver.imageId)}`;
+          thumbnail2.style.cssText = "width:64px;height:74px;object-fit:cover;border-radius:6px;display:block";
+          thumbnail2.alt = `v${idx + 1}`;
           const number4 = document.createElement("span");
           number4.style.fontWeight = "700";
           number4.textContent = `v${idx + 1}`;
           const restoreLabel = document.createElement("span");
           restoreLabel.style.cssText = "color:var(--accent);font-size:9px";
           restoreLabel.textContent = ver.restorable === false ? "Metadata unavailable" : "Restore ↺";
-          btn.append(thumbnail, number4, restoreLabel);
+          btn.append(thumbnail2, number4, restoreLabel);
           const selectedTurn = this.turn, selectedJob = this.selectedJob;
           btn.onclick = () => {
             if (ver.restorable === false || !selectedTurn || this.turn !== selectedTurn || this.selectedJob !== selectedJob)
@@ -64107,7 +67736,10 @@ class ImageLibrary {
       this.status("Picture removed. Undo within 4.5s.");
       this.back();
     };
-    this.el("[data-full-image]").onclick = () => this.openFullscreen();
+    this.el("[data-full-image]").onclick = () => {
+      if (!fullscreenButton.disabled)
+        this.openFullscreen(undefined, fullscreenButton);
+    };
     this.el("[data-copy]").onclick = async () => {
       if (!this.selected?.prompt)
         return;
@@ -64121,9 +67753,19 @@ Negative prompt:
         this.status("Clipboard unavailable. Select the saved wording to copy it.");
       }
     };
-    this.el("[data-full-image]").onerror = () => {
-      if (this.selected)
-        this.status("This image could not be loaded. Its saved reference may no longer be available.");
+    const detailImage = this.el("[data-full-image]");
+    detailImage.onerror = () => {
+      const entry = this.selected;
+      if (!entry)
+        return;
+      fullscreenButton.disabled = true;
+      if (entry.thumbnailUrl && detailImage.getAttribute("src") !== entry.thumbnailUrl) {
+        this.status("Full-size artwork could not be loaded. Showing the saved thumbnail.");
+        detailImage.src = entry.thumbnailUrl;
+      } else {
+        detailImage.hidden = true;
+        this.status("This image could not be loaded. Saved details remain readable.");
+      }
     };
     for (const type of ["click", "pointerdown", "pointerup", "touchstart", "touchend", "wheel", "keydown"])
       this.root.addEventListener(type, (event) => event.stopPropagation());
@@ -64307,6 +67949,11 @@ Negative prompt:
     return req;
   }
   load() {
+    const title = this.mode === "story" ? "History" : "Saved artwork";
+    this.el("h2").textContent = title;
+    this.el("[data-library-close]").setAttribute("aria-label", "Close " + title.toLowerCase());
+    this.el("[data-detail-back]").setAttribute("aria-label", "Back to " + title.toLowerCase());
+    this.el("[data-browse] .note").textContent = this.mode === "story" ? "Saved replies and pictures from this chat. Browsing never generates images." : "Pictures saved in this chat. Open one to see its source and recorded prompt.";
     this.readingHistorySlot.hidden = this.mode !== "story" || this.pageIndex !== 0;
     if (!this.readingHistorySlot.hidden)
       this.onReadingHistoryRefresh?.();
@@ -64692,9 +68339,11 @@ Negative prompt:
     this.el("[data-library-footer]").hidden = true;
     const image = this.el("[data-full-image]");
     image.removeAttribute("src");
-    image.hidden = !entry.imageUrl;
-    if (entry.imageUrl)
-      image.src = entry.imageUrl;
+    const source = entry.imageUrl || entry.thumbnailUrl;
+    image.hidden = !source;
+    this.el("[data-fullscreen]").disabled = !entry.imageUrl;
+    if (source)
+      image.src = source;
     this.el("[data-description]").textContent = `Reply ${entry.messageNumber} · Picture ${entry.paragraphIndex + 1} · ${entry.template ?? "Story picture"} · ${entry.versionLabel} · ${entry.model ?? "Model not recorded"}${entry.provider ? " · " + entry.provider : ""}`;
     this.el("[data-excerpt]").textContent = stripUnknownPresetTags(entry.excerpt || "Source excerpt not recorded.");
     this.el("[data-positive]").value = entry.prompt ?? "Prompt not recorded for this picture.";
@@ -66015,11 +69664,23 @@ class CharacterFolio {
           display: flex;
           flex-direction: column;
         }
+        .folio-cg-open {
+          display: block;
+          width: 100%;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          cursor: zoom-in;
+        }
+        .folio-cg-open:focus-visible {
+          outline: 2px solid var(--vn-shell-accent, #86dbb2);
+          outline-offset: -3px;
+        }
         .folio-cg-thumb {
           width: 100%;
           height: 160px;
           object-fit: cover;
-          cursor: pointer;
           display: block;
         }
         .folio-cg-footer {
@@ -67916,12 +71577,17 @@ class CharacterFolio {
         const isAvatar = char.avatarUrl === cg.imageUrl;
         const card = document.createElement("div");
         card.className = `folio-cg-card${isPrimary ? " active-primary-ref" : ""}${isSecondary ? " active-secondary-ref" : ""}`;
+        const openPicture = document.createElement("button");
+        openPicture.type = "button";
+        openPicture.className = "folio-cg-open";
+        openPicture.setAttribute("aria-label", "Inspect artwork: " + (cg.caption || char.name));
         const img = document.createElement("img");
         img.className = "folio-cg-thumb";
         img.src = cg.imageUrl;
-        img.alt = cg.caption || char.name;
-        img.title = "Click to inspect full image";
-        img.onclick = () => {
+        img.alt = "";
+        img.loading = "lazy";
+        openPicture.append(img);
+        openPicture.onclick = () => {
           FullscreenLightbox.open({
             src: cg.imageUrl,
             title: char.name,
@@ -67933,6 +71599,7 @@ class CharacterFolio {
             })),
             galleryIndex: collected.indexOf(cg),
             themeSource: this.element,
+            opener: openPicture,
             onDelete: (item) => {
               this.removeCg(item.src);
               this.handlers.onDeleteImage?.(item.src);
@@ -68104,7 +71771,7 @@ class CharacterFolio {
         };
         btnRow.append(primaryBtn, secondaryBtn, cropBtn, cropOutfitBtn, avatarBtn, deleteBtn);
         footer.append(cap, btnRow);
-        card.append(badges, img, footer);
+        card.append(badges, openPicture, footer);
         grid.append(card);
       }
       cgsWrap.append(grid);
@@ -71837,6 +75504,7 @@ function setupVisualNovelFrontend(baseContext) {
   let savedReadingPosition = null;
   let readingPositionTimer = null;
   let latestStoryDnaRequestId = null;
+  const storyAutofillRequests = new Map;
   const pendingStoryDnaWrites = new Set;
   function saveCursor(paragraphIndex, immediate = false) {
     if (stage.isReadingUserParagraph())
@@ -71979,7 +75647,7 @@ function setupVisualNovelFrontend(baseContext) {
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
-    isAutoAdvanceHeld: () => isSpeechHoldingAuto() || imageLibraryOpen || imageStudioOpen || externalReviewOpen,
+    isAutoAdvanceHeld: () => isSpeechHoldingAuto() || imageLibraryOpen || imageStudioOpen || externalReviewOpen || quickDirector?.isOpen() === true,
     isTypewriterAudioMuted: () => {
       const kind = speech?.getStatus().kind;
       return kind === "loading" || kind === "playing";
@@ -72116,44 +75784,63 @@ function setupVisualNovelFrontend(baseContext) {
     quickTuner.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
+  let directorDnaChat = null;
   let directorScope = null;
+  const directorAssets = (source, index) => source.assets.filter((asset) => asset.paragraphIndex === index);
+  const directorSubject = (source, jobId) => {
+    const brief = source.imageRequests?.filter((request) => request.jobId === jobId && (request.state === "approved" || request.state === "prepared")).at(-1)?.imagePromptMetadata?.brief;
+    return brief?.subjectMode === "one" ? brief.subjectPreparation?.name : undefined;
+  };
+  const directorOutfits = (source, jobId) => directorDnaChat === source.chatId ? stage.getDirectorOutfits(directorSubject(source, jobId)) : [];
   quickDirector = new QuickDirectorPopover({
     mount: stage.panelMount,
+    onOpenArtwork: () => {
+      const candidates = turn ? directorAssets(turn, stage.getState().currentParagraphIndex) : [];
+      if (candidates.length === 1 && candidates[0])
+        imageStudio.openPicture(candidates[0].jobId);
+      else
+        imageStudio.open();
+    },
+    onVisibility: (open2) => {
+      if (open2) {
+        stage.toggleSkip(false);
+        stage.holdAutoPlay();
+      } else if (active)
+        stage.checkAutoPlay();
+    },
     onDirect: (cmd) => {
-      if (!turn) {
-        stage.setActivity?.("Open a story passage first to steer its scene art.", "warning");
-        return;
-      }
-      const pIdx = stage.getState().currentParagraphIndex;
       const scope = directorScope;
       directorScope = null;
-      if (!scope || scope.token !== referenceTurnToken(turn) || scope.paragraphIndex !== pIdx) {
+      if (!turn || !scope || scope.token !== referenceTurnToken(turn) || scope.paragraphIndex !== stage.getState().currentParagraphIndex) {
         stage.setActivity?.("This passage changed. Reopen Quick Director to continue.", "warning");
         return;
       }
-      const candidates = (turn.assets ?? []).filter((asset) => asset.paragraphIndex === pIdx);
-      const matchingAsset = candidates.length === 1 ? candidates[0] : undefined;
-      if (!matchingAsset) {
-        stage.setActivity?.("Open Artwork Studio to choose or prepare a picture for this passage.", "warning");
+      const candidates = directorAssets(turn, scope.paragraphIndex);
+      if (candidates.length !== 1 || candidates[0]?.jobId !== scope.jobId || candidates[0].imageId !== scope.imageId || candidates[0].previousImage || candidates[0].source === "cache") {
+        stage.setActivity?.("This picture changed. Reopen Quick Director to continue.", "warning");
         return;
       }
-      if (cmd.kind === "outfit") {
-        stage.setActivity?.(`Directing outfit swap: ${cmd.label}…`, "loading");
-      } else {
-        stage.setActivity?.(`Directing scene (${cmd.label})…`, "loading");
+      if (imageStudio.hasDraftForPicture(scope.jobId)) {
+        imageStudio.openPicture(scope.jobId);
+        return;
       }
-      ctx.sendToBackend({
+      if (cmd.kind === "outfit" && !directorOutfits(turn, scope.jobId).some((outfit) => outfit.charId === cmd.charId && outfit.key === cmd.wardrobeKey && outfit.outfit === cmd.outfit)) {
+        stage.setActivity?.("This saved outfit changed. Reopen Quick Director to choose it again.", "warning");
+        return;
+      }
+      imageStudio.prepareDirectedPicture({
         type: "vn_prepare_image",
         chatId: turn.chatId,
         messageId: turn.messageId,
         sourceFingerprint: turn.sourceFingerprint,
-        jobId: matchingAsset.jobId,
-        directorScope: { swipeId: turn.swipeId, revision: turn.revision, paragraphIndex: pIdx },
+        jobId: scope.jobId,
+        directorScope: { swipeId: turn.swipeId, revision: turn.revision, paragraphIndex: scope.paragraphIndex, imageId: scope.imageId },
         regeneratePrompt: true,
         promptOperation: "rewrite",
         guidance: cmd.guidance,
         reframe: cmd.kind === "shot",
-        relight: cmd.kind === "relight"
+        relight: cmd.kind === "relight",
+        lockContinuity: true
       });
     }
   });
@@ -72161,7 +75848,25 @@ function setupVisualNovelFrontend(baseContext) {
     const opener = event.detail?.opener ?? null;
     if (configRef.current)
       quickDirector.setPreset(configRef.current.themePreset);
-    directorScope = turn ? { token: referenceTurnToken(turn), paragraphIndex: stage.getState().currentParagraphIndex } : null;
+    const paragraphIndex = stage.getState().currentParagraphIndex;
+    const candidates = turn ? directorAssets(turn, paragraphIndex) : [];
+    const selected = candidates.length === 1 ? candidates[0] : undefined;
+    directorScope = null;
+    if (turn && selected?.imageId && !selected.previousImage && selected.source !== "cache" && (selected.status === "generated" || selected.status === "browser_ready") && !imageStudio.hasDraftForPicture(selected.jobId)) {
+      directorScope = { token: referenceTurnToken(turn), paragraphIndex, jobId: selected.jobId, imageId: selected.imageId };
+      quickDirector.setPicture({
+        label: "Artwork for passage " + (paragraphIndex + 1),
+        imageUrl: sceneImageUrlFor(selected) ?? ""
+      });
+      quickDirector.setOutfits(directorOutfits(turn, selected.jobId));
+    } else {
+      const waiting = selected && imageStudio.hasDraftForPicture(selected.jobId);
+      quickDirector.setPicture({
+        unavailable: waiting ? "This picture has a prompt draft waiting in Artwork Studio." : candidates.length > 1 ? "There is more than one picture for this passage. Choose one in Artwork Studio." : "There is no saved picture to direct for this passage.",
+        artworkLabel: waiting ? "Review existing draft" : "Open Artwork Studio"
+      });
+      quickDirector.setOutfits([]);
+    }
     quickDirector.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-director", onQuickDirectorEvent);
@@ -72345,23 +76050,61 @@ function setupVisualNovelFrontend(baseContext) {
     dnaRequests.set(requestId, { chatId: owner, action: body2.action, turnToken: dnaTurnToken, ...body2.action === "save" ? { saved: { id: body2.dna.id, updatedAt: body2.dna.lastUpdated } } : {} });
     ctx.sendToBackend(checked.data);
   };
-  const sendStoryDna = (body2) => {
+  function finishStoryAutofill(requestId, result) {
+    const pending = storyAutofillRequests.get(requestId);
+    if (!pending)
+      return false;
+    storyAutofillRequests.delete(requestId);
+    clearTimeout(pending.timer);
+    const current = loadedReadingCursor.position(stage.getState().currentParagraphIndex);
+    pending.finish(JSON.stringify(current) === JSON.stringify(pending.position) ? result : { error: "The reading position changed. Run autofill again." });
+    return true;
+  }
+  const sendStoryDna = (body2, onReview) => {
     const owner = chatId();
-    if (!owner)
-      return;
-    const requestId = createUiId();
-    const checked = StoryDnaRequestSchema.safeParse({ type: "vn_story_dna", chatId: owner, requestId, ...body2 });
-    if (!checked.success) {
-      stage.setStoryDnaError(checked.error.issues[0]?.message ?? "Invalid location or item DNA field.");
+    const isAutofill = body2.action === "review_autofill" || body2.action === "apply_autofill";
+    const position = isAutofill && active ? loadedReadingCursor.position(stage.getState().currentParagraphIndex) : null;
+    if (!owner || isAutofill && !position) {
+      onReview?.({ error: "Open a prepared passage first." });
       return;
     }
-    if (body2.action === "list")
+    const requestId = createUiId();
+    const checked = StoryDnaRequestSchema.safeParse({
+      type: "vn_story_dna",
+      chatId: owner,
+      requestId,
+      ...body2,
+      ...position ? { readingPosition: position } : {}
+    });
+    if (!checked.success) {
+      const error61 = checked.error.issues[0]?.message ?? "Invalid location or item DNA field.";
+      if (onReview)
+        onReview({ error: error61 });
+      else
+        stage.setStoryDnaError(error61);
+      return;
+    }
+    if (position && onReview) {
+      const timeoutMessage = body2.action === "apply_autofill" ? "The save did not respond. Refresh the current entry before retrying." : "Autofill timed out. Run it again to retry.";
+      const timer = setTimeout(() => finishStoryAutofill(requestId, { error: timeoutMessage }), 60000);
+      storyAutofillRequests.set(requestId, { position, finish: onReview, timer });
+    } else if (body2.action === "list")
       latestStoryDnaRequestId = requestId;
     else
       pendingStoryDnaWrites.add(requestId);
-    ctx.sendToBackend(checked.data);
+    try {
+      ctx.sendToBackend(checked.data);
+    } catch (error61) {
+      if (!finishStoryAutofill(requestId, { error: error61 instanceof Error ? error61.message : String(error61) }))
+        throw error61;
+    }
   };
   function clearStoryLore() {
+    for (const [requestId, pending] of storyAutofillRequests) {
+      clearTimeout(pending.timer);
+      storyAutofillRequests.delete(requestId);
+      pending.finish({ error: "The reading position changed. Run autofill again." });
+    }
     latestStoryDnaRequestId = null;
     stage.setStoryDna({ locations: {}, items: {}, revision: 0 });
   }
@@ -72409,7 +76152,7 @@ function setupVisualNovelFrontend(baseContext) {
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open("character");
   });
-  stage.setStoryDnaRequester((body2) => sendStoryDna(body2));
+  stage.setStoryDnaRequester(sendStoryDna);
   stage.setLocationArtRequester((action2) => {
     const owner = chatId();
     if (!owner)
@@ -72720,6 +76463,9 @@ function setupVisualNovelFrontend(baseContext) {
       saveCursor(stage.getState().currentParagraphIndex, true);
     stage.showReaderText();
     active = false;
+    directorScope = null;
+    directorDnaChat = null;
+    quickDirector.close(false);
     const activeChatId = chatId();
     if (wasActive && activeChatId)
       ctx.sendToBackend({ type: "vn_view", chatId: activeChatId, open: false });
@@ -73042,6 +76788,7 @@ function setupVisualNovelFrontend(baseContext) {
       dnaRevision = message.library.revision ?? 0;
       characterFolio.setLibrary(message.library, owner.action !== "list", owner.saved);
       characterFolio.setGalleries(message.characterGalleries);
+      directorDnaChat = message.chatId;
       stage.setCharacterDnaLibrary(message.library.characters, owner.turnToken === dnaTurnToken);
       if (message.proposal)
         characterFolio.setProposal(message.proposal);
@@ -73058,6 +76805,12 @@ function setupVisualNovelFrontend(baseContext) {
       }
       return;
     }
+    if (type === "vn_story_autofill" && message.type === "vn_story_autofill") {
+      if (message.chatId === chatId() && finishStoryAutofill(message.requestId, message.result) && "saved" in message.result) {
+        refreshStoryLore();
+      }
+      return;
+    }
     if (type === "vn_story_dna" && message.type === "vn_story_dna") {
       if (message.chatId !== chatId() || !message.requestId)
         return;
@@ -73068,6 +76821,8 @@ function setupVisualNovelFrontend(baseContext) {
       return;
     }
     if (type === "vn_error" && message.type === "vn_error" && message.operation === "vn_story_dna") {
+      if (message.requestId && message.chatId === chatId() && finishStoryAutofill(message.requestId, { error: message.error }))
+        return;
       const accepted = !message.requestId || message.requestId === latestStoryDnaRequestId || pendingStoryDnaWrites.delete(message.requestId);
       if (accepted && (!message.chatId || message.chatId === chatId()))
         stage.setStoryDnaError(message.error);
@@ -73412,6 +77167,9 @@ function setupVisualNovelFrontend(baseContext) {
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const resetChatState = (ensureLauncher = false) => {
+    directorScope = null;
+    directorDnaChat = null;
+    quickDirector.close(false);
     characterFolio.setContext(null);
     dnaRequests.clear();
     dnaTurnToken = "";

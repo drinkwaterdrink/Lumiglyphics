@@ -2,7 +2,7 @@ import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {browserFixtureServer} from './browser-fixture-server.ts';
 const server=await browserFixtureServer('scripts/host-lifecycle-fixture.ts');
-const browser=await chromium.launch({headless:true});
+const browser=await chromium.launch({headless:true,...(process.env.LUMIGLYPHICS_CHROME_PATH?{executablePath:process.env.LUMIGLYPHICS_CHROME_PATH}:{})});
 try{
  for(const width of [390,1280]){
  const page=await browser.newPage({viewport:{width,height:844},isMobile:width<600,hasTouch:true});

@@ -19,7 +19,9 @@ import {
   formatLocationDNAForImagePrompt,
   type ItemDNA,
   type LocationDNA,
-  type StoryDnaActionBody,
+  type StoryDnaRequester,
+  type StoryAutofillField,
+  type StoryAutofillProposal,
   type StoryDNASet,
   type StoryDocumentLedgerEntry,
   type ThoughtCabinetEntry,
@@ -139,10 +141,11 @@ export class DossierCard {
   private selectedEntityId: string | null = null;
   private hubView: 'scene' | 'atlas' = 'scene';
   private perspectiveFilter = 'all';
+  private perspectivesOpen = false;
   private linkMode = false;
   private linkSourceId: string | null = null;
   private storyDna: StoryDNASet = { locations: {}, items: {}, revision: 0 };
-  private storyDnaRequester: ((body: StoryDnaActionBody) => void) | null = null;
+  private storyDnaRequester: StoryDnaRequester | null = null;
   private storyDnaError: string | null = null;
   private locationArtLibrary: LocationArtLibrary = { version: 1, locations: [] };
   private locationArtRequester: ((action: LocationArtAction) => void) | null = null;
@@ -273,7 +276,7 @@ export class DossierCard {
     }
   }
 
-  setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void {
+  setStoryDnaRequester(fn: StoryDnaRequester): void {
     this.storyDnaRequester = fn;
   }
 
@@ -1038,6 +1041,7 @@ export class DossierCard {
       this.selectedEntityId = null;
       this.hubView = 'scene';
       this.perspectiveFilter = 'all';
+      this.perspectivesOpen = false;
       this.linkMode = false;
       this.linkSourceId = null;
     }
@@ -1577,7 +1581,7 @@ export class DossierCard {
       } else {
         // Living Story Atlas & Thread Map (General-Purpose Interactive Hub)
         const atlasSection = document.createElement('div');
-        atlasSection.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:6px;';
+        atlasSection.className = 'world-atlas-section';
 
         const atlasBar = document.createElement('div');
         atlasBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;opacity:0.9;';
@@ -1596,20 +1600,17 @@ export class DossierCard {
         atlasViewport.style.cssText = 'overflow:auto;max-height:260px;border-radius:10px;border:1px solid var(--vn-panel-border,rgba(255,255,255,.16));background:rgba(12,24,20,0.55);';
 
         const atlasSizer = document.createElement('div');
-        atlasSizer.style.cssText = 'position:relative;';
+        atlasSizer.className = 'world-atlas-sizer';
 
         const atlasWrap = document.createElement('div');
         atlasWrap.className = 'world-atlas-view';
         atlasWrap.dataset.worldAtlasView = '';
-        atlasWrap.style.width = '330px';
-        atlasWrap.style.height = '215px';
-        atlasWrap.style.transformOrigin = 'top left';
         const applyAtlasZoom = (next: number) => {
           atlasZoom = Math.max(0.75, Math.min(1.75, Number(next.toFixed(2))));
           worldSheet.dataset.atlasZoom = String(atlasZoom);
-          atlasSizer.style.width = `${Math.round(330 * atlasZoom)}px`;
-          atlasSizer.style.height = `${Math.round(215 * atlasZoom)}px`;
-          atlasWrap.style.transform = `scale(${atlasZoom})`;
+          atlasSizer.style.setProperty("--world-atlas-width", String(Math.round(330 * atlasZoom)) + "px");
+          atlasSizer.style.setProperty("--world-atlas-height", String(Math.round(215 * atlasZoom)) + "px");
+          atlasSizer.style.setProperty("--world-atlas-scale", String(atlasZoom));
         };
 
         if (this.storyDnaRequester) {
@@ -1630,6 +1631,7 @@ export class DossierCard {
 
         for (const [label, aria, delta] of [['−', 'Zoom out atlas', -0.25], ['1:1', 'Reset atlas zoom', 0], ['+', 'Zoom in atlas', 0.25]] as const) {
           const zBtn = document.createElement('button');
+          zBtn.dataset.atlasZoomControl = '';
           zBtn.type = 'button';
           zBtn.textContent = label;
           zBtn.setAttribute('aria-label', aria);
@@ -1676,6 +1678,8 @@ export class DossierCard {
         const nodes = [...placeMap.values()].filter(
           (n) => !qLower || n.name.toLocaleLowerCase().includes(qLower)
         );
+        // More than four labels cannot fit on the ring with independent touch targets.
+        atlasSection.dataset.dense = String(nodes.length > 4);
         const coords = new Map<string, { x: number; y: number }>();
         nodes.forEach((node, idx) => {
           if (nodes.length === 1) {
@@ -1715,10 +1719,11 @@ export class DossierCard {
           nodeBtn.className = `map-node-pill ${this.selectedEntityId === node.entryId || (this.linkMode && this.linkSourceId === (node.dnaId ?? node.id)) ? 'active' : ''} ${node.isActive ? 'active-location' : ''}`;
           nodeBtn.style.left = `${Math.max(4, Math.min(68, Math.round((pt.x / 330) * 100 - 11)))}%`;
           nodeBtn.style.top = `${Math.max(4, Math.min(72, Math.round((pt.y / 210) * 100 - 10)))}%`;
-          nodeBtn.style.maxWidth = '120px';
+          nodeBtn.dataset.atlasPlaceState = node.state;
           const icon = node.state === 'active' ? '★' : node.state === 'visited' ? '📍' : '○';
           const badge = node.state === 'active' ? `★ ACTIVE · 👥 ${presentCast.length}` : node.state === 'visited' ? 'Visited' : 'Mentioned';
-          nodeBtn.innerHTML = html`<span class="index-dot"></span><b style="white-space:normal;line-height:1.2;word-break:break-word">${icon} ${node.name}</b><small>${badge}</small>`.value;
+          nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${icon} ${node.name}</b><small>${badge}</small>`.value;
+          nodeBtn.title = node.name;
           nodeBtn.onclick = () => {
             if (this.linkMode && this.storyDnaRequester) {
               const targetKey = node.dnaId ?? node.id;
@@ -1918,14 +1923,18 @@ export class DossierCard {
         worldSheet.append(threadsCard);
       }
 
-      if (beliefNpcs.length > 0 || this.hubView === 'atlas') {
-        const perspCard = document.createElement('div');
+      if (this.hubView === 'atlas') {
+        const perspCard = document.createElement('details');
+        perspCard.open = this.perspectivesOpen;
+        perspCard.ontoggle = () => {
+          if (this.host.contains(perspCard)) this.perspectivesOpen = perspCard.open;
+        };
         perspCard.className = 'world-threads-card secrets-board';
         perspCard.dataset.worldPerspectivesSection = '';
         perspCard.dataset.secretsBoard = '';
-        const pHdr = document.createElement('div');
+        const pHdr = document.createElement('summary');
         pHdr.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--vn-shell-info-ink,#93c5fd);margin-bottom:6px;';
-        pHdr.textContent = '👁️ Secrets & Beliefs · Who Knows What';
+        pHdr.textContent = 'Perspectives';
         const pFilterRow = document.createElement('div');
         pFilterRow.className = 'chip-row';
         for (const npc of ['all', ...beliefNpcs.map(([n]) => n)]) {
@@ -1942,7 +1951,7 @@ export class DossierCard {
         if (beliefNpcs.length === 0) {
           const emptySecrets = document.createElement('p');
           emptySecrets.className = 'world-scene-empty';
-          emptySecrets.textContent = 'No character beliefs or hidden secrets recorded yet in this chat.';
+          emptySecrets.textContent = 'No character perspectives have been revealed here yet.';
           bList.append(emptySecrets);
         } else {
           for (const [npc, items] of beliefNpcs) {
@@ -1966,17 +1975,24 @@ export class DossierCard {
               body.textContent = item.belief;
 
               row.append(head, body);
-              if (this.sceneHubContext?.onDraftAction) {
+              const draftAction = this.sceneHubContext?.actionsEnabled ? this.sceneHubContext.onDraftAction : undefined;
+              if (draftAction) {
                 const askBtn = document.createElement('button');
                 askBtn.type = 'button';
                 askBtn.className = 'secret-action-btn';
                 askBtn.dataset.secretAsk = '';
-                askBtn.textContent = `Reveal / Ask ${npc} about this`;
-                askBtn.onclick = () => {
-                  this.close();
-                  this.sceneHubContext?.onDraftAction?.(`Ask ${npc} about ${item.topic}: "${item.belief}" `);
-                };
+                askBtn.textContent = 'Draft a question for ' + npc;
+                askBtn.onclick = () => draftAction('I ask ' + npc + ' about ' + item.topic + '.');
                 row.append(askBtn);
+                if (rawState === 'knows') {
+                  const share = document.createElement('button');
+                  share.type = 'button';
+                  share.className = 'secret-action-btn';
+                  share.dataset.secretShare = '';
+                  share.textContent = 'Draft sharing this with ' + npc;
+                  share.onclick = () => draftAction('I tell ' + npc + ' what I learned about ' + item.topic + ': ' + item.belief);
+                  row.append(share);
+                }
               }
               bList.append(row);
             }
@@ -2095,10 +2111,10 @@ export class DossierCard {
           goBtn.type = 'button';
           goBtn.className = 'world-lens-cta';
           goBtn.dataset.worldLensGoTo = activeEntry.entity.name;
-          goBtn.textContent = `Head to ${activeEntry.entity.name}`;
+          goBtn.title = 'Add a travel intention to your reply draft';
+          goBtn.textContent = `Draft travel to ${activeEntry.entity.name}`;
           goBtn.onclick = () => {
             this.sceneHubContext?.onDraftAction?.(`I head to ${activeEntry.entity.name}.`);
-            this.close();
           };
           actionsRow.append(goBtn);
         }
@@ -2357,7 +2373,7 @@ export class DossierCard {
     const autofillBtn = document.createElement('button');
     autofillBtn.type = 'button';
     autofillBtn.dataset.storyDnaAutofill = '';
-    autofillBtn.textContent = '✨ Auto-Fill DNA';
+    autofillBtn.textContent = 'Review autofill suggestions';
     autofillBtn.disabled = isLocked || !this.storyDnaRequester;
 
     lockBtn.onclick = () => {
@@ -2455,16 +2471,6 @@ export class DossierCard {
       [aliasesIn, descIn, archIn, lightIn, atmIn, elemIn, connIn, loreIn, notesIn].forEach(el => el.addEventListener('input', refreshPreview));
       refreshPreview();
 
-      autofillBtn.onclick = () => {
-        this.awaitingDnaSync = true;
-        status.textContent = 'Scanning story & SimTracker for scenery clues...';
-        status.hidden = false;
-        this.storyDnaRequester?.({
-          action: 'autofill_location',
-          locationId: existingLoc?.id,
-          locationName: dossier.entity.name,
-        });
-      };
       saveBtn.onclick = () => {
         const nextLoc = buildLoc();
         this.storyDnaRequester?.({ action: 'save_location', location: nextLoc, revision: this.storyDna.revision });
@@ -2588,13 +2594,19 @@ export class DossierCard {
       }
     } else {
       if (existingItem?.referenceImageUrl) {
-        const artWrap = document.createElement('div');
-        artWrap.style.cssText = 'margin-bottom:10px;border-radius:10px;overflow:hidden;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.16));background:rgba(0,0,0,0.28);display:flex;justify-content:center;';
+        const artWrap = document.createElement('button');
+        artWrap.type = 'button';
+        artWrap.dataset.dossierArtOpen = '';
+        artWrap.setAttribute('aria-label', 'Inspect artwork: ' + existingItem.name);
         const artImg = document.createElement('img');
         artImg.src = existingItem.referenceImageUrl;
-        artImg.alt = existingItem.name;
-        artImg.style.cssText = 'max-width:100%;max-height:240px;object-fit:contain;cursor:zoom-in;display:block;';
-        artImg.onclick = () => FullscreenLightbox.open({ src: existingItem.referenceImageUrl!, title: existingItem.name, themeSource: this.host });
+        artImg.alt = '';
+        artWrap.onclick = () => FullscreenLightbox.open({
+          src: existingItem.referenceImageUrl!,
+          title: existingItem.name,
+          themeSource: this.host,
+          opener: artWrap,
+        });
         artWrap.append(artImg);
         form.append(artWrap);
       }
@@ -2654,16 +2666,6 @@ export class DossierCard {
         status.hidden = false;
         this.storyDnaRequester?.({ action: 'generate_item_art', itemId: existingItem.id });
       };
-      autofillBtn.onclick = () => {
-        this.awaitingDnaSync = true;
-        status.textContent = 'Scanning story for artifact details...';
-        status.hidden = false;
-        this.storyDnaRequester?.({
-          action: 'autofill_item',
-          itemId: existingItem?.id,
-          itemName: dossier.entity.name,
-        });
-      };
       saveBtn.onclick = () => {
         const nextItem = buildItem();
         this.storyDnaRequester?.({ action: 'save_item', item: nextItem, revision: this.storyDna.revision });
@@ -2718,7 +2720,151 @@ export class DossierCard {
       }
     }
 
-    wrap.append(form, preview, footer);
+    const review = document.createElement('section');
+    review.dataset.storyAutofillReview = '';
+    review.hidden = true;
+    const fields = new Map(Array.from(form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-dna-field]'))
+      .map(input => [input.dataset.dnaField!, { input, saved: input.value }]));
+    const setAutofillStatus = (text: string) => {
+      status.textContent = text;
+      status.hidden = !text;
+      status.setAttribute('role', 'status');
+    };
+    let savingReview = false;
+    const closeReview = () => {
+      if (savingReview) return;
+      review.hidden = true;
+      review.replaceChildren();
+      autofillBtn.focus({ preventScroll: true });
+    };
+    review.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        event.preventDefault();
+        closeReview();
+      }
+    });
+    const showReview = (proposal: StoryAutofillProposal) => {
+      if (!proposal.changes.length) {
+        setAutofillStatus('Autofill found no new fields in the revealed passages.');
+        return;
+      }
+      const heading = document.createElement('h4');
+      heading.textContent = 'Review suggestions for ' + proposal.name;
+      heading.tabIndex = -1;
+      const scope = document.createElement('small');
+      scope.textContent = 'Revealed through passage ' + (proposal.paragraphIndex + 1);
+      const evidence = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'Read the source excerpts';
+      evidence.append(summary);
+      for (const excerpt of proposal.evidence) {
+        const quote = document.createElement('blockquote');
+        quote.textContent = excerpt;
+        evidence.append(quote);
+      }
+      const choices = document.createElement('fieldset');
+      const legend = document.createElement('legend');
+      legend.textContent = 'Select fields to apply';
+      choices.append(legend);
+      const apply = document.createElement('button');
+      apply.type = 'button';
+      apply.textContent = 'Apply selected fields';
+      apply.disabled = true;
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.textContent = 'Keep current fields';
+      cancel.onclick = closeReview;
+      const note = document.createElement('p');
+      note.setAttribute('role', 'status');
+      const checked = new Set<StoryAutofillField>();
+      for (const change of proposal.changes) {
+        const label = document.createElement('label');
+        label.className = 'story-autofill-field';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.dataset.autofillField = change.field;
+        const labelText = document.createElement('strong');
+        labelText.textContent = fields.get(change.field)?.input.closest('label')?.querySelector('span')?.textContent ?? change.field;
+        const values = document.createElement('small');
+        const format = (value: string | string[] | null) => (Array.isArray(value) ? value.join(', ') : value) || 'Empty';
+        values.textContent = 'Current: ' + format(change.before) + '\nSuggested: ' + format(change.after);
+        box.onchange = () => {
+          if (box.checked) checked.add(change.field);
+          else checked.delete(change.field);
+          apply.disabled = checked.size === 0;
+        };
+        label.append(box, labelText, values);
+        choices.append(label);
+      }
+      apply.onclick = () => {
+        const selected = proposal.changes.filter(change => checked.has(change.field));
+        if (!selected.length || apply.disabled) return;
+        if (selected.some(change => {
+          const field = fields.get(change.field);
+          return field && field.input.value !== field.saved;
+        })) {
+          note.textContent = 'A selected field has unsaved edits in this editor. Keep your edits or deselect that field.';
+          return;
+        }
+        savingReview = true;
+        apply.disabled = true;
+        cancel.disabled = true;
+        autofillBtn.disabled = true;
+        choices.disabled = true;
+        note.textContent = 'Saving selected fields…';
+        this.storyDnaRequester?.({ action: 'apply_autofill', proposalId: proposal.id, fields: [...checked] }, result => {
+          if (!this.host.contains(review) || review.hidden) return;
+          savingReview = false;
+          cancel.disabled = false;
+          autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+          if ('error' in result) {
+            note.textContent = result.error;
+            choices.disabled = false;
+            apply.disabled = false;
+            return;
+          }
+          if (!('saved' in result)) return;
+          for (const change of selected) {
+            const field = fields.get(change.field);
+            if (!field) continue;
+            const value = Array.isArray(change.after) ? change.after.join(', ') : change.after;
+            if (field.input.value === field.saved) {
+              field.input.value = value;
+              field.input.dispatchEvent(new Event('input'));
+            }
+            field.saved = value;
+          }
+          setAutofillStatus('Selected autofill fields saved.');
+          closeReview();
+        });
+      };
+      const actions = document.createElement('div');
+      actions.className = 'story-dna-footer';
+      actions.append(cancel, apply);
+      review.replaceChildren(heading, scope, evidence, choices, note, actions);
+      review.hidden = false;
+      heading.focus({ preventScroll: true });
+    };
+    autofillBtn.onclick = () => {
+      if (!review.hidden) closeReview();
+      const target = existingLoc ?? existingItem;
+      autofillBtn.disabled = true;
+      setAutofillStatus('Scanning revealed passages for suggestions…');
+      this.storyDnaRequester?.({
+        action: 'review_autofill', kind, name: dossier.entity.name,
+        ...(target ? { targetId: target.id } : {}),
+      }, result => {
+        if (!this.host.contains(wrap) || this.host.hidden) return;
+        autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+        if ('error' in result) setAutofillStatus(result.error);
+        else if ('proposal' in result) {
+          setAutofillStatus('');
+          showReview(result.proposal);
+        }
+      });
+    };
+    wrap.append(review, form, preview, footer);
     return wrap;
   }
 

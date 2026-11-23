@@ -44,7 +44,7 @@ const COLOR_NAME_TO_HEX: Record<string, string> = {
 };
 
 /**
- * Extracts or generates 4 to 6 uppercase #RRGGBB hex codes based on scene atmosphere,
+ * Extracts or generates 3 to 6 uppercase #RRGGBB hex codes based on scene atmosphere,
  * lighting, and character appearance to satisfy Ideogram's strict color_palette rules.
  */
 export function extractIdeogramPalette(brief: VisualBrief, styleDNA?: StyleDNA): string[] {
@@ -115,12 +115,16 @@ function isPhotographicMedium(styleDNA?: StyleDNA, brief?: VisualBrief): boolean
   return false;
 }
 
-/**
- * Finds optional text element in quotes within action or visualFocus (e.g. 'MIDNIGHT RAMEN').
- */
-function extractQuotedText(text: string): string | null {
-  const match = text.match(/['"]([^'"]{1,40})['"]/);
-  return match && match[1] ? match[1].trim() : null;
+/** Extracts lettering explicitly assigned to a visible surface. */
+function extractVisibleLettering(text: string): string | undefined {
+  const cue = /\b(?:sign(?:age|board)?|poster|plaque|label|banner|billboard|lettering|inscription|written text|printed text)\b(?:\s+(?:that\s+)?(?:reads?|says?|reading|bearing|displaying|lettered|labeled|labelled))?\s*:?\s*/giu;
+  const quote = /^(?:"([^"\r\n]{1,40})"|“([^”\r\n]{1,40})”|'((?:[^'\r\n]|(?<=\w)'(?=\w)){1,40})'(?!\w)|‘((?:[^’\r\n]|(?<=\w)’(?=\w)){1,40})’(?!\w))/iu;
+  for (const match of text.matchAll(cue)) {
+    const literal = quote.exec(text.slice(match.index + match[0].length));
+    const wording = literal?.slice(1).find(value => value !== undefined)?.trim();
+    if (wording) return wording;
+  }
+  return undefined;
 }
 
 function findPlacementForSubject(
@@ -174,6 +178,10 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
 
   const subjects = parseSubjectsFromBrief(brief, cue);
   const palette = extractIdeogramPalette(brief, styleDNA);
+  const rolePalette = (first: number, second: number) =>
+    [palette[first % palette.length]!, palette[second % palette.length]!];
+  const lettering = extractVisibleLettering(cue?.visualFocus ?? '') ?? extractVisibleLettering(brief.action);
+
   const isPhoto = isPhotographicMedium(styleDNA, brief);
   const isDirectJson = profile.ideogramMode !== 'structured-prose';
 
@@ -227,7 +235,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
       styleDescription.color_palette = palette;
     }
 
-    // 3. Compositional deconstruction (4 to 6 elements for safety refusal bypass)
+    // 3. Compositional deconstruction (up to six elements)
     const elements: Array<Record<string, unknown>> = [];
 
     let overflowCastDescriptions = '';
@@ -259,7 +267,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
           type: 'obj',
           bbox,
           desc: `${sub.name}: ${appearanceDesc}${attireStr}. ${stagingClause}`,
-          color_palette: [palette[i % palette.length], palette[(i + 1) % palette.length]]
+          color_palette: rolePalette(i, i + 1)
         });
       });
     } else if (subjects.length === 1 && brief.subjectMode !== 'none') {
@@ -272,7 +280,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
         type: 'obj',
         bbox: [120, 200, 880, 800],
         desc: `${main.name}: ${appearanceDesc}${attireStr}, ${main.action || brief.action || 'featured in the scene'}.`,
-        color_palette: [palette[0]!, palette[1]!]
+        color_palette: rolePalette(0, 1)
       });
 
       // Focal action prop
@@ -280,7 +288,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
         type: 'obj',
         bbox: [480, 320, 800, 680],
         desc: cue?.visualFocus ? `Featured focal element: ${cue.visualFocus}.` : 'Featured interaction prop and immediate environmental details.',
-        color_palette: [palette[2]!, palette[3]!]
+        color_palette: rolePalette(2, 3)
       });
     } else {
       // Environment-only focus
@@ -288,7 +296,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
         type: 'obj',
         bbox: [180, 150, 820, 850],
         desc: cue?.visualFocus ? `Central focus: ${cue.visualFocus}.` : 'Central focal scenery and primary architectural features.',
-        color_palette: [palette[0]!, palette[1]!]
+        color_palette: rolePalette(0, 1)
       });
     }
 
@@ -297,7 +305,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
       type: 'obj',
       bbox: [760, 40, 960, 960],
       desc: 'Immediate foreground floor plane with detailed material textures, reflections, and spatial perspective.',
-      color_palette: [palette[0]!, palette[1]!]
+      color_palette: rolePalette(0, 1)
     });
 
     // Midground environment element (Element 4)
@@ -306,7 +314,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
       type: 'obj',
       bbox: [180, 40, 740, 960],
       desc: `Midground environmental backdrop: ${midgroundBackdrop}.${overflowCastDescriptions}`,
-      color_palette: [palette[2]!, palette[3]!]
+      color_palette: rolePalette(2, 3)
     });
 
     // Upper atmosphere/ceiling element (Element 5)
@@ -314,18 +322,17 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
       type: 'obj',
       bbox: [20, 40, 360, 960],
       desc: 'Upper ceiling structure, sky gradient, and atmospheric volumetric light spill overhead.',
-      color_palette: [palette[3]!, palette[4] || palette[0]!]
+      color_palette: rolePalette(3, 4)
     });
 
     // Check for optional typography (Element 6)
-    const quoteInAction = extractQuotedText(`${brief.action} ${cue?.visualFocus || ''}`);
-    if (quoteInAction && elements.length < 6) {
+    if (lettering && elements.length < 6) {
       elements.unshift({
         type: 'text',
         bbox: [80, 150, 200, 850],
-        text: quoteInAction.slice(0, 35),
+        text: lettering.slice(0, 35),
         desc: 'Sharp, elegant typography displayed cleanly on an environmental sign or surface.',
-        color_palette: [palette[1]!, palette[4] || palette[0]!]
+        color_palette: rolePalette(1, 4)
       });
     }
 
@@ -384,8 +391,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
   }
 
   // [3. Exact Text in Single Quotes if any]
-  const quoted = extractQuotedText(`${brief.action} ${cue?.visualFocus || ''}`);
-  const textClause = quoted ? ` featuring clean typography reading '${quoted}'` : '';
+  const textClause = lettering ? ` featuring clean typography reading '${lettering}'` : '';
 
   // [4. Detailed Background & Surfaces]
   const backgroundText = `Behind, ${cleanScene}.`;

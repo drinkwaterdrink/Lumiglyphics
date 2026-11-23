@@ -322,14 +322,14 @@ it('allows setting primary face reference and secondary outfit reference in the 
     expect(cards.length).toBeGreaterThanOrEqual(2);
 
     // Click primary reference on first card (most recent image: cloak)
-    const firstPrimaryBtn = cards[0].querySelectorAll('button')[0];
+    const firstPrimaryBtn = cards[0].querySelectorAll('.folio-action-btn')[0];
     firstPrimaryBtn.click();
     expect(char.referenceImageUrl).toBe('https://example.com/cloak.png');
     expect(char.avatarUrl).toBe('https://example.com/cloak.png');
     expect(savedDna?.referenceImageUrl).toBe('https://example.com/cloak.png');
 
     // Click secondary reference on second card (earlier image: face)
-    const secondOutfitBtn = cards[1].querySelectorAll('button')[1];
+    const secondOutfitBtn = cards[1].querySelectorAll('.folio-action-btn')[1];
     secondOutfitBtn.click();
     expect(char.secondaryReferenceImageUrl).toBe('https://example.com/face.png');
     expect(savedDna?.secondaryReferenceImageUrl).toBe('https://example.com/face.png');
@@ -397,11 +397,12 @@ it('setActiveCharacter with empty string does not create blank character, facts 
     let openedOpts: any = null;
     FullscreenLightbox.open = ((opts: any) => { openedOpts = opts; return null as any; });
     try {
-      const thumb = f.detailContainer.querySelector('.folio-cg-thumb');
+      const thumb = f.detailContainer.querySelector('.folio-cg-open');
       expect(thumb).not.toBeNull();
       thumb.click();
       expect(openedOpts).not.toBeNull();
       expect(openedOpts.src).toBe('https://example.com/pic1.png');
+      expect(openedOpts.opener).toBe(thumb);
       expect(openedOpts.gallery).toHaveLength(1);
     } finally {
       FullscreenLightbox.open = origOpen;

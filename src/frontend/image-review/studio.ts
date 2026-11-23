@@ -1,3 +1,4 @@
+import { compileModelPrompt } from '../../backend/runtime/model-prompt-compiler.js';
 import {ImageActivityPanel} from './image-activity.js';
 import {createUiId} from '../request-id.js';
 import {VersionComparison} from './version-comparison.js';
@@ -41,7 +42,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px calc(max(12px,env(safe-area-inset-bottom)) + var(--reader-keyboard-inset,0px));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
 const INSPECTOR_CSS=`
-:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.025));padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:var(--vn-shell-field,rgba(255,255,255,.04));border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.03))),rgba(0,0,0,.18));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.07)));font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:var(--vn-shell-field,rgba(255,255,255,.05));display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:var(--vn-shell-field,rgba(255,255,255,.025));border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--edge);background:var(--vn-shell-button,#252632);color:var(--vn-shell-text,#eee);font-weight:650;justify-content:center}[data-studio-footer] button[data-skip],[data-studio-footer] button[data-reset],[data-studio-footer] button[data-copy]{background:transparent;border-color:var(--edge)}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);border-color:var(--accent);font-weight:750}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.025));padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:var(--vn-shell-field,rgba(255,255,255,.04));border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.03))),rgba(0,0,0,.18));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.07)));font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{position:relative;padding:0;cursor:zoom-in;width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:var(--vn-shell-field,rgba(255,255,255,.05));display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:var(--vn-shell-field,rgba(255,255,255,.025));border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--edge);background:var(--vn-shell-button,#252632);color:var(--vn-shell-text,#eee);font-weight:650;justify-content:center}[data-studio-footer] button[data-skip],[data-studio-footer] button[data-reset],[data-studio-footer] button[data-copy]{background:transparent;border-color:var(--edge)}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);border-color:var(--accent);font-weight:750}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
 .studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:10px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
 .studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:color-mix(in srgb,var(--accent) 10%,var(--vn-shell-button,rgba(255,255,255,.08)));color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
@@ -608,8 +609,9 @@ export class ImageStudio {
   private layoutInspector():void {
     const body=this.el<HTMLElement>('[data-studio-body]');
     const context=document.createElement('div');context.dataset.context='';
-    context.innerHTML='<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><div data-preview-safe-curtain hidden class="studio-vf-safe-curtain" style="font-size:8.5px;letter-spacing:0">SAFE ZONE</div><span aria-hidden="true" style="position:absolute;bottom:4px;right:4px;width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.28);background:rgba(0,0,0,0.68);color:#fff;font-size:12px;display:grid;place-items:center;pointer-events:none;line-height:1">⛶</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
-    const openHeroFullscreen = () => {
+    context.innerHTML='<button type="button" data-thumbnail disabled aria-label="View selected artwork fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><span data-preview-safe-curtain hidden class="studio-vf-safe-curtain" style="font-size:8.5px;letter-spacing:0">SAFE ZONE</span><span aria-hidden="true" style="position:absolute;bottom:4px;right:4px;width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.28);background:rgba(0,0,0,0.68);color:#fff;font-size:12px;display:grid;place-items:center;pointer-events:none;line-height:1">⛶</span></button><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    const opener = context.querySelector<HTMLButtonElement>("[data-thumbnail]")!;
+    const openHeroFullscreen = (trigger: HTMLButtonElement) => {
       const img = this.el<HTMLImageElement>('[data-preview]');
       if (!img.src || img.hidden) return;
       const record = this.record();
@@ -623,9 +625,10 @@ export class ImageStudio {
         prompt: record?.prompt,
         negativePrompt: record?.negativePrompt,
         themeSource: this.host,
+        opener: trigger,
       });
     };
-    context.querySelector('[data-thumbnail]')!.addEventListener('click', openHeroFullscreen);
+    opener.addEventListener('click', () => openHeroFullscreen(opener));
     context.querySelector('[data-context-text]')!.append(this.el('[data-scene]'));
     const heroActions = document.createElement('div');
     heroActions.className = 'studio-hero-actions';
@@ -646,7 +649,7 @@ export class ImageStudio {
     fsHeroBtn.type = 'button';
     fsHeroBtn.dataset.heroFullscreen = '';
     fsHeroBtn.textContent = '⛶ Fullscreen';
-    fsHeroBtn.onclick = openHeroFullscreen;
+    fsHeroBtn.onclick = () => openHeroFullscreen(fsHeroBtn);
     const compareHeroBtn = document.createElement('button');
     compareHeroBtn.type = 'button';
     compareHeroBtn.dataset.hubCompareBtn = '';
@@ -679,6 +682,19 @@ export class ImageStudio {
       if(selector==='[data-combined-count]'){const budgetMeter=document.createElement('div');budgetMeter.dataset.budgetMeter='';budgetMeter.setAttribute('aria-hidden','true');budgetMeter.innerHTML='<div data-budget-fill></div>';editor.append(budgetMeter);}
       const element=this.el(selector);editor.append(element.tagName?.toUpperCase()==='TEXTAREA'?element.closest('label')!:element);
     }
+    const dialectPreview = document.createElement("details");
+    dialectPreview.dataset.dialectPreview = "";
+    dialectPreview.hidden = true;
+    dialectPreview.innerHTML = '<summary>Prompt format preview</summary>'
+      + '<label>Format<select data-preview-format aria-label="Prompt preview format">'
+      + '<option value="current">Current draft</option><option value="prose">Generic prose</option>'
+      + '<option value="tags">Generic tags</option><option value="ideogram-json">Ideogram JSON</option>'
+      + '<option value="ideogram-prose">Ideogram structured prose</option></select></label>'
+      + '<p data-preview-format-status role="status"></p>'
+      + '<label>Preview text<textarea data-preview-format-text readonly></textarea></label>';
+    dialectPreview.ontoggle = () => this.renderDialectPreview();
+    dialectPreview.querySelector("select")!.onchange = () => this.renderDialectPreview();
+    editor.append(dialectPreview);
     const enrichSection = document.createElement('div');
     enrichSection.dataset.enrichSection = '';
     enrichSection.style.cssText = 'margin:12px 0 8px;padding:12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);display:flex;flex-direction:column;gap:8px;';
@@ -1647,6 +1663,61 @@ export class ImageStudio {
     for(let parent=target.parentElement;parent;parent=parent.parentElement)if(parent.tagName?.toUpperCase()==='DETAILS')(parent as any).open=true;
     target.scrollIntoView({block:'nearest'});target.focus({preventScroll:true});
   }
+  private renderDialectPreview(): void {
+    const preview = this.root.querySelector<HTMLDetailsElement>("[data-dialect-preview]");
+    if (!preview) return;
+    const record = this.record();
+    preview.hidden = !record || Boolean(this.planningChat) || this.turn?.status === "planning";
+    if (!record || preview.hidden) return;
+    const select = this.el<HTMLSelectElement>("[data-preview-format]");
+    const key = this.draftKey(record);
+    if (preview.dataset.record !== key) {
+      preview.dataset.record = key;
+      select.value = "current";
+    }
+    const metadata = record.imagePromptMetadata;
+    const shotSpec = record.shotSpec ?? metadata?.shotSpec;
+    const outputPlan = record.outputPlan ?? metadata?.outputPlan;
+    const canCompare = Boolean(metadata?.brief && shotSpec && outputPlan);
+    for (const option of Array.from(select.children) as HTMLOptionElement[]) {
+      option.disabled = option.value !== "current" && !canCompare;
+    }
+    if (!preview.open) return;
+    const status = this.el("[data-preview-format-status]");
+    const output = this.el<HTMLTextAreaElement>("[data-preview-format-text]");
+    if (select.value === "current" || !metadata || !shotSpec || !outputPlan) {
+      const draft = this.editSnapshot();
+      const profile = record.promptProfileV2 ?? resolveImagePromptProfileV2(record.provider, record.model);
+      const maximum = record.promptProfileV2?.hardMaxCharacters ?? record.promptProfile?.maxCharacters ?? profile.hardMaxCharacters;
+      const total = draft.prompt.length + draft.negativePrompt.length;
+      status.textContent = record.provider + " · " + record.model + " · " + profile.dialect
+        + " · " + total.toLocaleString() + " / " + maximum.toLocaleString() + " draft characters. "
+        + (profile.negativePolicy === "positive-only" ? "This format uses a positive prompt only. " : "")
+        + (canCompare ? "" : "This picture has no saved scene data for alternate format previews.");
+      output.value = ["Positive prompt", draft.prompt, "Negative prompt", draft.negativePrompt,
+        "Parameters (as edited)", draft.parametersText].join("\n\n");
+      return;
+    }
+    const format = select.value;
+    const alternate = resolveImagePromptProfileV2("preview", undefined, format.startsWith("ideogram")
+      ? { ideogramPromptMode: format === "ideogram-json" ? "json" : "structured-prose" } : {});
+    const profile = format === "tags" ? { ...alternate, dialect: "generic-tags" as const } : alternate;
+    try {
+      const result = compileModelPrompt({
+        brief: metadata.brief, shotSpec, outputPlan, profile,
+        styleDNA: record.styleSnapshot ?? metadata.styleSnapshot ?? {},
+      });
+      const count = result.prompt.length + (result.negativePrompt?.length ?? 0);
+      status.textContent = count.toLocaleString() + " / " + profile.hardMaxCharacters.toLocaleString()
+        + " characters in this example. Compiled from the saved scene without local wording edits or attached references. Choosing a format here makes no request.";
+      output.value = result.negativePrompt
+        ? result.prompt + "\n\nNegative prompt\n" + result.negativePrompt : result.prompt;
+    } catch {
+      status.textContent = "This saved scene couldn’t be previewed in the selected format.";
+      output.value = "";
+    }
+  }
+
   private editSnapshot():PromptEditSnapshot{return {prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negativePrompt:this.el<HTMLTextAreaElement>('[data-negative]').value,parametersText:this.el<HTMLTextAreaElement>('[data-parameters]').value};}
   private historyFor():PromptHistory|undefined {const r=this.record();if(!r||!this.turn)return;const key=JSON.stringify([this.turn.chatId,this.turn.messageId,this.turn.swipeId,this.turn.sourceFingerprint,this.turn.revision,r.jobId,r.requestId,r.state==='review'?'review':'replacement']);let history=this.editHistories.get(key);if(!history){history=new PromptHistory(this.editSnapshot());this.editHistories.set(key,history);while(this.editHistories.size>8)this.editHistories.delete(this.editHistories.keys().next().value!);}return history;}
   private updateHistoryButtons():void{const h=this.historyFor();const disPos=this.el<HTMLTextAreaElement>('[data-positive]').disabled;this.el<HTMLButtonElement>('[data-prompt-undo]').disabled=!h?.canUndo||disPos;this.el<HTMLButtonElement>('[data-prompt-redo]').disabled=!h?.canRedo||disPos;const qUndo=this.root.querySelector<HTMLButtonElement>('[data-quick-undo]');const qRedo=this.root.querySelector<HTMLButtonElement>('[data-quick-redo]');if(qUndo)qUndo.disabled=!h?.canUndo||disPos;if(qRedo)qRedo.disabled=!h?.canRedo||disPos;}
@@ -1679,6 +1750,7 @@ export class ImageStudio {
     let error='';
     try{assertPromptLengths(this.el<HTMLTextAreaElement>('[data-positive]').value,this.el<HTMLTextAreaElement>('[data-negative]').value,profile);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
     this.el<HTMLElement>('[data-combined-count]').textContent=`${total.toLocaleString()} / ${maximum.toLocaleString()} combined characters${error?' — blocked draft; repair required':''}`;
+    this.renderDialectPreview();
     const promptHubSub = this.root.querySelector<HTMLElement>('[data-hub-sub="prompt"]');
     if (promptHubSub) promptHubSub.textContent = `${total.toLocaleString()} / ${maximum.toLocaleString()} chars`;
     const fill=this.root.querySelector<HTMLElement>('[data-budget-fill]');if(fill){const pct=Math.min(100,Math.round((total/Math.max(1,maximum))*100));fill.style.width=`${pct}%`;fill.dataset.tone=total>maximum?'over':pct>=85?'warn':'ok';}
@@ -1877,6 +1949,31 @@ export class ImageStudio {
   /** Mirrors the @container (max-width:600px) breakpoint in CSS. */
   private mobileLayout():boolean{
     return isMobileWidth(this.host);
+  }
+  hasDraftForPicture(jobId: string): boolean {
+    const hasSavedImage = this.turn?.assets.some(asset => asset.jobId === jobId && asset.imageId && !asset.previousImage);
+    return this.drafts.has('job:' + jobId)
+      || Boolean(this.turn?.imageRequests?.some(record => record.jobId === jobId
+        && (record.state === 'review' || (record.state === 'prepared' && !hasSavedImage) || this.drafts.has(this.draftKey(record)))));
+  }
+
+  openPicture(jobId: string): void {
+    this.open();
+    if (!this.turn?.assets.some(asset => asset.jobId === jobId) || this.selectedJob === jobId) return;
+    this.selectedJob = jobId;
+    this.selectedRequest = "";
+    this.render();
+  }
+  prepareDirectedPicture(request: Extract<FrontendRequest, { type: "vn_prepare_image" }>): void {
+    this.openPicture(request.jobId);
+    if (this.preparing.has(request.jobId) || this.hasDraftForPicture(request.jobId)) return;
+    this.beginPreparation(request.jobId);
+    this.render();
+    try {
+      this.send(request);
+    } catch (error) {
+      this.showError(error instanceof Error ? error.message : String(error));
+    }
   }
   open():void{
     if(!this.el<HTMLElement>('section').hidden)return;
@@ -2349,7 +2446,8 @@ export class ImageStudio {
     this.el('[data-meta]').hidden=!record||planning;
     this.el('[data-prompt-editor]').hidden=(!record && !asset)||planning;
     this.el('[data-picture-tools]').hidden=!asset||planning;
-    this.el('[data-thumbnail]').hidden=!asset||planning;
+    const thumbnail = this.el<HTMLButtonElement>('[data-thumbnail]');
+    thumbnail.hidden = !asset || planning;
     this.el('[data-model-help]').hidden=!record||planning||!this.el('[data-model-help]').textContent;
     this.el('[data-turn-recovery]').hidden=planning||!this.turn;
     if(planning)this.el('[data-card-role]').hidden=true;
@@ -2358,10 +2456,11 @@ export class ImageStudio {
     const key=JSON.stringify([this.turn?.chatId,this.turn?.messageId,this.turn?.sourceFingerprint,this.turn?.swipeId,this.turn?.revision,asset?.jobId,candidates]);
     if(key!==this.previewKey){
       this.previewLoad?.abort();this.previewKey=key;const controller=new AbortController();this.previewLoad=controller;
+      thumbnail.disabled = true;
       image.hidden=true;image.removeAttribute('src');this.el('[data-placeholder]').hidden=false;
       if(candidates.length)void loadVnImageCandidates(candidates,undefined,controller.signal).then(url=>{
         if(controller.signal.aborted||this.previewLoad!==controller)return;
-        image.src=url;image.alt=asset?.previousImage?'Previous picture while replacement is pending':'Selected picture';image.hidden=false;this.el('[data-placeholder]').hidden=true;
+        image.src=url;image.alt=asset?.previousImage?'Previous picture while replacement is pending':'Selected picture';image.hidden=false;thumbnail.disabled=false;this.el('[data-placeholder]').hidden=true;
       }).catch(()=>{if(!controller.signal.aborted){image.hidden=true;this.el('[data-placeholder]').hidden=false;}});
     }
     this.comparison.setContext(JSON.stringify([this.turn?.chatId,this.turn?.messageId,this.turn?.swipeId,this.turn?.sourceFingerprint,this.turn?.revision,this.selectedJob]),asset);

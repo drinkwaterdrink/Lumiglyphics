@@ -5,7 +5,7 @@ import {progressForCursor} from '../speech/read-along.js';
 import {musicTrackForPosition,locationForPosition,atmosphereForPosition} from '../../shared/scene-atmosphere.js';
 import {resumeCardModel} from '../stage/resume-card.js';
 import {DnaRequestSchema,DNA_FIELD_LABELS,type DnaRequest,type DnaField} from '../../shared/character-dna-workflow.js';
-import { StoryDnaRequestSchema, type StoryDnaActionBody } from '../../shared/story-dna.js';
+import { StoryDnaRequestSchema, type StoryDnaRequester, type StoryAutofillResult } from '../../shared/story-dna.js';
 import {inspectorState,pictureStateSummary} from '../image-review/inspector-model.js';
 import {scopedPictureOperations,type LocalPictureOperations} from '../image-review/local-operations.js';
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
@@ -540,6 +540,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   let savedReadingPosition: ReadingPosition | null = null;
   let readingPositionTimer: ReturnType<typeof setTimeout> | null = null;
   let latestStoryDnaRequestId: string | null = null;
+  const storyAutofillRequests = new Map<string, {
+    position: ReadingPosition;
+    finish: (result: StoryAutofillResult) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
   const pendingStoryDnaWrites = new Set<string>();
   function saveCursor(paragraphIndex: number, immediate = false): void {
     if (stage.isReadingUserParagraph()) return;
@@ -653,7 +658,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
-    isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen||imageStudioOpen||externalReviewOpen,
+    isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen||imageStudioOpen||externalReviewOpen||quickDirector?.isOpen()===true,
     isTypewriterAudioMuted: () => {
       const kind = speech?.getStatus().kind;
       return kind === "loading" || kind === "playing";
@@ -779,51 +784,91 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
 
-  let directorScope: { token: string; paragraphIndex: number } | null = null;
+  let directorDnaChat: string | null = null;
+  let directorScope: { token: string; paragraphIndex: number; jobId: string; imageId: string } | null = null;
+  const directorAssets = (source: TurnView, index: number) => source.assets.filter(asset => asset.paragraphIndex === index);
+  const directorSubject = (source: TurnView, jobId: string) => {
+    const brief = source.imageRequests?.filter(request => request.jobId === jobId && (request.state === "approved" || request.state === "prepared")).at(-1)?.imagePromptMetadata?.brief;
+    return brief?.subjectMode === "one" ? brief.subjectPreparation?.name : undefined;
+  };
+  const directorOutfits = (source: TurnView, jobId: string) => directorDnaChat === source.chatId
+    ? stage.getDirectorOutfits(directorSubject(source, jobId)) : [];
   quickDirector = new QuickDirectorPopover({
     mount: stage.panelMount,
+    onOpenArtwork: () => {
+      const candidates = turn ? directorAssets(turn, stage.getState().currentParagraphIndex) : [];
+      if (candidates.length === 1 && candidates[0]) imageStudio.openPicture(candidates[0].jobId);
+      else imageStudio.open();
+    },
+    onVisibility: (open) => {
+      if (open) {
+        stage.toggleSkip(false);
+        stage.holdAutoPlay();
+      } else if (active) stage.checkAutoPlay();
+    },
     onDirect: (cmd) => {
-      if (!turn) {
-        stage.setActivity?.("Open a story passage first to steer its scene art.", "warning");
-        return;
-      }
-      const pIdx = stage.getState().currentParagraphIndex;
       const scope = directorScope;
       directorScope = null;
-      if (!scope || scope.token !== referenceTurnToken(turn) || scope.paragraphIndex !== pIdx) {
+      if (!turn || !scope || scope.token !== referenceTurnToken(turn) || scope.paragraphIndex !== stage.getState().currentParagraphIndex) {
         stage.setActivity?.("This passage changed. Reopen Quick Director to continue.", "warning");
         return;
       }
-      const candidates = (turn.assets ?? []).filter(asset => asset.paragraphIndex === pIdx);
-      const matchingAsset = candidates.length === 1 ? candidates[0] : undefined;
-      if (!matchingAsset) {
-        stage.setActivity?.("Open Artwork Studio to choose or prepare a picture for this passage.", "warning");
+      const candidates = directorAssets(turn, scope.paragraphIndex);
+      if (candidates.length !== 1 || candidates[0]?.jobId !== scope.jobId || candidates[0].imageId !== scope.imageId ||
+          candidates[0].previousImage || candidates[0].source === "cache") {
+        stage.setActivity?.("This picture changed. Reopen Quick Director to continue.", "warning");
         return;
       }
-      if (cmd.kind === "outfit") {
-        stage.setActivity?.(`Directing outfit swap: ${cmd.label}…`, "loading");
-      } else {
-        stage.setActivity?.(`Directing scene (${cmd.label})…`, "loading");
+      if (imageStudio.hasDraftForPicture(scope.jobId)) {
+        imageStudio.openPicture(scope.jobId);
+        return;
       }
-      ctx.sendToBackend({
+      if (cmd.kind === "outfit" && !directorOutfits(turn, scope.jobId)
+        .some(outfit => outfit.charId === cmd.charId && outfit.key === cmd.wardrobeKey && outfit.outfit === cmd.outfit)) {
+        stage.setActivity?.("This saved outfit changed. Reopen Quick Director to choose it again.", "warning");
+        return;
+      }
+      imageStudio.prepareDirectedPicture({
         type: "vn_prepare_image",
         chatId: turn.chatId,
         messageId: turn.messageId,
         sourceFingerprint: turn.sourceFingerprint,
-        jobId: matchingAsset.jobId,
-        directorScope: { swipeId: turn.swipeId, revision: turn.revision, paragraphIndex: pIdx },
+        jobId: scope.jobId,
+        directorScope: { swipeId: turn.swipeId, revision: turn.revision, paragraphIndex: scope.paragraphIndex, imageId: scope.imageId },
         regeneratePrompt: true,
         promptOperation: "rewrite",
         guidance: cmd.guidance,
         reframe: cmd.kind === "shot",
         relight: cmd.kind === "relight",
+        lockContinuity: true,
       });
     },
   });
   const onQuickDirectorEvent = (event: Event) => {
     const opener = (event as CustomEvent<{ opener?: HTMLElement }>).detail?.opener ?? null;
     if (configRef.current) quickDirector.setPreset(configRef.current.themePreset);
-    directorScope = turn ? { token: referenceTurnToken(turn), paragraphIndex: stage.getState().currentParagraphIndex } : null;
+    const paragraphIndex = stage.getState().currentParagraphIndex;
+    const candidates = turn ? directorAssets(turn, paragraphIndex) : [];
+    const selected = candidates.length === 1 ? candidates[0] : undefined;
+    directorScope = null;
+    if (turn && selected?.imageId && !selected.previousImage && selected.source !== "cache" &&
+        (selected.status === "generated" || selected.status === "browser_ready") && !imageStudio.hasDraftForPicture(selected.jobId)) {
+      directorScope = { token: referenceTurnToken(turn), paragraphIndex, jobId: selected.jobId, imageId: selected.imageId };
+      quickDirector.setPicture({
+        label: "Artwork for passage " + (paragraphIndex + 1),
+        imageUrl: sceneImageUrlFor(selected) ?? "",
+      });
+      quickDirector.setOutfits(directorOutfits(turn, selected.jobId));
+    } else {
+      const waiting = selected && imageStudio.hasDraftForPicture(selected.jobId);
+      quickDirector.setPicture({
+        unavailable: waiting ? "This picture has a prompt draft waiting in Artwork Studio."
+          : candidates.length > 1 ? "There is more than one picture for this passage. Choose one in Artwork Studio."
+          : "There is no saved picture to direct for this passage.",
+        artworkLabel: waiting ? "Review existing draft" : "Open Artwork Studio",
+      });
+      quickDirector.setOutfits([]);
+    }
     quickDirector.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-director", onQuickDirectorEvent);
@@ -919,20 +964,53 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     dnaRequests.set(requestId,{chatId:owner,action:body.action,turnToken:dnaTurnToken,...(body.action==='save'?{saved:{id:body.dna.id,updatedAt:body.dna.lastUpdated}}:{})});
     ctx.sendToBackend(checked.data);
   };
-  const sendStoryDna = (body: StoryDnaActionBody) => {
+  function finishStoryAutofill(requestId: string, result: StoryAutofillResult): boolean {
+    const pending = storyAutofillRequests.get(requestId);
+    if (!pending) return false;
+    storyAutofillRequests.delete(requestId);
+    clearTimeout(pending.timer);
+    const current = loadedReadingCursor.position(stage.getState().currentParagraphIndex);
+    pending.finish(JSON.stringify(current) === JSON.stringify(pending.position)
+      ? result : { error: "The reading position changed. Run autofill again." });
+    return true;
+  }
+  const sendStoryDna: StoryDnaRequester = (body, onReview) => {
     const owner = chatId();
-    if (!owner) return;
-    const requestId = createUiId();
-    const checked = StoryDnaRequestSchema.safeParse({ type: 'vn_story_dna', chatId: owner, requestId, ...body });
-    if (!checked.success) {
-      stage.setStoryDnaError(checked.error.issues[0]?.message ?? 'Invalid location or item DNA field.');
+    const isAutofill = body.action === "review_autofill" || body.action === "apply_autofill";
+    const position = isAutofill && active ? loadedReadingCursor.position(stage.getState().currentParagraphIndex) : null;
+    if (!owner || (isAutofill && !position)) {
+      onReview?.({ error: "Open a prepared passage first." });
       return;
     }
-    if (body.action === 'list') latestStoryDnaRequestId = requestId;
+    const requestId = createUiId();
+    const checked = StoryDnaRequestSchema.safeParse({ type: 'vn_story_dna', chatId: owner, requestId, ...body,
+      ...(position ? { readingPosition: position } : {}) });
+    if (!checked.success) {
+      const error = checked.error.issues[0]?.message ?? 'Invalid location or item DNA field.';
+      if (onReview) onReview({ error });
+      else stage.setStoryDnaError(error);
+      return;
+    }
+    if (position && onReview) {
+      const timeoutMessage = body.action === "apply_autofill"
+        ? "The save did not respond. Refresh the current entry before retrying."
+        : "Autofill timed out. Run it again to retry.";
+      const timer = setTimeout(() => finishStoryAutofill(requestId, { error: timeoutMessage }), 60_000);
+      storyAutofillRequests.set(requestId, { position, finish: onReview, timer });
+    } else if (body.action === 'list') latestStoryDnaRequestId = requestId;
     else pendingStoryDnaWrites.add(requestId);
-    ctx.sendToBackend(checked.data);
+    try {
+      ctx.sendToBackend(checked.data);
+    } catch (error) {
+      if (!finishStoryAutofill(requestId, { error: error instanceof Error ? error.message : String(error) })) throw error;
+    }
   };
   function clearStoryLore(): void {
+    for (const [requestId, pending] of storyAutofillRequests) {
+      clearTimeout(pending.timer);
+      storyAutofillRequests.delete(requestId);
+      pending.finish({ error: "The reading position changed. Run autofill again." });
+    }
     latestStoryDnaRequestId = null;
     stage.setStoryDna({ locations: {}, items: {}, revision: 0 });
   }
@@ -971,7 +1049,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open('character');
   });
-  stage.setStoryDnaRequester((body) => sendStoryDna(body));
+  stage.setStoryDnaRequester(sendStoryDna);
   stage.setLocationArtRequester((action) => {
     const owner = chatId();
     if (!owner) return;
@@ -1265,6 +1343,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (wasActive) saveCursor(stage.getState().currentParagraphIndex, true);
     stage.showReaderText();
     active = false;
+    directorScope = null;
+    directorDnaChat = null;
+    quickDirector.close(false);
     // Tell the backend this chat's view closed so it stops paying for the
     // in-flight batch and skips upcoming replies. Only when actually open;
     // repeats would be harmless (the backend close is idempotent).
@@ -1515,6 +1596,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       dnaRevision=message.library.revision??0;
       characterFolio.setLibrary(message.library,owner.action!=='list',owner.saved);
       characterFolio.setGalleries(message.characterGalleries);
+      directorDnaChat = message.chatId;
       stage.setCharacterDnaLibrary(message.library.characters, owner.turnToken === dnaTurnToken);
       if(message.proposal)characterFolio.setProposal(message.proposal);
       return;
@@ -1524,6 +1606,12 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if(owner&&(!dnaTurnScoped(owner.action)||owner.turnToken===dnaTurnToken)&&owner.chatId===chatId()&&owner.chatId===characterFolio.getContext()){characterFolio.showError(message.error);if(message.error.includes('DNA changed'))sendDna({action:'list'});}
       return;
     }
+    if (type === 'vn_story_autofill' && message.type === 'vn_story_autofill') {
+      if (message.chatId === chatId() && finishStoryAutofill(message.requestId, message.result) && 'saved' in message.result) {
+        refreshStoryLore();
+      }
+      return;
+    }
     if (type === 'vn_story_dna' && message.type === 'vn_story_dna') {
       if (message.chatId !== chatId() || !message.requestId) return;
       if (message.requestId === latestStoryDnaRequestId) stage.setStoryDna(message.storyDna);
@@ -1531,6 +1619,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === 'vn_error' && message.type === 'vn_error' && message.operation === 'vn_story_dna') {
+      if (message.requestId && message.chatId === chatId() && finishStoryAutofill(message.requestId, { error: message.error })) return;
       const accepted = !message.requestId || message.requestId === latestStoryDnaRequestId || pendingStoryDnaWrites.delete(message.requestId);
       if (accepted && (!message.chatId || message.chatId === chatId())) stage.setStoryDnaError(message.error);
       return;
@@ -1805,6 +1894,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const resetChatState = (ensureLauncher = false): void => {
+    directorScope = null;
+    directorDnaChat = null;
+    quickDirector.close(false);
     characterFolio.setContext(null);
     dnaRequests.clear();
     dnaTurnToken = "";

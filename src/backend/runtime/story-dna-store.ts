@@ -62,7 +62,7 @@ export async function mutateStoryDNASet(
   chatId: string,
   userId: string | undefined,
   expectedRevision: number | undefined,
-  mutation: (set: StoryDNASet) => void
+  mutation: (set: StoryDNASet) => void | Promise<void>
 ): Promise<StoryDNASet> {
   if (!spindle.userStorage) throw new Error('Story DNA storage is unavailable. Your changes have not been saved.');
   let scopes = queues.get(spindle);
@@ -77,7 +77,7 @@ export async function mutateStoryDNASet(
     if (expectedRevision !== undefined && expectedRevision !== (set.revision ?? 0)) {
       throw new Error('Story DNA changed. Reload the latest data before saving.');
     }
-    mutation(set);
+    await mutation(set);
     set.revision = (set.revision ?? 0) + 1;
     const candidate = StoryDNASetSchema.safeParse(set);
     if (!candidate.success) {

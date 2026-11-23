@@ -489,6 +489,24 @@ export function formatItemDNAForImagePrompt(dna: ItemDNA): string {
   return formatItemDNAToPromptClause(dna, { optimizeForImagePrompt: true });
 }
 
+export const LOCATION_AUTOFILL_FIELDS = ['environmentDescription', 'lighting', 'atmosphere', 'architecture', 'persistentElements', 'loreText'] as const;
+export const ITEM_AUTOFILL_FIELDS = ['itemType', 'description', 'materials', 'distinctiveFeatures', 'colors', 'heldBy', 'loreText'] as const;
+export const StoryAutofillFieldSchema = z.enum([...LOCATION_AUTOFILL_FIELDS, ...ITEM_AUTOFILL_FIELDS]);
+export type StoryAutofillField = z.infer<typeof StoryAutofillFieldSchema>;
+
+export type StoryAutofillProposal = {
+  id: string;
+  name: string;
+  paragraphIndex: number;
+  evidence: string[];
+  changes: Array<{ field: StoryAutofillField; before: string | string[] | null; after: string | string[] }>;
+};
+
+export type StoryAutofillResult =
+  | { proposal: StoryAutofillProposal }
+  | { saved: true }
+  | { error: string };
+
 export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
   z.object({
     type: z.literal('vn_story_dna'),
@@ -537,6 +555,25 @@ export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
     itemId: z.string(),
     revision: z.number().int().optional(),
   }),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('review_autofill'),
+    chatId: z.string(),
+    requestId: z.string().min(1).max(160),
+    kind: z.enum(['place', 'object']),
+    targetId: z.string().min(1).max(256).optional(),
+    name: z.string().trim().min(1).max(160),
+    readingPosition: ReadingPositionSchema,
+  }).strict(),
+  z.object({
+    type: z.literal('vn_story_dna'),
+    action: z.literal('apply_autofill'),
+    chatId: z.string(),
+    requestId: z.string().min(1).max(160),
+    proposalId: z.string().min(1).max(160),
+    fields: z.array(StoryAutofillFieldSchema).min(1).max(7),
+    readingPosition: ReadingPositionSchema,
+  }).strict(),
   z.object({
     type: z.literal('vn_story_dna'),
     action: z.literal('autofill_location'),
@@ -645,7 +682,10 @@ export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
 ]);
 
 export type StoryDnaRequest = z.infer<typeof StoryDnaRequestSchema>;
-export type StoryDnaActionBody<T = StoryDnaRequest> = T extends StoryDnaRequest ? Omit<T, 'type' | 'chatId' | 'requestId'> : never;
+export type StoryDnaActionBody<T = StoryDnaRequest> = T extends StoryDnaRequest
+  ? Omit<T, 'type' | 'chatId' | 'requestId' | (T['action'] extends 'review_autofill' | 'apply_autofill' ? 'readingPosition' : never)>
+  : never;
+export type StoryDnaRequester = (body: StoryDnaActionBody, onReview?: (result: StoryAutofillResult) => void) => void;
 
 function isSwipeEntryActive(
   entry: { autoDiscovered?: boolean | undefined; locked?: boolean | undefined; seenInSwipes?: string[] | undefined },

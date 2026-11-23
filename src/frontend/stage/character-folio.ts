@@ -771,11 +771,23 @@ export class CharacterFolio implements WorkspaceSurface {
           display: flex;
           flex-direction: column;
         }
+        .folio-cg-open {
+          display: block;
+          width: 100%;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          cursor: zoom-in;
+        }
+        .folio-cg-open:focus-visible {
+          outline: 2px solid var(--vn-shell-accent, #86dbb2);
+          outline-offset: -3px;
+        }
         .folio-cg-thumb {
           width: 100%;
           height: 160px;
           object-fit: cover;
-          cursor: pointer;
           display: block;
         }
         .folio-cg-footer {
@@ -2640,12 +2652,17 @@ export class CharacterFolio implements WorkspaceSurface {
         const card = document.createElement('div');
         card.className = `folio-cg-card${isPrimary ? ' active-primary-ref' : ''}${isSecondary ? ' active-secondary-ref' : ''}`;
 
+        const openPicture = document.createElement('button');
+        openPicture.type = 'button';
+        openPicture.className = 'folio-cg-open';
+        openPicture.setAttribute('aria-label', 'Inspect artwork: ' + (cg.caption || char.name));
         const img = document.createElement('img');
         img.className = 'folio-cg-thumb';
         img.src = cg.imageUrl;
-        img.alt = cg.caption || char.name;
-        img.title = 'Click to inspect full image';
-        img.onclick = () => {
+        img.alt = '';
+        img.loading = 'lazy';
+        openPicture.append(img);
+        openPicture.onclick = () => {
           FullscreenLightbox.open({
             src: cg.imageUrl,
             title: char.name,
@@ -2657,6 +2674,7 @@ export class CharacterFolio implements WorkspaceSurface {
             })),
             galleryIndex: collected.indexOf(cg),
             themeSource: this.element,
+            opener: openPicture,
             onDelete: (item) => {
               this.removeCg(item.src);
               this.handlers.onDeleteImage?.(item.src);
@@ -2831,7 +2849,7 @@ export class CharacterFolio implements WorkspaceSurface {
 
         btnRow.append(primaryBtn, secondaryBtn, cropBtn, cropOutfitBtn, avatarBtn, deleteBtn);
         footer.append(cap, btnRow);
-        card.append(badges, img, footer);
+        card.append(badges, openPicture, footer);
         grid.append(card);
       }
       cgsWrap.append(grid);

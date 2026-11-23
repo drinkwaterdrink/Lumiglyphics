@@ -367,6 +367,72 @@ test('handleStoryDnaRequest > autofill_location and autofill_item extract contex
   expect(persisted.deletedItems?.['carved-yew-staff']).toBeDefined();
 });
 
+test('reviewed autofill saves selected fields and detects overlapping edits at commit', async () => {
+  const path = 'chats/c1/story-dna.json';
+  const store = new Map<string, any>([[path, { revision: 1, locations: {},
+    items: { 'ada-notebook': { id: 'ada-notebook', name: 'Ada notebook', aliases: [], description: 'Small notebook',
+      distinctiveFeatures: [], colors: [], lastUpdated: 1 } },
+  }]]);
+  const sent: any[] = [];
+  let changeModel = false;
+  const spindle = {
+    userStorage: {
+      getJson: async (key: string, options?: { fallback?: unknown }) => structuredClone(store.get(key) ?? options?.fallback ?? null),
+      setJson: async (key: string, value: unknown) => { store.set(key, structuredClone(value)); },
+    },
+    chat: { getMessages: async () => [{ id: 'm1', swipe_id: 0, content: 'UNREVEALED MATERIAL' }] },
+    connections: { list: async () => [{ id: 'planner', provider: 'openai', model: 'test', is_default: true }] },
+    generate: { raw: async (options: { messages: Array<{ content: string }> }) => {
+      const input = options.messages[1]!.content;
+      expect(input).toContain('cloth cover');
+      expect(input).not.toContain('UNREVEALED');
+      expect(input).not.toContain('Small notebook');
+      return { content: JSON.stringify({ description: 'Blue notebook', materials: changeModel ? 'Leather' : 'Cloth' }) };
+    } },
+    sendToFrontend: (message: unknown) => sent.push(message),
+  } as unknown as SpindleAPI;
+  const position = { version: 1 as const, key: { chatId: 'c1', assistantMessageId: 'm1', swipeId: 0,
+    sourceFingerprint: 'fingerprint', revision: 1 }, paragraphIndex: 0 };
+  let isCurrent = true;
+  const readScope = async () => {
+    if (!isCurrent) throw new Error('This reply changed.');
+    return ['The Ada notebook had a cloth cover.'];
+  };
+  const review = (requestId: string) => handleStoryDnaRequest(spindle, {
+    type: 'vn_story_dna', action: 'review_autofill', chatId: 'c1', requestId, kind: 'object',
+    targetId: 'ada-notebook', name: 'Ada notebook', readingPosition: position,
+  }, 'u1', readScope);
+  const apply = (proposalId: string, requestId: string, paragraphIndex = 0) => handleStoryDnaRequest(spindle, {
+    type: 'vn_story_dna', action: 'apply_autofill', chatId: 'c1', requestId, proposalId,
+    fields: ['materials'], readingPosition: { ...position, paragraphIndex },
+  }, 'u1', readScope);
+  const item = () => store.get(path).items['ada-notebook'];
+  await review('first');
+  expect(sent.at(-1)).toMatchObject({ type: 'vn_story_autofill', result: { proposal: {
+    changes: [{ field: 'description', before: 'Small notebook', after: 'Blue notebook' },
+      { field: 'materials', before: null, after: 'Cloth' }],
+  } } });
+  expect(item().materials).toBeUndefined();
+  item().notes = 'Manual note';
+  await apply('first', 'wrong-position', 1);
+  expect(sent.at(-1)).toMatchObject({ type: 'vn_error', requestId: 'wrong-position' });
+  await apply('first', 'apply-first');
+  expect(item()).toMatchObject({ materials: 'Cloth', description: 'Small notebook', notes: 'Manual note' });
+  await apply('first', 'replay');
+  expect(sent.at(-1)).toMatchObject({ type: 'vn_error', requestId: 'replay' });
+
+  changeModel = true;
+  await review('second');
+  item().materials = 'Paper';
+  await apply('second', 'apply-conflict');
+  expect(sent.at(-1)).toMatchObject({ type: 'vn_error', requestId: 'apply-conflict' });
+  expect(item().materials).toBe('Paper');
+  isCurrent = false;
+  await apply('second', 'apply-swipe');
+  expect(sent.at(-1)).toMatchObject({ type: 'vn_error', requestId: 'apply-swipe' });
+  expect(item().materials).toBe('Paper');
+});
+
 test('Wave 2 > findMatchingLocation separates composite rooms while preserving exact aliases', () => {
   const set: StoryDNASet = {
     revision: 1,

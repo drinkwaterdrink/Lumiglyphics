@@ -16,7 +16,7 @@ import {
   findMatchingLocation,
   formatItemDNAToPromptClause,
   formatLocationDNAToPromptClause,
-  type StoryDnaActionBody,
+  type StoryDnaRequester,
   type StoryDNASet,
 } from '../../shared/story-dna.js';
 import { findCharacterDNA, type CharacterDNA } from '../../shared/character-dna.js';
@@ -29,7 +29,7 @@ export class StageDossiers {
  private prefs=normalizeTooltipPreferences({});private presentation:ReaderPresentation|undefined;private paragraphs:readonly string[]=[];private index=-1;
  private history:ReferenceHistory|undefined;
  private storyDna:StoryDNASet={locations:{},items:{},revision:0};
- private storyDnaRequester?:(body:StoryDnaActionBody)=>void;
+ private storyDnaRequester?:StoryDnaRequester;
  private locationArtLibrary:LocationArtLibrary={version:1,locations:[]};
  private locationArtRequester?:(action:LocationArtAction)=>void;
  private characterDnaLibrary:Record<string,CharacterDNA>={};
@@ -159,7 +159,7 @@ export class StageDossiers {
   this.card.setStoryDna(storyDna);
   if(this.card.isOpen())this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
  }
- setStoryDnaRequester(fn:(body:StoryDnaActionBody)=>void):void {
+ setStoryDnaRequester(fn:StoryDnaRequester):void {
   this.storyDnaRequester=fn;
   this.card.setStoryDnaRequester(fn);
  }

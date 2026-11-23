@@ -745,6 +745,7 @@ export async function autofillLocationDNA(
     locationName: string;
     messageId?: string | undefined;
     set: StoryDNASet;
+    revealedEvidence?: readonly string[] | undefined;
   }
 ): Promise<LocationDNA> {
   const existing = (params.locationId ? params.set.locations[params.locationId] : undefined)
@@ -770,57 +771,60 @@ export async function autofillLocationDNA(
       };
 
   const config = await loadConfig(spindle, params.userId).catch(() => null);
-  const messages = await spindle.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
-  const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined)
-    ?? [...messages].reverse().find((m) => m.role === 'assistant');
+  const evidenceParts = params.revealedEvidence?.map(passage => 'Story passage: ' + passage) ?? [];
+  if (!params.revealedEvidence) {
+    const messages = await spindle.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
+    const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined)
+      ?? [...messages].reverse().find((m) => m.role === 'assistant');
 
-  const evidenceParts: string[] = [];
-  if (targetMsg) {
-    const swipeId = typeof targetMsg.swipe_id === 'number' ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
-    const record = await loadTurnRecord(spindle, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
-    if (record) {
-      for (const scene of record.plan.scenes) {
-        if (findMatchingLocation({ [base.id]: base }, scene.environment.location)) {
-          if (!base.environmentDescription && scene.environment.description) {
-            base.environmentDescription = scene.environment.description.trim().slice(0, 2000);
+    if (targetMsg) {
+      const swipeId = typeof targetMsg.swipe_id === 'number' ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
+      const record = await loadTurnRecord(spindle, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
+      if (record) {
+        for (const scene of record.plan.scenes) {
+          if (findMatchingLocation({ [base.id]: base }, scene.environment.location)) {
+            if (!base.environmentDescription && scene.environment.description) {
+              base.environmentDescription = scene.environment.description.trim().slice(0, 2000);
+            }
+            if (!base.lighting && scene.environment.lighting) {
+              base.lighting = scene.environment.lighting.trim().slice(0, 500);
+            }
+            const atm = [scene.environment.timeOfDay, scene.environment.weather].filter(Boolean).join(', ');
+            if (!base.atmosphere && atm) base.atmosphere = atm.slice(0, 500);
+            if (scene.environment.persistentElements.length && base.persistentElements.length === 0) {
+              base.persistentElements = scene.environment.persistentElements.slice(0, 24);
+            }
+            evidenceParts.push(`Scene environment: ${JSON.stringify(scene.environment)}`);
           }
-          if (!base.lighting && scene.environment.lighting) {
-            base.lighting = scene.environment.lighting.trim().slice(0, 500);
+        }
+        for (const ref of record.plan.storyReferences ?? []) {
+          if (ref.kind === 'place' && findMatchingLocation({ [base.id]: base }, ref.name)) {
+            evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
+            if (!base.loreText && ref.value.trim()) base.loreText = ref.value.trim().slice(0, 4000);
           }
-          const atm = [scene.environment.timeOfDay, scene.environment.weather].filter(Boolean).join(', ');
-          if (!base.atmosphere && atm) base.atmosphere = atm.slice(0, 500);
-          if (scene.environment.persistentElements.length && base.persistentElements.length === 0) {
-            base.persistentElements = scene.environment.persistentElements.slice(0, 24);
-          }
-          evidenceParts.push(`Scene environment: ${JSON.stringify(scene.environment)}`);
         }
       }
-      for (const ref of record.plan.storyReferences ?? []) {
-        if (ref.kind === 'place' && findMatchingLocation({ [base.id]: base }, ref.name)) {
-          evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
-          if (!base.loreText && ref.value.trim()) base.loreText = ref.value.trim().slice(0, 4000);
-        }
+      if (config?.includeSimTrackerContext) {
+        const sim = extractSimTracker(messages.map((m) => ({ id: m.id, content: m.content })), targetMsg.id, config.simTrackerMappings);
+        if (sim.world) evidenceParts.push(`SimTracker world: ${sim.world}`);
       }
     }
-    if (config?.includeSimTrackerContext) {
-      const sim = extractSimTracker(messages.map((m) => ({ id: m.id, content: m.content })), targetMsg.id, config.simTrackerMappings);
-      if (sim.world) evidenceParts.push(`SimTracker world: ${sim.world}`);
-    }
-  }
 
-  for (const m of messages.slice(-10)) {
-    for (const passage of targetDnaPassages(m.content, candidateNames)) {
-      evidenceParts.push(`Story passage: ${passage}`);
+    for (const m of messages.slice(-10)) {
+      for (const passage of targetDnaPassages(m.content, candidateNames)) {
+        evidenceParts.push(`Story passage: ${passage}`);
+      }
     }
-  }
 
-  try {
-    if (config) {
-      const ctx = await loadVisualContext(spindle, { chatId: params.chatId, userId: params.userId, config, target: targetName });
-      if (ctx.plannerContext) evidenceParts.push(`Card/Lore context:\n${ctx.plannerContext.slice(0, 4000)}`);
+    try {
+      if (config) {
+        const ctx = await loadVisualContext(spindle, { chatId: params.chatId, userId: params.userId, config, target: targetName });
+        if (ctx.plannerContext) evidenceParts.push(`Card/Lore context:\n${ctx.plannerContext.slice(0, 4000)}`);
+      }
+    } catch {
+      // Non-fatal if context loader is unavailable
     }
-  } catch {
-    // Non-fatal if context loader is unavailable
+
   }
 
   if (evidenceParts.length > 0 && config && typeof spindle.generate?.raw === 'function') {
@@ -843,11 +847,12 @@ export async function autofillLocationDNA(
             },
             {
               role: 'user',
-              content: JSON.stringify({ location: targetName, existing: base, evidence: evidenceParts.slice(0, 12) }),
+              content: JSON.stringify({ location: targetName, ...(!params.revealedEvidence ? { existing: base } : {}), evidence: evidenceParts.slice(0, 12) }),
             },
           ],
         });
         const parsed = LocationAutofillOutputSchema.safeParse(jsonObject(responseText(res)));
+        if (!parsed.success && params.revealedEvidence) throw new Error('The autofill model returned invalid fields.');
         if (parsed.success) {
           if (parsed.data.environmentDescription) base.environmentDescription = parsed.data.environmentDescription;
           if (parsed.data.lighting) base.lighting = parsed.data.lighting;
@@ -858,6 +863,7 @@ export async function autofillLocationDNA(
         }
       }
     } catch {
+      if (params.revealedEvidence) throw new Error('Autofill could not read the model response. Run it again to retry.');
       // Fall back gracefully to deterministic evidence extraction above
     }
   }
@@ -879,6 +885,7 @@ export async function autofillItemDNA(
     itemName: string;
     messageId?: string | undefined;
     set: StoryDNASet;
+    revealedEvidence?: readonly string[] | undefined;
   }
 ): Promise<ItemDNA> {
   const existing = (params.itemId ? params.set.items[params.itemId] : undefined)
@@ -905,48 +912,51 @@ export async function autofillItemDNA(
       };
 
   const config = await loadConfig(spindle, params.userId).catch(() => null);
-  const messages = await spindle.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
-  const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined)
-    ?? [...messages].reverse().find((m) => m.role === 'assistant');
+  const evidenceParts = params.revealedEvidence?.map(passage => 'Story passage: ' + passage) ?? [];
+  if (!params.revealedEvidence) {
+    const messages = await spindle.chat?.getMessages?.(params.chatId).catch(() => []) ?? [];
+    const targetMsg = (params.messageId ? messages.find((m) => m.id === params.messageId) : undefined)
+      ?? [...messages].reverse().find((m) => m.role === 'assistant');
 
-  const evidenceParts: string[] = [];
-  if (targetMsg) {
-    const swipeId = typeof targetMsg.swipe_id === 'number' ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
-    const record = await loadTurnRecord(spindle, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
-    if (record) {
-      for (const doc of record.plan.storyDocuments ?? []) {
-        if (findMatchingItem({ [base.id]: base }, doc.name)) {
-          const text = doc.sections.map((s) => s.text).join(' ').trim();
-          if (!base.itemType) base.itemType = doc.kind;
-          if (text) {
-            base.loreText = base.loreText || text.slice(0, 4000);
-            if (!base.description || base.description === base.name) base.description = text.slice(0, 2000);
-            evidenceParts.push(`Document (${doc.kind}): ${text}`);
+    if (targetMsg) {
+      const swipeId = typeof targetMsg.swipe_id === 'number' ? targetMsg.swipe_id : Number(targetMsg.swipe_id ?? 0) || 0;
+      const record = await loadTurnRecord(spindle, turnPath(params.chatId, targetMsg.id, swipeId), params.userId).catch(() => null);
+      if (record) {
+        for (const doc of record.plan.storyDocuments ?? []) {
+          if (findMatchingItem({ [base.id]: base }, doc.name)) {
+            const text = doc.sections.map((s) => s.text).join(' ').trim();
+            if (!base.itemType) base.itemType = doc.kind;
+            if (text) {
+              base.loreText = base.loreText || text.slice(0, 4000);
+              if (!base.description || base.description === base.name) base.description = text.slice(0, 2000);
+              evidenceParts.push(`Document (${doc.kind}): ${text}`);
+            }
+          }
+        }
+        for (const ref of record.plan.storyReferences ?? []) {
+          if (ref.kind === 'object' && findMatchingItem({ [base.id]: base }, ref.name)) {
+            evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
+            if (ref.field === 'owner' && !base.heldBy) base.heldBy = ref.value.slice(0, 160);
+            else if (!base.description || base.description === base.name) base.description = ref.value.slice(0, 2000);
+            else if (!base.loreText) base.loreText = ref.value.slice(0, 4000);
+          }
+        }
+        for (const cue of record.plan.visualCues) {
+          const actionObj = typeof cue.action === 'object' && cue.action !== null ? cue.action.object : undefined;
+          if (actionObj && findMatchingItem({ [base.id]: base }, actionObj)) {
+            if (cue.character && !base.heldBy) base.heldBy = cue.character.slice(0, 160);
+            if (cue.visualFocus) evidenceParts.push(`Visual focus: ${cue.visualFocus}`);
           }
         }
       }
-      for (const ref of record.plan.storyReferences ?? []) {
-        if (ref.kind === 'object' && findMatchingItem({ [base.id]: base }, ref.name)) {
-          evidenceParts.push(`Reference (${ref.field}): ${ref.value}`);
-          if (ref.field === 'owner' && !base.heldBy) base.heldBy = ref.value.slice(0, 160);
-          else if (!base.description || base.description === base.name) base.description = ref.value.slice(0, 2000);
-          else if (!base.loreText) base.loreText = ref.value.slice(0, 4000);
-        }
-      }
-      for (const cue of record.plan.visualCues) {
-        const actionObj = typeof cue.action === 'object' && cue.action !== null ? cue.action.object : undefined;
-        if (actionObj && findMatchingItem({ [base.id]: base }, actionObj)) {
-          if (cue.character && !base.heldBy) base.heldBy = cue.character.slice(0, 160);
-          if (cue.visualFocus) evidenceParts.push(`Visual focus: ${cue.visualFocus}`);
-        }
-      }
     }
-  }
 
-  for (const m of messages.slice(-10)) {
-    for (const passage of targetDnaPassages(m.content, candidateNames)) {
-      evidenceParts.push(`Story passage: ${passage}`);
+    for (const m of messages.slice(-10)) {
+      for (const passage of targetDnaPassages(m.content, candidateNames)) {
+        evidenceParts.push(`Story passage: ${passage}`);
+      }
     }
+
   }
 
   if (evidenceParts.length > 0 && config && typeof spindle.generate?.raw === 'function') {
@@ -969,11 +979,12 @@ export async function autofillItemDNA(
             },
             {
               role: 'user',
-              content: JSON.stringify({ item: targetName, existing: base, evidence: evidenceParts.slice(0, 12) }),
+              content: JSON.stringify({ item: targetName, ...(!params.revealedEvidence ? { existing: base } : {}), evidence: evidenceParts.slice(0, 12) }),
             },
           ],
         });
         const parsed = ItemAutofillOutputSchema.safeParse(jsonObject(responseText(res)));
+        if (!parsed.success && params.revealedEvidence) throw new Error('The autofill model returned invalid fields.');
         if (parsed.success) {
           if (parsed.data.itemType) base.itemType = parsed.data.itemType;
           if (parsed.data.description) base.description = parsed.data.description;
@@ -985,6 +996,7 @@ export async function autofillItemDNA(
         }
       }
     } catch {
+      if (params.revealedEvidence) throw new Error('Autofill could not read the model response. Run it again to retry.');
       // Fall back gracefully to deterministic evidence extraction above
     }
   }

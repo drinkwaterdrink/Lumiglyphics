@@ -1,3 +1,4 @@
+import type { QuickDirectorOutfitOption } from "./quick-director.js";
 import {ParagraphReadAlong,type SpeechPlaybackProgress} from '../speech/read-along.js';
 import { createUiId } from '../request-id.js';
 import {DisplayRuleExecutor,type DisplayEvaluation} from './display-rule-executor.js';
@@ -16,7 +17,7 @@ import { FullscreenLightbox } from "./fullscreen-lightbox.js";
 import { createScenePostcardPopover, renderWorldAtmosphereStrip } from "./world-strip.js";
 import { atmosphereForPosition } from "../../shared/scene-atmosphere.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
-import { inferredSceneOutfits, type StoryDnaActionBody, type StoryDNASet } from "../../shared/story-dna.js";
+import { inferredSceneOutfits, type StoryDnaRequester, type StoryDNASet } from "../../shared/story-dna.js";
 import type { LocationArtAction, LocationArtLibrary } from "../../shared/stage-assets.js";
 import { findCharacterDNA, type CharacterDNA } from "../../shared/character-dna.js";
 import { gameMoveKey, type GameMoveSnapshot } from '../../shared/game-moves.js';
@@ -536,7 +537,7 @@ export class VnStage {
     this.inferredOutfits = inferredSceneOutfits(storyDna);
     this.dossiers.setStoryDna(storyDna);
   }
-  setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void { this.dossiers.setStoryDnaRequester(fn); }
+  setStoryDnaRequester(fn: StoryDnaRequester): void { this.dossiers.setStoryDnaRequester(fn); }
   setStoryDnaError(error: string): void { this.dossiers.setStoryDnaError(error); }
   setLocationArtLibrary(library: LocationArtLibrary): void { this.dossiers.setLocationArtLibrary(library); }
   setLocationArtRequester(fn: (action: LocationArtAction) => void): void { this.dossiers.setLocationArtRequester(fn); }
@@ -595,6 +596,21 @@ export class VnStage {
       if (oldest !== undefined) this.seenBondCelebrations.delete(oldest);
     }
     this.showBondResonanceBanner(pending);
+  }
+
+  getDirectorOutfits(subject: string | undefined): QuickDirectorOutfitOption[] {
+    if (!subject) return [];
+    const character = findCharacterDNA(this.characterDnaLibrary, subject);
+    if (!character) return [];
+    return Object.entries(character.wardrobeStates ?? {})
+      .filter(([key, outfit]) => key.trim() && outfit.trim())
+      .map(([key, outfit]) => ({
+        charId: character.id,
+        charName: character.name,
+        key,
+        outfit,
+        active: character.activeWardrobeKey === key || character.activeOutfit === outfit,
+      }));
   }
 
   setCharacterDnaSaver(fn: (dna: CharacterDNA) => void): void {

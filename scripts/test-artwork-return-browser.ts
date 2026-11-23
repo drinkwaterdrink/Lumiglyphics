@@ -1,7 +1,7 @@
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {browserFixtureServer} from './browser-fixture-server.ts';
-const server=await browserFixtureServer('scripts/host-lifecycle-fixture.ts');const browser=await chromium.launch({headless:true});
+const server=await browserFixtureServer('scripts/host-lifecycle-fixture.ts');const browser=await chromium.launch({headless:true,...(process.env.LUMIGLYPHICS_CHROME_PATH?{executablePath:process.env.LUMIGLYPHICS_CHROME_PATH}:{})});
 try{for(const width of [390,1280]){const p=await browser.newPage({viewport:{width,height:844}});await p.goto(`http://127.0.0.1:${server.port}/`);await p.evaluate(()=>{const f=(window as any).hostFixture;f.state(f.turn());f.open();f.state(f.turn());f.stage().dismissChapterCard();f.stage().advance();f.stage().restoreReplyDraft('Unsent reader reply');});
  await p.getByRole('button',{name:'Open Art Studio',exact:true}).click();await p.locator('[data-workspace-close]').click();
  let state=await p.evaluate(()=>(window as any).hostFixture.stage().getState());assert.equal(state.currentParagraphIndex,1);assert.equal(state.draft,'Unsent reader reply');
