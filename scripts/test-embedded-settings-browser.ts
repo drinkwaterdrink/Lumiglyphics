@@ -53,6 +53,24 @@ try {
     assert.equal(patches.length, 3);
     assert.ok(patches.every(patch => Object.keys(patch).join() === 'readerPreferences'));
     assert.equal(previews, 0);
+    await page.evaluate(() => (window as any).settingsFixture.panel.openPage('connections'));
+    await settings.getByText('Background collection profile', { exact: true }).click();
+    const collection = settings.getByLabel('Collection profile');
+    const autofill = settings.locator('[name="sidecarUseForAutofill"]');
+    const priorAutofill = await autofill.isChecked();
+    assert.equal(await collection.inputValue(), 'worldbuilding');
+    await collection.selectOption('essentials');
+    assert.match(await settings.locator('[data-sidecar-profile-summary]').innerText(), /Story references, Readable documents/);
+    assert.equal(await settings.locator('[data-sidecar-channels]').isVisible(), false);
+    await collection.selectOption('custom');
+    const channels = settings.locator('[name="sidecar-channel"]:checked');
+    assert.equal(await channels.count(), 2);
+    while (await channels.count()) await channels.first().uncheck();
+    assert.match(await settings.locator('[data-sidecar-profile-summary]').innerText(), /Background model off/);
+    assert.equal(await autofill.isChecked(), priorAutofill);
+    assert.deepEqual(await page.evaluate(() => (window as any).settingsFixture.patches.at(-1)), {
+      sidecarCollection: { profile: 'custom', selected: [] },
+    });
     await settings.evaluate(el => el.removeAttribute('data-vn-workspace-tool'));
     assert.equal(await rail.isVisible(), true, 'standalone desktop keeps the section rail');
     console.log('Embedded Settings picker and focus restoration passed at 360×740, 768×1024, and 1440×900.');

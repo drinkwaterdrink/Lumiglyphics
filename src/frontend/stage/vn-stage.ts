@@ -37,6 +37,7 @@ import {
   createInitialVnStageState,
   reduceVnStage,
   selectVnStageView,
+  availableChoices,
   type VnActivity,
   type VnAssetProgress,
   type VnChoice,
@@ -162,6 +163,7 @@ export class VnStage {
   readonly panelMount: HTMLElement;
   historyOpener?: (opener: HTMLElement) => void;
   private state: VnStageState;
+  private pendingChoiceId: string | null = null;
   private passagePickerParagraphs?: VnStageState["paragraphs"];
   private readonly callbacks: VnStageCallbacks;
   private dialogueSheet: DialogueSheet | null = null;
@@ -1332,6 +1334,12 @@ export class VnStage {
   setCastAbsenceDisplay(value:'hide'|'dim'):void{this.castStage.setAbsenceDisplay(value);}
   setCastMode(enabled:boolean):void {this.castStage.setEnabled(enabled);}
   setShowPanelsMenu(enabled: boolean): void { this.workspace.setShowPanelsMenu(enabled); }
+  setChoiceMode(mode: VnStageState["mode"], generateChoices: boolean): void {
+    if (this.state.mode !== mode || this.state.generateChoices !== generateChoices) {
+      this.dispatch({ type: "set-mode", mode, generateChoices });
+    }
+  }
+
   setRpgMode(mode: RpgMode): void {
     this.rpgMode = mode;
     this.rpgHud.update(this.rpgMode, this.rpgState);
@@ -1348,6 +1356,7 @@ export class VnStage {
   }
 
   reset(): void {
+    this.pendingChoiceId = null;
     this.bondBranch = undefined;
     this.bondAffinities.clear();
     this.bondSnapshots.clear();
@@ -1395,6 +1404,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.pendingChoiceId = null;
     // A new reply/branch must not inherit another turn's read flags or backlog.
     this.readParagraphIds.clear();this.backlogEntries.length=0;this.currentRenderedParagraphId="";this.currentRenderedFormatted="";
     this.speechReadAlong.setParagraph('',-1);
@@ -2859,16 +2869,23 @@ export class VnStage {
   }
 
   private async submitChoice(choice: VnChoice): Promise<void> {
-    if (!selectVnStageView(this.state).showChoices || choice.disabled || !this.callbacks.onChoice) {
-      return;
-    }
+    if (this.pendingChoiceId || !selectVnStageView(this.state).showChoices || choice.disabled ||
+        !availableChoices(this.state).some(item => item.id === choice.id) || !this.callbacks.onChoice) return;
+    const paragraphs = this.state.paragraphs;
+    this.pendingChoiceId = choice.id;
     this.dispatch({ type: "submit-started" });
-
     try {
       const resolvedValue = this.rpgHud.resolveChoiceSubmission(choice);
       await this.callbacks.onChoice({ ...choice, value: resolvedValue });
     } catch (error) {
-      this.dispatch({ type: "submit-failed", error: errorMessage(error) });
+      if (this.state.paragraphs === paragraphs && this.state.phase === "submitting") {
+        this.pendingChoiceId = null;
+        this.dispatch({ type: "submit-failed", error: errorMessage(error) });
+        [...this.choiceList.querySelectorAll<HTMLButtonElement>("[data-vn-choice]")]
+          .find(button => button.dataset.vnChoiceId === choice.id)?.focus({ preventScroll: true });
+      }
+    } finally {
+      if (this.state.paragraphs === paragraphs && this.pendingChoiceId === choice.id) this.pendingChoiceId = null;
     }
   }
 
@@ -3847,6 +3864,8 @@ export class VnStage {
     showStandardInput: boolean,
     isBusy: boolean,
   ): void {
+    const savingChoice = this.state.mode === "cyoa" && this.state.phase === "submitting" && this.pendingChoiceId !== null;
+    showChoices = showChoices || savingChoice;
     if(!selectVnStageView(this.state).acceptsInput)this.closeMoveDraft();
     const showGame = (showChoices || showStandardInput) && (this.gameChoices.length > 0 || this.gameBusyTimedOut);
     this.interaction.hidden = !showChoices && !showStandardInput;
@@ -3856,7 +3875,8 @@ export class VnStage {
     this.inputForm.hidden = !showStandardInput;
     const hasCoarsePointer = typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
     const sendHint = hasCoarsePointer ? "" : " Ctrl+Enter sends it.";
-    const hint = showChoices
+    const hint = savingChoice ? "Saving your choice…" : showChoices && showStandardInput
+      ? "Choose an available reply or write your own." : showChoices
       ? showGame ? "Pick a move or choose a reply." : "Choose a reply."
       : showStandardInput
         ? showGame ? `Pick a move, or write your own reply.${sendHint}` : `Write your reply.${sendHint}`
@@ -3865,7 +3885,7 @@ export class VnStage {
 
     if (showChoices) {
       this.choiceList.replaceChildren(
-        ...this.state.choices.map((choice) => {
+        ...availableChoices(this.state).map((choice) => {
           const item = document.createElement("li");
           const button = document.createElement("button");
           button.type = "button";
@@ -3873,6 +3893,12 @@ export class VnStage {
           button.dataset.vnChoiceId = choice.id;
           button.textContent = choice.label;
           this.rpgHud.decorateChoiceButton(button, choice);
+          if (choice.disabled && !choice.lockedReason) {
+            const reason = document.createElement("span");
+            reason.dataset.vnChoiceLock = "";
+            reason.textContent = "Requirements are unmet";
+            button.append(reason);
+          }
           button.disabled = Boolean(choice.disabled) || isBusy;
           if (choice.disabled) button.setAttribute("aria-disabled", "true");
           item.append(button);

@@ -179,7 +179,7 @@ export const THEME_MARKUP = `
     <section data-vn-interaction hidden tabindex="0" aria-labelledby="vn-interaction-title">
       <div data-vn-interaction-heading>
         <h2 id="vn-interaction-title" data-vn-interaction-title>Your turn</h2>
-        <p data-vn-interaction-hint></p>
+        <p data-vn-interaction-hint aria-live="polite"></p>
       </div>
       <div data-vn-game-choices hidden aria-label="Game moves"></div>
       <ol data-vn-choice-list hidden aria-label="Choose a reply"></ol>

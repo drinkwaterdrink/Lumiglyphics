@@ -37,6 +37,41 @@ describe("P0 storyDocuments.sections <= 16 & Sidecar Curator Engine", () => {
     expect(partial.channels).toMatchObject({ storyReferences: "valid", storyDocuments: "unavailable", npcBeliefs: "invalid", suppressedDocumentNouns: "valid" });
     expect(partial.storyDocuments.flatMap(document => document.sections)).toHaveLength(1);
   });
+  test("collection profiles request selected keys, discard unsolicited fields, and skip empty profiles", async () => {
+    const paragraphs = [{ index: 0, text: 'The sealed letter reads: "Meet me at dawn."' }];
+    let requests = 0;
+    let connectionReads = 0;
+    let prompt = "";
+    const spindle = {
+      connections: { list: async () => { connectionReads++; return []; } },
+      generate: { raw: async (args: { messages: Array<{ content: string }> }) => {
+        requests++;
+        prompt = args.messages[0]!.content;
+        return { content: JSON.stringify({
+          storyDocuments: [], storyReferences: [], suppressedDocumentNouns: [],
+          npcBeliefs: [{ npc: "Ada", topic: "Meeting", belief: "Ada suspects a meeting", status: "suspects" }],
+        }) };
+      } },
+    } as unknown as SpindleAPI;
+    const empty = await extractTurnLoreAsync(spindle, {
+      paragraphs, config: normalizeConfig({ collectEntityReferences: true, sidecarCollection: { profile: "custom", selected: [] } }),
+    });
+    expect(requests).toBe(0);
+    expect(connectionReads).toBe(0);
+    expect(empty.storyDocuments[0]?.sections[0]?.text).toContain("Meet me at dawn");
+    expect(Object.values(empty.channels).every(channel => channel === "disabled")).toBe(true);
+
+    const essentials = await extractTurnLoreAsync(spindle, {
+      paragraphs, config: normalizeConfig({ collectEntityReferences: true, sidecarCollection: { profile: "essentials" } }),
+    });
+    expect(requests).toBe(1);
+    expect(prompt).toContain("storyDocuments:");
+    expect(prompt).not.toContain("npcBeliefs:");
+    expect(essentials.npcBeliefs).toEqual([]);
+    expect(essentials.channels.npcBeliefs).toBe("disabled");
+    expect(essentials.channels.storyDocuments).toBe("valid");
+  });
+
   test("senseDocumentsDeterministically and mergeStoryDocuments cap sections at <=16 and documents at <=12", () => {
     const quotes = Array.from({ length: 24 }, (_, idx) => `"Line ${idx + 1} of the long ledger entry."`).join(" ");
     const paragraphs = [

@@ -121,9 +121,9 @@ export async function resolveSidecarConnection(
   const targetId = config.sidecarConnectionId?.trim() || null;
   let resolved: ResolvedPlannerConnection | null = null;
   if (targetId) {
-    const candidate = await resolvePlannerConnection(spindle, { parserConnectionId: targetId }, userId);
-    if (candidate && candidate.id === targetId) {
-      resolved = candidate;
+    const candidate = await spindle.connections?.get?.(targetId, userId).catch(() => null);
+    if (candidate && !isSystemOneProfile(candidate)) {
+      resolved = { id: candidate.id, provider: candidate.provider, model: candidate.model };
     }
   }
   if (!resolved) {

@@ -675,6 +675,53 @@ test("World Lens autofill routes through the active reply and rejects a changed 
     ?.locations?.["first-paragraph"]).toBeUndefined();
 });
 
+test("CYOA commit validates mode and deduplicates choices across retries", async () => {
+  const f = generationFixture();
+  f.data.set("config.json", { mode: "cyoa", generateChoices: false, generateImages: false });
+  registerVisualNovelBackend(f.spindle);
+  await sendState(f.spindle, "chat", "review-user", { viewOpen: true });
+  const recordPath = turnPath("chat", "assistant-1", 0);
+  await waitFor(() => Boolean(f.data.get(recordPath)));
+  const record = f.data.get(recordPath) as StoredTurnRecord;
+  record.plan.choices = [
+    { id: "look", label: "Look", submission: "I look.", source: "authored", unlocksAfterParagraph: 1 },
+    { id: "leave", label: "Leave", submission: "I leave.", source: "generated", unlocksAfterParagraph: 1 },
+  ];
+  const history = [...await f.spindle.chat.getMessages("chat")];
+  f.spindle.chat.getMessages = async () => history;
+  const allowWrite = Promise.withResolvers<void>();
+  let writes = 0;
+  f.spindle.chat.appendMessage = (async (_chatId: string, message: { content: string; metadata: object }) => {
+    writes++;
+    await allowWrite.promise;
+    history.push({ ...history[0]!, id: "user-choice", is_user: true, content: message.content, metadata: message.metadata });
+  }) as unknown as typeof f.spindle.chat.appendMessage;
+  const sent = f.sent as Array<{ type: string; requestId?: string; error?: string }>;
+  const request = (requestId: string, choiceId: string, key = record.plan.key) => f.request({
+    type: "vn_submit", chatId: "chat", content: "I look.", requestId, choiceScope: { key, choiceId, paragraphIndex: 1 },
+  });
+  const reply = async (requestId: string) => {
+    await waitFor(() => sent.some(message => message.requestId === requestId));
+    return sent.find(message => message.requestId === requestId)!;
+  };
+  request("disabled-generated", "leave");
+  expect((await reply("disabled-generated")).error).toContain("disabled");
+  request("stale-choice", "look", { ...record.plan.key, swipeId: 1 });
+  expect((await reply("stale-choice")).error).toContain("current reply");
+  request("first-choice", "look");
+  await waitFor(() => writes === 1);
+  try {
+    request("second-choice", "look");
+    expect((await reply("second-choice")).error).toContain("already saving");
+  } finally {
+    allowWrite.resolve();
+  }
+  expect((await reply("first-choice")).type).toBe("vn_choice_saved");
+  request("retry-choice", "look");
+  expect((await reply("retry-choice")).error).toContain("already been saved");
+  expect(writes).toBe(1);
+});
+
 test("state replies echo the requesting identity for active and empty chat selections", async () => {
   const f = generationFixture();
   f.data.set("config.json", { enabled: false });

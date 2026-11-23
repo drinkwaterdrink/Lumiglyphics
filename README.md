@@ -32,6 +32,11 @@ Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visu
 - **Review Location or Item suggestions.** Inspect an entry in World Lens, open its DNA Studio, then choose **Review autofill suggestions**. The review shows current and suggested values with excerpts from up to 33 reached passages in the active reply. Choose **Apply selected fields** to save them. If the source changes or someone edits a selected field first, reopen the entry and review the latest values before applying.
 - **Navigate Atlas and Perspectives.** Atlas uses a list on narrow screens and when several places are shown. Open **Perspectives** to see revealed knowledge states. Questions, sharing, and travel add text to your editable reply draft for you to send.
 
+### Optional choices and background collection
+
+- **Use CYOA when you want choices.** Open **Settings → Reading → How you reply** and choose **Choose from suggestions**. Turn off **Suggest choices** to keep authored choices while skipping generated ones. If no selectable choice is available, the reply composer remains available. Locked options explain the unmet requirement when the reply has already shown it. Optional RPG checks show estimated odds.
+- **Choose what the Sidecar collects.** Under **Settings → Connections → Sidecar curator → Background collection profile**, **Essentials** collects references and documents. **Worldbuilding** also collects perspectives, threads, and wardrobe changes. **Custom** lets you select individual outputs. Background collection runs when story reference collection or tooltips are enabled. Clear every Custom output to skip the background model call and retain recognized document quotations. Manual autofill keeps its own connection setting. If the latest background response was unavailable or incomplete, the profile panel shows a status.
+
 ### How the reader keeps story context
 
 - **Sidecar Curator** collects optional story details after the reply is readable. If the provider is unavailable or returns partial data, you can keep reading and verified document quotes remain available.

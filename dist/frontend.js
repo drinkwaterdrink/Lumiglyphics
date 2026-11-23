@@ -25710,6 +25710,7 @@ var SETTINGS_FIELD_PAGES = {
   speech: "speech",
   parserConnectionId: "connections",
   sidecarConnectionId: "connections",
+  sidecarCollection: "connections",
   sidecarModel: "connections",
   sidecarUseForAutofill: "connections",
   parserParameters: "parameters",
@@ -38166,9 +38167,13 @@ var clampParagraphIndex = (paragraphs, index) => {
     return 0;
   return Math.min(Math.max(index, 0), paragraphs.length - 1);
 };
+function availableChoices(state) {
+  return state.generateChoices === false ? state.choices.filter((choice) => choice.source !== "generated") : state.choices;
+}
 var selectVnStageView = (state) => {
   const paragraph = state.paragraphs[clampParagraphIndex(state.paragraphs, state.currentParagraphIndex)] ?? null;
   const acceptsInput = state.phase === "awaiting-input";
+  const choices = availableChoices(state);
   return {
     paragraph,
     paragraphNumber: paragraph ? state.currentParagraphIndex + 1 : 0,
@@ -38176,8 +38181,8 @@ var selectVnStageView = (state) => {
     canAdvance: paragraph !== null && (state.phase === "revealing" || state.phase === "error" && state.currentParagraphIndex < state.highestRevealedIndex),
     canGoBack: (state.phase === "revealing" || state.phase === "awaiting-input" || state.phase === "error") && !state.isUserTurn && state.currentParagraphIndex > 0,
     acceptsInput,
-    showChoices: acceptsInput && state.mode === "cyoa",
-    showStandardInput: acceptsInput && (state.mode === "standard" || state.customReplyOpen),
+    showChoices: acceptsInput && state.mode === "cyoa" && choices.length > 0,
+    showStandardInput: acceptsInput && (state.mode === "standard" || state.customReplyOpen || !choices.some((choice) => !choice.disabled)),
     isBusy: state.phase === "waiting-for-response" || state.phase === "planning" || state.phase === "submitting"
   };
 };
@@ -38275,7 +38280,7 @@ var reduceVnStage = (state, action) => {
       };
     }
     case "set-mode":
-      return { ...state, mode: action.mode, customReplyOpen: state.customReplyOpen || Boolean(state.draft.trim()) };
+      return { ...state, mode: action.mode, ...action.generateChoices !== undefined ? { generateChoices: action.generateChoices } : {}, customReplyOpen: state.customReplyOpen || Boolean(state.draft.trim()) };
     case "set-draft":
       return { ...state, draft: action.draft, customReplyOpen: state.customReplyOpen || state.mode === "cyoa" && Boolean(action.draft.trim()) };
     case "set-phase": {
@@ -38364,7 +38369,10 @@ var reduceVnStage = (state, action) => {
         ambient: action.ambient
       };
     case "reset":
-      return createInitialVnStageState();
+      return createInitialVnStageState({
+        mode: state.mode,
+        ...state.generateChoices !== undefined ? { generateChoices: state.generateChoices } : {}
+      });
   }
 };
 // src/frontend/theme/effects-css.ts
@@ -41312,7 +41320,7 @@ class RpgStageController {
       button.appendChild(lockPill);
       button.title = choice.lockedReason;
     }
-    if (this.rpgMode === "off" || !choice.check)
+    if (this.rpgMode === "off" || choice.disabled || !choice.check)
       return;
     const { check: check2, sources } = evaluateContextualSkillCheckDetailed(choice.check, this.rpgState?.vitals);
     const modStr = check2.modifier > 0 ? ` +${check2.modifier}` : check2.modifier < 0 ? ` ${check2.modifier}` : "";
@@ -41328,6 +41336,8 @@ class RpgStageController {
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
     badge.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:0.78em;transform:perspective(220px) rotateX(4deg);";
+    const risk = pct < 40 ? "High risk" : pct < 70 ? "Moderate risk" : "Low risk";
+    badge.setAttribute("aria-label", risk + " · estimated " + pct + "%");
     badge.textContent = `\uD83C\uDFB2 ${check2.stat} DC ${check2.dc}${modStr}${rollTag} · ${pct}%`;
     const meter = document.createElement("span");
     meter.style.cssText = "display:inline-block;width:36px;height:4px;border-radius:999px;background:rgba(255,255,255,0.16);overflow:hidden;vertical-align:middle;";
@@ -44793,6 +44803,27 @@ var VN_ORNAMENT_LAYER_MARKUP = `
 ` + INDENT + Object.values(VN_ORNAMENT_GROUPS).join(INDENT) + `
     </svg>
   </div>`;
+// src/shared/sidecar-collection.ts
+var SIDECAR_COLLECTION_LABELS = {
+  storyReferences: "Story references",
+  storyDocuments: "Readable documents",
+  npcBeliefs: "Character perspectives",
+  threadUpdates: "Story threads",
+  wardrobeDeltas: "Wardrobe changes"
+};
+var SIDECAR_OUTPUTS = Object.keys(SIDECAR_COLLECTION_LABELS);
+var DEFAULT_SIDECAR_COLLECTION = { profile: "worldbuilding", selected: [...SIDECAR_OUTPUTS] };
+function normalizeSidecarCollection(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  if (raw.profile === "essentials")
+    return { profile: "essentials", selected: ["storyReferences", "storyDocuments"] };
+  if (raw.profile === "custom" && Array.isArray(raw.selected)) {
+    const selected = raw.selected;
+    return { profile: "custom", selected: SIDECAR_OUTPUTS.filter((output2) => selected.includes(output2)) };
+  }
+  return { profile: "worldbuilding", selected: [...SIDECAR_OUTPUTS] };
+}
+
 // src/shared/tracker-mappings.ts
 var TRACKER_MAPPING_FIELDS = ["identity", "attire", "sceneState", "world", "time", "date", "temperature", "weather"];
 var blocked = new Set(["__proto__", "constructor", "prototype"]);
@@ -44940,6 +44971,7 @@ var DEFAULT_CONFIG = {
   generateChoices: true,
   parserConnectionId: null,
   sidecarConnectionId: null,
+  sidecarCollection: DEFAULT_SIDECAR_COLLECTION,
   sidecarModel: "",
   sidecarUseForAutofill: true,
   systemOneMode: "off",
@@ -46750,7 +46782,7 @@ var THEME_MARKUP = `
     <section data-vn-interaction hidden tabindex="0" aria-labelledby="vn-interaction-title">
       <div data-vn-interaction-heading>
         <h2 id="vn-interaction-title" data-vn-interaction-title>Your turn</h2>
-        <p data-vn-interaction-hint></p>
+        <p data-vn-interaction-hint aria-live="polite"></p>
       </div>
       <div data-vn-game-choices hidden aria-label="Game moves"></div>
       <ol data-vn-choice-list hidden aria-label="Choose a reply"></ol>
@@ -46905,6 +46937,7 @@ class VnStage {
   panelMount;
   historyOpener;
   state;
+  pendingChoiceId = null;
   passagePickerParagraphs;
   callbacks;
   dialogueSheet = null;
@@ -48096,6 +48129,11 @@ class VnStage {
   setShowPanelsMenu(enabled) {
     this.workspace.setShowPanelsMenu(enabled);
   }
+  setChoiceMode(mode, generateChoices) {
+    if (this.state.mode !== mode || this.state.generateChoices !== generateChoices) {
+      this.dispatch({ type: "set-mode", mode, generateChoices });
+    }
+  }
   setRpgMode(mode) {
     this.rpgMode = mode;
     this.rpgHud.update(this.rpgMode, this.rpgState);
@@ -48111,6 +48149,7 @@ class VnStage {
     return this.castStage.set(turn, index);
   }
   reset() {
+    this.pendingChoiceId = null;
     this.bondBranch = undefined;
     this.bondAffinities.clear();
     this.bondSnapshots.clear();
@@ -48163,6 +48202,7 @@ class VnStage {
     this.dispatch({ type: "reset" });
   }
   loadTurn(turn) {
+    this.pendingChoiceId = null;
     this.readParagraphIds.clear();
     this.backlogEntries.length = 0;
     this.currentRenderedParagraphId = "";
@@ -49669,15 +49709,23 @@ class VnStage {
     this.callbacks.onAdvance?.(this.state.currentParagraphIndex, this.state.phase === "awaiting-input");
   }
   async submitChoice(choice) {
-    if (!selectVnStageView(this.state).showChoices || choice.disabled || !this.callbacks.onChoice) {
+    if (this.pendingChoiceId || !selectVnStageView(this.state).showChoices || choice.disabled || !availableChoices(this.state).some((item) => item.id === choice.id) || !this.callbacks.onChoice)
       return;
-    }
+    const paragraphs = this.state.paragraphs;
+    this.pendingChoiceId = choice.id;
     this.dispatch({ type: "submit-started" });
     try {
       const resolvedValue = this.rpgHud.resolveChoiceSubmission(choice);
       await this.callbacks.onChoice({ ...choice, value: resolvedValue });
     } catch (error61) {
-      this.dispatch({ type: "submit-failed", error: errorMessage(error61) });
+      if (this.state.paragraphs === paragraphs && this.state.phase === "submitting") {
+        this.pendingChoiceId = null;
+        this.dispatch({ type: "submit-failed", error: errorMessage(error61) });
+        [...this.choiceList.querySelectorAll("[data-vn-choice]")].find((button) => button.dataset.vnChoiceId === choice.id)?.focus({ preventScroll: true });
+      }
+    } finally {
+      if (this.state.paragraphs === paragraphs && this.pendingChoiceId === choice.id)
+        this.pendingChoiceId = null;
     }
   }
   async submitGameChoice(choice) {
@@ -50628,6 +50676,8 @@ class VnStage {
     this.gameChoiceList.replaceChildren(...items);
   }
   renderInteraction(showChoices, showStandardInput, isBusy) {
+    const savingChoice = this.state.mode === "cyoa" && this.state.phase === "submitting" && this.pendingChoiceId !== null;
+    showChoices = showChoices || savingChoice;
     if (!selectVnStageView(this.state).acceptsInput)
       this.closeMoveDraft();
     const showGame = (showChoices || showStandardInput) && (this.gameChoices.length > 0 || this.gameBusyTimedOut);
@@ -50638,11 +50688,11 @@ class VnStage {
     this.inputForm.hidden = !showStandardInput;
     const hasCoarsePointer = typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
     const sendHint = hasCoarsePointer ? "" : " Ctrl+Enter sends it.";
-    const hint = showChoices ? showGame ? "Pick a move or choose a reply." : "Choose a reply." : showStandardInput ? showGame ? `Pick a move, or write your own reply.${sendHint}` : `Write your reply.${sendHint}` : "";
+    const hint = savingChoice ? "Saving your choice…" : showChoices && showStandardInput ? "Choose an available reply or write your own." : showChoices ? showGame ? "Pick a move or choose a reply." : "Choose a reply." : showStandardInput ? showGame ? `Pick a move, or write your own reply.${sendHint}` : `Write your reply.${sendHint}` : "";
     if (this.interactionHint.textContent !== hint)
       this.interactionHint.textContent = hint;
     if (showChoices) {
-      this.choiceList.replaceChildren(...this.state.choices.map((choice) => {
+      this.choiceList.replaceChildren(...availableChoices(this.state).map((choice) => {
         const item = document.createElement("li");
         const button = document.createElement("button");
         button.type = "button";
@@ -50650,6 +50700,12 @@ class VnStage {
         button.dataset.vnChoiceId = choice.id;
         button.textContent = choice.label;
         this.rpgHud.decorateChoiceButton(button, choice);
+        if (choice.disabled && !choice.lockedReason) {
+          const reason = document.createElement("span");
+          reason.dataset.vnChoiceLock = "";
+          reason.textContent = "Requirements are unmet";
+          button.append(reason);
+        }
         button.disabled = Boolean(choice.disabled) || isBusy;
         if (choice.disabled)
           button.setAttribute("aria-disabled", "true");
@@ -57282,6 +57338,20 @@ class VisualNovelSettingsPanel {
                 <span>Sidecar model override (optional)</span>
                 <input name="sidecarModel" type="text" placeholder="Leave blank to use connection default">
               </label>
+              <details data-sidecar-collection>
+                <summary>Background collection profile</summary>
+                <label data-field><span>Collection profile</span><select name="sidecarCollection">
+                  <option value="essentials">Essentials</option><option value="worldbuilding">Worldbuilding</option><option value="custom">Custom</option>
+                </select></label>
+                <small>Background collection runs when story reference collection or tooltips are on.</small>
+                <small data-sidecar-profile-summary></small>
+                <fieldset data-sidecar-channels hidden><legend>Collect with the background model</legend>
+                  ${SIDECAR_OUTPUTS.map((channel) => `<label data-check>
+                    <input type="checkbox" name="sidecar-channel" value="${channel}"><span>${SIDECAR_COLLECTION_LABELS[channel]}</span>
+                  </label>`).join("")}
+                </fieldset>
+                <p data-sidecar-status role="status" hidden></p>
+              </details>
               <label data-check>
                 <input name="sidecarUseForAutofill" type="checkbox">
                 <span>Use Sidecar for manual DNA &amp; Lore Auto-Fill buttons<small>Route Character, Location, and Item DNA auto-fill requests through the Sidecar connection when configured.</small></span>
@@ -58417,6 +58487,13 @@ class VisualNovelSettingsPanel {
       case "parserConnectionId":
       case "setupParserConnectionId":
         return { parserConnectionId: target2.value.trim() || null };
+      case "sidecarCollection": {
+        return { sidecarCollection: normalizeSidecarCollection({ profile: target2.value, selected: this.config.sidecarCollection.selected }) };
+      }
+      case "sidecar-channel": {
+        const selected = SIDECAR_OUTPUTS.filter((output2) => this.root.querySelector('input[name="sidecar-channel"][value="' + output2 + '"]')?.checked);
+        return { sidecarCollection: normalizeSidecarCollection({ profile: "custom", selected }) };
+      }
       case "sidecarConnectionId":
         return { sidecarConnectionId: target2.value.trim() || null };
       case "sidecarModel":
@@ -59008,6 +59085,13 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.updateImageModelHint();
   }
   syncEveryday(config2) {
+    const collection = config2.sidecarCollection;
+    this.control("sidecarCollection").value = collection.profile;
+    this.root.querySelector("[data-sidecar-channels]").hidden = collection.profile !== "custom";
+    for (const input2 of this.root.querySelectorAll('input[name="sidecar-channel"]')) {
+      input2.checked = collection.selected.some((output2) => input2.value === output2);
+    }
+    this.root.querySelector("[data-sidecar-profile-summary]").textContent = collection.selected.length ? collection.selected.map((output2) => SIDECAR_COLLECTION_LABELS[output2]).join(", ") : "Background model off. Recognized document quotes remain available.";
     this.control("imagePromptEngineVersion").value = String(config2.imagePromptEngineVersion ?? 2);
     this.control("ideogramPromptMode").value = config2.ideogramPromptMode ?? "auto";
     this.control("flux3KleinPromptMode").value = config2.flux3KleinPromptMode ?? "auto";
@@ -59238,6 +59322,13 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
       }, pause);
     };
     tick();
+  }
+  setSidecarStatus(message) {
+    const status = this.root.querySelector("[data-sidecar-status]");
+    if (!status)
+      return;
+    status.textContent = message;
+    status.hidden = !message;
   }
   setConnectionCatalog(kind, state) {
     this.connectionStates[kind] = state;
@@ -63913,7 +64004,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.15-beta.185";
+var LUMIGLYPHICS_VERSION = "0.2.16-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -75350,7 +75441,7 @@ function stageTurnInput(next, mode, preserveImage, intensity = "full") {
       ...effectForParagraph(next, index, intensity),
       ...ambientForParagraph(next, index, intensity)
     })),
-    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value, ...choice.disabled ? { disabled: true } : {}, ...choice.lockedReason ? { lockedReason: choice.lockedReason } : {}, ...choice.check ? { check: choice.check } : {}, ...choice.setsFlags ? { setsFlags: choice.setsFlags } : {} })),
+    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value, ...choice.source ? { source: choice.source } : {}, ...choice.disabled ? { disabled: true } : {}, ...choice.lockedReason ? { lockedReason: choice.lockedReason } : {}, ...choice.check ? { check: choice.check } : {}, ...choice.setsFlags ? { setsFlags: choice.setsFlags } : {} })),
     ...next.rpgState ? { rpgState: next.rpgState } : {},
     preserveImage,
     ...presentation ? { presentation } : {},
@@ -75425,6 +75516,7 @@ function applyVisualConfigToStage(stage, config2) {
   stage.setSceneImageFit(config2.sceneImageFit);
   stage.setCastMode?.(config2.castMode);
   stage.setRpgMode?.(config2.rpgMode);
+  stage.setChoiceMode?.(config2.mode, config2.generateChoices);
   stage.setCastAbsenceDisplay?.(config2.castAbsenceDisplay);
   stage.setUserCss(config2.customCss);
   applyDisplayRulesGuarded(stage, config2.displayRegexRules);
@@ -75497,6 +75589,15 @@ function setupVisualNovelFrontend(baseContext) {
     if (configRef.current?.debugLogging)
       console.info("[VN]", ...parts);
   };
+  let pendingChoice = null;
+  function clearPendingChoice(reason) {
+    const pending = pendingChoice;
+    if (!pending)
+      return;
+    pendingChoice = null;
+    clearTimeout(pending.timer);
+    pending.reject(new Error(reason));
+  }
   let turn = null;
   let retryQueue = null;
   let localPictureOperations = null;
@@ -75711,7 +75812,7 @@ function setupVisualNovelFrontend(baseContext) {
       const raw = choice.value?.trim() ?? "";
       const isNumeric = /^\s*(?:\d+|choice[_-]?\d+|option\s*\d+)\s*$/i.test(raw);
       const submission = !raw || isNumeric ? choice.label : raw;
-      await handleUserSubmission(submission);
+      await commitChoice(choice.id, submission);
     },
     onSubmit: async (content) => {
       await handleUserSubmission(content);
@@ -76100,6 +76201,7 @@ function setupVisualNovelFrontend(baseContext) {
     }
   };
   function clearStoryLore() {
+    settingsPanel?.setSidecarStatus("");
     for (const [requestId, pending] of storyAutofillRequests) {
       clearTimeout(pending.timer);
       storyAutofillRequests.delete(requestId);
@@ -76463,6 +76565,7 @@ function setupVisualNovelFrontend(baseContext) {
       saveCursor(stage.getState().currentParagraphIndex, true);
     stage.showReaderText();
     active = false;
+    clearPendingChoice("The reader closed before the choice was confirmed.");
     directorScope = null;
     directorDnaChat = null;
     quickDirector.close(false);
@@ -76494,6 +76597,30 @@ function setupVisualNovelFrontend(baseContext) {
       throw new Error("Enter a response first.");
     const requestId = createUiId();
     ctx.sendToBackend({ type: "vn_submit", chatId: activeChatId, content: trimmed, requestId });
+  }
+  async function commitChoice(choiceId, content) {
+    const source = loadedReadingCursor.turn;
+    const position = loadedReadingCursor.position(stage.getState().currentParagraphIndex);
+    if (!source || !position || position.key.chatId !== chatId() || pendingChoice || configRef.current?.mode !== "cyoa") {
+      throw new Error("This choice is no longer available.");
+    }
+    const requestId = createUiId();
+    const completion = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => clearPendingChoice("Choice status is unknown. Check the chat before trying again."), 20000);
+      pendingChoice = { requestId, source, text: content, timer, resolve, reject };
+    });
+    try {
+      ctx.sendToBackend({
+        type: "vn_submit",
+        chatId: source.chatId,
+        requestId,
+        content,
+        choiceScope: { key: position.key, choiceId, paragraphIndex: position.paragraphIndex }
+      });
+    } catch (error61) {
+      clearPendingChoice(error61 instanceof Error ? error61.message : String(error61));
+    }
+    await completion;
   }
   async function handleUserSubmission(content) {
     const trimmed = content.trim();
@@ -76574,6 +76701,9 @@ function setupVisualNovelFrontend(baseContext) {
     }
     if (!turn || turn.chatId !== next.chatId || turn.messageId !== next.messageId || turn.sourceFingerprint !== next.sourceFingerprint || turn.swipeId !== next.swipeId || turn.revision !== next.revision)
       retryQueue = null;
+    if (pendingChoice && referenceTurnToken(pendingChoice.source) !== referenceTurnToken(next)) {
+      clearPendingChoice("The active reply changed.");
+    }
     turn = next;
     stage.setBondBranch(JSON.stringify([next.chatId, next.messageId, next.sourceFingerprint, next.swipeId]));
     imageStudio.setTurn(next);
@@ -76640,7 +76770,7 @@ function setupVisualNovelFrontend(baseContext) {
     }
     const requestedMode = configRef.current?.mode ?? "standard";
     panels.setTurn(next, 0);
-    const mode = requestedMode === "cyoa" && next.choices.length > 0 ? "cyoa" : "standard";
+    const mode = requestedMode;
     const preserveImage = shouldPreserveImage(previous, next);
     if (syncMusicChoices(next, 0)) {
       turnOpeningBgm = preserveImage ? currentBgm : null;
@@ -76940,6 +77070,9 @@ function setupVisualNovelFrontend(baseContext) {
       return;
     }
     if (type === "vn_config" && message.type === "vn_config") {
+      if (JSON.stringify(configRef.current?.sidecarCollection) !== JSON.stringify(message.config.sidecarCollection)) {
+        settingsPanel?.setSidecarStatus("");
+      }
       imageBridge.fit(message.config.sceneImageFit);
       const castWasEnabled = configRef.current?.castMode ?? false;
       const rememberedBefore = Boolean(configRef.current?.tooltips.enabled && configRef.current.tooltips.rememberReferences);
@@ -76980,6 +77113,32 @@ function setupVisualNovelFrontend(baseContext) {
         pendingNextTurn = next;
       } else {
         applyTurn(next, turn);
+      }
+      return;
+    }
+    if (type === "vn_choice_saved" && message.type === "vn_choice_saved") {
+      const pending = pendingChoice;
+      if (!pending || message.chatId !== chatId() || message.requestId !== pending.requestId)
+        return;
+      pendingChoice = null;
+      clearTimeout(pending.timer);
+      if (active && turn && referenceTurnToken(turn) === referenceTurnToken(pending.source)) {
+        speech.setCursor(null);
+        stage.presentUserParagraph(pending.text, turn.userSpeaker || "You");
+        if (message.generationError)
+          reportStageError({
+            message: "Your choice was saved. Lumiverse could not start the next reply.",
+            detail: message.generationError,
+            source: "generation",
+            retryable: false
+          });
+      }
+      pending.resolve();
+      return;
+    }
+    if (type === "vn_sidecar_status" && message.type === "vn_sidecar_status") {
+      if (turn && turn.chatId === message.chatId && turn.messageId === message.messageId && turn.swipeId === message.swipeId && turn.sourceFingerprint === message.sourceFingerprint && turn.revision === message.revision) {
+        settingsPanel?.setSidecarStatus(message.notice);
       }
       return;
     }
@@ -77102,7 +77261,7 @@ function setupVisualNovelFrontend(baseContext) {
         stage.setError(null);
         stage.setAssetProgress(null);
         stage.workspace.setAttention(0);
-        if (!stage.isReadingUserParagraph()) {
+        if (!pendingChoice && !stage.isReadingUserParagraph()) {
           stage.setPhase("waiting-for-response");
         }
       } else if (message.error) {
@@ -77121,6 +77280,11 @@ function setupVisualNovelFrontend(baseContext) {
       return;
     }
     if (type === "vn_error" && message.type === "vn_error") {
+      if (message.operation === "vn_choice_submit") {
+        if (pendingChoice && message.requestId === pendingChoice.requestId && message.chatId === chatId())
+          clearPendingChoice(message.error);
+        return;
+      }
       if (message.operation === "vn_replan_turn" && (!message.chatId || message.chatId === chatId())) {
         preparationActive = false;
         imageStudio.setPlanning(chatId(), false);
@@ -77167,6 +77331,7 @@ function setupVisualNovelFrontend(baseContext) {
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const resetChatState = (ensureLauncher = false) => {
+    clearPendingChoice("The active chat changed.");
     directorScope = null;
     directorDnaChat = null;
     quickDirector.close(false);

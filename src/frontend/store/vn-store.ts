@@ -84,6 +84,7 @@ export interface VnChoice {
   id: string;
   label: string;
   value: string;
+  source?: "authored" | "generated";
   disabled?: boolean;
   lockedReason?: string;
   check?: SkillCheck;
@@ -112,6 +113,7 @@ export interface VnActivity {
 
 export interface VnStageState {
   mode: VnMode;
+  generateChoices?: boolean;
   phase: VnPhase;
   paragraphs: readonly VnParagraph[];
   currentParagraphIndex: number;
@@ -163,7 +165,7 @@ export type VnStageAction =
   | { type: "load-turn"; turn: VnTurnInput }
   | { type: "advance" }
   | { type: "previous" }
-  | { type: "set-mode"; mode: VnMode }
+  | { type: "set-mode"; mode: VnMode; generateChoices?: boolean }
   | { type: "set-draft"; draft: string }
   | { type: "set-phase"; phase: VnPhase }
   | { type: "set-activity"; activity: VnActivity | null }
@@ -228,11 +230,16 @@ const clampParagraphIndex = (
   return Math.min(Math.max(index, 0), paragraphs.length - 1);
 };
 
+export function availableChoices(state: VnStageState): readonly VnChoice[] {
+  return state.generateChoices === false ? state.choices.filter(choice => choice.source !== "generated") : state.choices;
+}
+
 export const selectVnStageView = (state: VnStageState): VnStageView => {
   const paragraph =
     state.paragraphs[clampParagraphIndex(state.paragraphs, state.currentParagraphIndex)] ??
     null;
   const acceptsInput = state.phase === "awaiting-input";
+  const choices = availableChoices(state);
 
   return {
     paragraph,
@@ -245,8 +252,8 @@ export const selectVnStageView = (state: VnStageState): VnStageView => {
     canGoBack: (state.phase === "revealing" || state.phase === "awaiting-input" || state.phase === "error")
       && !state.isUserTurn && state.currentParagraphIndex > 0,
     acceptsInput,
-    showChoices: acceptsInput && state.mode === "cyoa",
-    showStandardInput: acceptsInput && (state.mode === "standard" || state.customReplyOpen),
+    showChoices: acceptsInput && state.mode === "cyoa" && choices.length > 0,
+    showStandardInput: acceptsInput && (state.mode === "standard" || state.customReplyOpen || !choices.some(choice => !choice.disabled)),
     isBusy:
       state.phase === "waiting-for-response" ||
       state.phase === "planning" ||
@@ -349,7 +356,7 @@ export const reduceVnStage = (
     }
 
     case "set-mode":
-      return { ...state, mode: action.mode, customReplyOpen: state.customReplyOpen || Boolean(state.draft.trim()) };
+      return { ...state, mode: action.mode, ...(action.generateChoices !== undefined ? { generateChoices: action.generateChoices } : {}), customReplyOpen: state.customReplyOpen || Boolean(state.draft.trim()) };
 
     case "set-draft":
       return { ...state, draft: action.draft, customReplyOpen: state.customReplyOpen || (state.mode === "cyoa" && Boolean(action.draft.trim())) };
@@ -452,6 +459,9 @@ export const reduceVnStage = (
       };
 
     case "reset":
-      return createInitialVnStageState();
+      return createInitialVnStageState({
+        mode: state.mode,
+        ...(state.generateChoices !== undefined ? { generateChoices: state.generateChoices } : {}),
+      });
   }
 };

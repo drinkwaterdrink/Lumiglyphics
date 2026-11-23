@@ -35574,9 +35574,9 @@ async function resolveSidecarConnection(spindle2, config2, userId) {
   const targetId = config2.sidecarConnectionId?.trim() || null;
   let resolved = null;
   if (targetId) {
-    const candidate = await resolvePlannerConnection(spindle2, { parserConnectionId: targetId }, userId);
-    if (candidate && candidate.id === targetId) {
-      resolved = candidate;
+    const candidate = await spindle2.connections?.get?.(targetId, userId).catch(() => null);
+    if (candidate && !isSystemOneProfile(candidate)) {
+      resolved = { id: candidate.id, provider: candidate.provider, model: candidate.model };
     }
   }
   if (!resolved) {
@@ -39113,6 +39113,30 @@ var init_cast_art2 = __esm(() => {
   runtimes = new WeakMap;
 });
 
+// src/shared/sidecar-collection.ts
+function normalizeSidecarCollection(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  if (raw.profile === "essentials")
+    return { profile: "essentials", selected: ["storyReferences", "storyDocuments"] };
+  if (raw.profile === "custom" && Array.isArray(raw.selected)) {
+    const selected = raw.selected;
+    return { profile: "custom", selected: SIDECAR_OUTPUTS.filter((output2) => selected.includes(output2)) };
+  }
+  return { profile: "worldbuilding", selected: [...SIDECAR_OUTPUTS] };
+}
+var SIDECAR_COLLECTION_LABELS, SIDECAR_OUTPUTS, DEFAULT_SIDECAR_COLLECTION;
+var init_sidecar_collection = __esm(() => {
+  SIDECAR_COLLECTION_LABELS = {
+    storyReferences: "Story references",
+    storyDocuments: "Readable documents",
+    npcBeliefs: "Character perspectives",
+    threadUpdates: "Story threads",
+    wardrobeDeltas: "Wardrobe changes"
+  };
+  SIDECAR_OUTPUTS = Object.keys(SIDECAR_COLLECTION_LABELS);
+  DEFAULT_SIDECAR_COLLECTION = { profile: "worldbuilding", selected: [...SIDECAR_OUTPUTS] };
+});
+
 // src/shared/reference-history.ts
 function retainableReferenceField(field) {
   return retainedFields.has(field);
@@ -39525,6 +39549,7 @@ function normalizeConfigUncached(input2) {
     generateChoices: bool(input2.generateChoices, DEFAULT_CONFIG.generateChoices),
     parserConnectionId: nullableString(input2.parserConnectionId),
     sidecarConnectionId: nullableString(input2.sidecarConnectionId),
+    sidecarCollection: normalizeSidecarCollection(input2.sidecarCollection),
     sidecarModel: stringValue(input2.sidecarModel, DEFAULT_CONFIG.sidecarModel).trim(),
     sidecarUseForAutofill: bool(input2.sidecarUseForAutofill, DEFAULT_CONFIG.sidecarUseForAutofill),
     systemOneMode: input2.systemOneMode === "compare" || input2.systemOneMode === "on" ? input2.systemOneMode : "off",
@@ -39578,6 +39603,7 @@ function normalizeConfigUncached(input2) {
 }
 var SCENE_IMAGE_FITS, EFFECT_INTENSITIES, TEXT_EFFECT_MODES, REFERENCE_SOURCES, TEXT_SCALE_MIN = 0.8, TEXT_SCALE_MAX = 1.6, THEME_PRESET_IDS, DEFAULT_CONFIG, LEGACY_DEFAULT_PROMPT_SUFFIX = "wide composition, centered subject, stable eye-level camera, dialogue-safe lower frame", CONFIG_MEMO_LIMIT = 16, configMemo;
 var init_config = __esm(() => {
+  init_sidecar_collection();
   init_dossiers();
   init_tracker_mappings();
   init_image_output();
@@ -39656,6 +39682,7 @@ var init_config = __esm(() => {
     generateChoices: true,
     parserConnectionId: null,
     sidecarConnectionId: null,
+    sidecarCollection: DEFAULT_SIDECAR_COLLECTION,
     sidecarModel: "",
     sidecarUseForAutofill: true,
     systemOneMode: "off",
@@ -43581,28 +43608,7 @@ Return a single JSON object { "storyReferences": [...], "storyDocuments": [...] 
     }
   ],
   "storyDocuments": []
-}`, MASTER_SIDECAR_CURATOR_PROMPT = `You are the Master Narrative Sidecar Curator for an interactive visual novel engine.
-Your job is to inspect a completed story turn asynchronously and curate 6 high-signal narrative intelligence outputs without adding latency to the reader.
-
-### 1. Salience-Filtered Story References (storyReferences)
-- Extract ONLY genuinely story-relevant entities, props, locations, factions, or lore concepts worth surfacing as interactive .reference tooltips.
-- Resolve pronouns and short aliases ("he", "the captain", "she") to their canonical character/entity name.
-- Skip generic filler nouns, background furniture, or transient mannerisms.
-
-### 2. Strict Readable/Inspected Documents (storyDocuments & suppressedDocumentNouns)
-- Include a storyDocument ONLY if it is a tangible physical or digital readable artifact (letter, ledger, dossier, book, flyer, plaque, contract, phone/terminal message) that is explicitly read, inspected, quoted, or handed over.
-- If a word like "note", "letter", "page", or "paper" appears idiomatically or casually (e.g., "a note of sarcasm", "turn the page") and is NOT a readable prop, add that surface noun to suppressedDocumentNouns.
-
-### 3. Dramatic Irony & NPC Beliefs (npcBeliefs)
-- Track what key NPCs explicitly "knows", "suspects", or is "unaware" of regarding secrets, motives, or hidden events in this turn.
-
-### 4. Semantic Story Threads (threadUpdates)
-- Open, advance, or resolve meaningful narrative mysteries, quests, or promises.
-
-### 5. Live Wardrobe & Physical State Drift (wardrobeDeltas)
-- Record activeOutfit updates ONLY when a character visibly changes clothes, puts on/removes outerwear/armor, or suffers clear outfit state changes.
-
-Return ONLY one valid JSON object matching the requested schema and no prose.`;
+}`;
 
 // src/backend/runtime/prompt-detail.ts
 function imageDirectionBudgets(config2, profile) {
@@ -48654,7 +48660,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     rpgDeltas: planner.rpgDeltas
   }) : undefined;
   const finalParagraph = narrative.paragraphs.length - 1;
-  const choices = narrative.choices.length > 0 ? narrative.choices : planner.choices.map((choice, index) => {
+  const choices = narrative.choices.length > 0 ? narrative.choices : (input2.config.mode === "cyoa" && input2.config.generateChoices ? planner.choices : []).map((choice, index) => {
     const gate = input2.config.rpgMode !== "off" ? evaluateChoiceGate(choice.requires, choice.lockedReason, rpgState ?? input2.previousRpgState) : { locked: false, lockedReason: null };
     return ChoiceSchema.parse({
       id: id6("choice", `${sourceFingerprint}:${index}:${choice.label}`),
@@ -48753,8 +48759,9 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     previousEnvironment: input2.previousScene?.environment ?? null
   });
   const loreEnabled = input2.config.collectEntityReferences || input2.config.tooltips.enabled;
-  const malformedDocs = loreEnabled && planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
-  const llmDocs = loreEnabled && !malformedDocs ? normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) : [];
+  const mainModelDocs = loreEnabled && (!input2.splitHorizonLore || input2.config.sidecarCollection.selected.includes("storyDocuments"));
+  const malformedDocs = mainModelDocs && planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
+  const llmDocs = mainModelDocs && !malformedDocs ? normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) : [];
   const rawSensedDocs = malformedDocs ? [] : senseDocumentsDeterministically(promptParagraphs);
   const sensedDocs = input2.config.strictDocumentSensing !== false ? filterStrictStoryDocuments(rawSensedDocs) : rawSensedDocs;
   const resolvedStoryDocuments = malformedDocs ? [] : llmDocs.length > 0 ? mergeStoryDocuments(llmDocs, sensedDocs) : sensedDocs.length > 0 ? sensedDocs : undefined;
@@ -48766,7 +48773,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
-    ...loreEnabled && (!input2.splitHorizonLore || Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs, normRefOptions).filter((r) => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {},
+    ...loreEnabled && (!input2.splitHorizonLore || input2.config.sidecarCollection.selected.includes("storyReferences") && Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs, normRefOptions).filter((r) => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {},
     ...resolvedStoryDocuments !== undefined ? { storyDocuments: resolvedStoryDocuments } : {},
     ...worldAtmosphereTimeline.length > 0 ? { worldAtmosphereTimeline } : {},
     paragraphs: narrative.paragraphs,
@@ -48896,11 +48903,14 @@ function parseSidecarWardrobeDeltas(raw) {
   return out;
 }
 async function extractTurnLoreAsync(spindle2, params) {
+  const selected = new Set(params.config.sidecarCollection.selected);
+  if (selected.has("storyDocuments"))
+    selected.add("suppressedDocumentNouns");
   const emptyResult = (docs, status) => ({
     storyReferences: [],
     storyDocuments: docs,
     sidecarSucceeded: false,
-    channels: sidecarChannelStatuses(status),
+    channels: Object.fromEntries(SIDECAR_CHANNELS.map((key) => [key, selected.has(key) ? status : "disabled"])),
     suppressedDocumentNouns: [],
     npcBeliefs: [],
     threadUpdates: [],
@@ -48913,6 +48923,10 @@ async function extractTurnLoreAsync(spindle2, params) {
   throwIfAborted(params.signal);
   const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
   const fallbackDocs = strict ? filterStrictStoryDocuments(rawSensedDocs, { ...params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {} }) : rawSensedDocs;
+  if (!selected.size)
+    return emptyResult(fallbackDocs, "disabled");
+  if (typeof spindle2.generate?.raw !== "function")
+    return emptyResult(fallbackDocs, "unavailable");
   let connection;
   try {
     connection = await resolveSidecarConnection(spindle2, params.config, params.userId);
@@ -48945,19 +48959,35 @@ ${contextLines.join(`
 
 Visible paragraphs:
 ${paragraphText}` : paragraphText;
+  const outputs = {
+    storyReferences: "Salient story references only. Resolve aliases and omit incidental details.",
+    storyDocuments: "Up to 12 explicitly read or inspected documents. Anchor names, aliases, observations and sections to numbered paragraphs. Copy section wording verbatim. Shape: [{name,kind:" + JSON.stringify(STORY_DOCUMENT_KINDS) + ",paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}].",
+    suppressedDocumentNouns: "A list of document-like nouns used figuratively or casually rather than as readable artifacts.",
+    npcBeliefs: 'Only explicitly stated knowledge. Shape: [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}].',
+    threadUpdates: 'Only meaningful narrative threads. Shape: [{title,action:"open"|"advance"|"resolve",summary?}].',
+    wardrobeDeltas: "Only visible outfit changes. Shape: [{character,activeOutfit}]."
+  };
   const systemPrompt = [
-    params.config.referencePromptOverride?.trim() || MASTER_SIDECAR_CURATOR_PROMPT,
-    MASTER_LORE_REFERENCE_PROMPT,
-    `Extract optional storyDocuments: up to 12 physical/digital readable documents or inspected props with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Anchor name/aliases to the paragraph where introduced and copy literal document prose verbatim into sections.`,
-    'Return one JSON object { "storyReferences": [...], "storyDocuments": [...], "suppressedDocumentNouns": [...], "npcBeliefs": [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}], "threadUpdates": [{title,action:"open"|"advance"|"resolve",summary?}], "wardrobeDeltas": [{character,activeOutfit}] } and no prose.'
+    "You are the Master Narrative Sidecar Curator. Extract only the following selected fields from the numbered paragraphs.",
+    ...SIDECAR_CHANNELS.filter((key) => selected.has(key)).map((key) => key + ": " + outputs[key]),
+    ...selected.has("storyReferences") ? [params.config.referencePromptOverride?.trim() || MASTER_LORE_REFERENCE_PROMPT] : [],
+    "Return only a JSON object with the selected keys. Return an empty array for each selected field with no supported findings."
   ].join(`
 
 `);
   const maxTokens = Math.min(12000, 4000 + params.paragraphs.length * 300);
   const parameters = structuredJsonParametersFor(connection, maxTokens, params.config.parserParameters);
   let rawContent;
+  const timeout = new AbortController;
+  const signal = params.signal ? AbortSignal.any([params.signal, timeout.signal]) : timeout.signal;
+  const timer = setTimeout(() => timeout.abort("Sidecar request timed out"), 20000);
+  let abort = () => {};
+  const stopped = new Promise((_, reject) => {
+    abort = () => reject(new Error("Sidecar request stopped"));
+    signal.addEventListener("abort", abort, { once: true });
+  });
   try {
-    const response = await spindle2.generate.raw({
+    const response = await Promise.race([stopped, spindle2.generate.raw({
       type: "raw",
       messages: [
         { role: "system", content: systemPrompt },
@@ -48966,14 +48996,17 @@ ${paragraphText}` : paragraphText;
       ...connection ? { provider: connection.provider, model: connection.model, connection_id: connection.id } : {},
       parameters,
       reasoning: { source: "off" },
-      ...params.signal ? { signal: params.signal } : {},
+      signal,
       ...params.userId ? { userId: params.userId } : {}
-    });
+    })]);
     throwIfAborted(params.signal);
     rawContent = extractResponseContent(response);
   } catch {
     throwIfAborted(params.signal);
     return emptyResult(fallbackDocs, "unavailable");
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", abort);
   }
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
     return emptyResult(fallbackDocs, "invalid");
@@ -48987,7 +49020,8 @@ ${paragraphText}` : paragraphText;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return emptyResult(fallbackDocs, "invalid");
   }
-  const rec = parsed;
+  const responseFields = parsed;
+  const rec = Object.fromEntries(SIDECAR_CHANNELS.filter((key) => selected.has(key)).map((key) => [key, responseFields[key]]));
   const scenarioRef = params.scenarioReferenceName ? characterAppearanceKey(params.scenarioReferenceName) : "";
   const storyReferences = normalizeStoryReferences(rec.storyReferences, params.paragraphs, {
     paragraphSpeakers: params.paragraphSpeakers,
@@ -49013,6 +49047,10 @@ ${paragraphText}` : paragraphText;
   };
   const channels = sidecarChannelStatuses("unavailable");
   for (const key of SIDECAR_CHANNELS) {
+    if (!selected.has(key)) {
+      channels[key] = "disabled";
+      continue;
+    }
     const raw = rec[key];
     if (raw === undefined)
       continue;
@@ -55174,12 +55212,22 @@ function isFrontendRequest(value) {
     return GenerateDocumentImageRequestSchema.safeParse(value).success;
   if (value.type === "vn_get_turn_snapshot")
     return exports_external.object({ type: exports_external.literal("vn_get_turn_snapshot"), chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), swipeId: exports_external.number().int().min(0).optional(), requestId: exports_external.string().min(1).max(128).optional() }).strict().safeParse(value).success;
+  if (value.type === "vn_submit" && "choiceScope" in value) {
+    return exports_external.object({
+      type: exports_external.literal("vn_submit"),
+      chatId: exports_external.string().min(1).max(256),
+      content: exports_external.string().trim().min(1).max(20000),
+      requestId: exports_external.string().min(1).max(160),
+      choiceScope: exports_external.object({ key: TurnKeySchema, choiceId: exports_external.string().min(1).max(256), paragraphIndex: exports_external.number().int().nonnegative() }).strict()
+    }).strict().safeParse(value).success;
+  }
   if (value.type === "vn_reading_position")
     return ReadingPositionSchema.safeParse(value.position).success;
   return typeof value.type === "string" && String(value.type).startsWith("vn_");
 }
 var recoveryScope, CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, ContextSourcesRequestSchema, RecoverImagesRequestSchema, imageOperationScope, imageOperationEdits, imagePromptOperation, RewriteImagePromptRequestSchema, ManualLightingSchema, PrepareImageRequestSchema, RestorePreviousImageRequestSchema, DeleteImageRequestSchema, GenerateDocumentImageRequestSchema, REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES;
 var init_protocol = __esm(() => {
+  init_turn_key();
   init_story_dna();
   init_character_dna_workflow();
   init_image_retries();
@@ -60506,6 +60554,7 @@ function capEpochMap(map2, max = 256) {
     map2.delete(oldest);
   }
 }
+var scheduledLoreTurns = new Map;
 var pendingLoreJobs = new Map;
 function cancelSplitHorizonLore(key) {
   const pending = pendingLoreJobs.get(key);
@@ -60521,6 +60570,9 @@ function scheduleSplitHorizonLore(spindle2, params) {
   if (!paragraphs.length || !config2.collectEntityReferences && !config2.tooltips.enabled)
     return;
   const key = runtimeKey(params.userId, params.chatId);
+  const scheduled = JSON.stringify([params.turnKey, params.intakeEpoch]);
+  if (scheduledLoreTurns.get(key) === scheduled || pendingLoreJobs.get(key)?.scheduled === scheduled)
+    return;
   cancelSplitHorizonLore(key);
   const controller = new AbortController;
   const isCurrent = () => !controller.signal.aborted && views.isOpen(params.userId, params.chatId) && (intakeEpochs.get(key) ?? 0) === params.intakeEpoch && compareTurnKeys(activeTurnKeys.get(key) ?? null, params.turnKey).accepted;
@@ -60549,6 +60601,12 @@ function scheduleSplitHorizonLore(spindle2, params) {
         ...p.sourceIndex !== undefined ? { sourceIndex: p.sourceIndex } : {},
         text: stripTextEffectTags(p.text)
       }));
+      scheduledLoreTurns.set(key, scheduled);
+      if (scheduledLoreTurns.size > 256) {
+        const oldest = scheduledLoreTurns.keys().next().value;
+        if (oldest !== undefined)
+          scheduledLoreTurns.delete(oldest);
+      }
       const lore = await extractTurnLoreAsync(spindle2, {
         config: config2,
         paragraphs: strippedParagraphs,
@@ -60565,6 +60623,17 @@ function scheduleSplitHorizonLore(spindle2, params) {
       });
       if (!isCurrent())
         return;
+      const selectedStatuses = Object.values(lore.channels).filter((status) => status !== "disabled");
+      const notice = !selectedStatuses.length ? "" : selectedStatuses.every((status) => status === "unavailable") ? "The latest background request was unavailable. Reading and recognized document quotes remain available." : selectedStatuses.some((status) => status !== "valid") ? "Some requested background details were missing or invalid in the latest reply." : "";
+      spindle2.sendToFrontend({
+        type: "vn_sidecar_status",
+        chatId: params.chatId,
+        messageId: params.turnKey.assistantMessageId,
+        swipeId: Number(params.turnKey.swipeId ?? 0) || 0,
+        revision: params.turnKey.revision,
+        sourceFingerprint: params.turnKey.sourceFingerprint,
+        notice
+      }, params.userId);
       if (config2.debugLogging) {
         spindle2.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name, status]) => `${name}=${status}`).join(", ")}`);
       }
@@ -60682,7 +60751,7 @@ function scheduleSplitHorizonLore(spindle2, params) {
   };
   const delayMs = Math.max(0, params.delayMs ?? 1500);
   if (delayMs === 0) {
-    pendingLoreJobs.set(key, { controller });
+    pendingLoreJobs.set(key, { controller, scheduled, userId: params.userId });
     run();
     return;
   }
@@ -60693,7 +60762,7 @@ function scheduleSplitHorizonLore(spindle2, params) {
     }
     run();
   }, delayMs);
-  pendingLoreJobs.set(key, { timer, controller });
+  pendingLoreJobs.set(key, { timer, controller, scheduled, userId: params.userId });
 }
 function bumpIntakeEpoch(userId, chatId) {
   const key = runtimeKey(userId, chatId);
@@ -61085,8 +61154,9 @@ function turnView(record5) {
       id: choice.id,
       label: choice.label,
       value: choice.submission,
+      source: choice.source,
       ...choice.disabled ? { disabled: true } : {},
-      ...choice.lockedReason ? { lockedReason: choice.lockedReason } : {},
+      ...choice.disabled ? { lockedReason: choice.lockedReason && record5.plan.paragraphs.some((paragraph) => paragraph.text.toLowerCase().includes(choice.lockedReason.replace(/^Requires\s+/i, "").toLowerCase())) ? choice.lockedReason : "A prerequisite is unmet" } : {},
       ...choice.check ? { check: choice.check } : {},
       ...choice.setsFlags ? { setsFlags: choice.setsFlags } : {}
     })),
@@ -62078,7 +62148,63 @@ function submit(spindle2, request, userId) {
   }).catch(() => {});
   return pending;
 }
+var pendingChoiceScopes = new Set;
+async function submitScopedChoice(spindle2, request, userId) {
+  const scope4 = request.choiceScope;
+  if (scope4.key.chatId !== request.chatId)
+    throw new Error("This choice belongs to another chat.");
+  const turnScope = JSON.stringify([scope4.key.assistantMessageId, String(scope4.key.swipeId ?? 0), scope4.key.sourceFingerprint]);
+  const owner = JSON.stringify([userId, request.chatId, turnScope]);
+  if (pendingChoiceScopes.has(owner))
+    throw new Error("A choice for this reply is already saving.");
+  pendingChoiceScopes.add(owner);
+  const runtime4 = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(runtime4) ?? 0;
+  try {
+    const messages = await spindle2.chat.getMessages(request.chatId);
+    const wasSaved = (source) => source.some((message) => {
+      const metadata = submissionMetadata(message).visualNovelPreview;
+      return metadata?.choiceScope === turnScope;
+    });
+    if (wasSaved(messages))
+      throw new Error("A choice for this reply has already been saved.");
+    const config2 = await loadConfig(spindle2, userId);
+    const state = await loadChatState(spindle2, request.chatId, userId);
+    const record5 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
+    const latest = messages.at(-1);
+    const intake = latest && !latest.is_user ? await resolveMessageIntake(spindle2, request.chatId, latest.content, userId) : undefined;
+    if (!record5 || record5.status !== "ready" || !latest || !intake?.resolved || config2.mode !== "cyoa" || !views.isOpen(userId, request.chatId) || epoch !== (intakeEpochs.get(runtime4) ?? 0) || !sameLoreSource(record5.plan.key, scope4.key) || relateRecord(record5, latest, intake) !== "current") {
+      throw new Error("This choice is no longer available in the current reply.");
+    }
+    const choice = record5.plan.choices.find((item) => item.id === scope4.choiceId);
+    if (!choice || choice.disabled || choice.source === "generated" && !config2.generateChoices || scope4.paragraphIndex < choice.unlocksAfterParagraph || scope4.paragraphIndex >= record5.plan.paragraphs.length) {
+      throw new Error("This choice is locked or has been disabled.");
+    }
+    try {
+      await spindle2.chat.appendMessage(request.chatId, {
+        role: "user",
+        content: request.content,
+        metadata: { visualNovelPreview: { requestId: request.requestId, choiceScope: turnScope } }
+      }, { triggerGeneration: true });
+    } catch (error61) {
+      if (!wasSaved(await spindle2.chat.getMessages(request.chatId)))
+        throw error61;
+      spindle2.sendToFrontend({
+        type: "vn_choice_saved",
+        chatId: request.chatId,
+        requestId: request.requestId,
+        generationError: errorText2(error61)
+      }, userId);
+      return;
+    }
+    spindle2.sendToFrontend({ type: "vn_choice_saved", chatId: request.chatId, requestId: request.requestId }, userId);
+  } finally {
+    pendingChoiceScopes.delete(owner);
+  }
+}
 async function submitOnce(spindle2, request, userId) {
+  if (request.choiceScope)
+    return submitScopedChoice(spindle2, request, userId);
   const existing = await spindle2.chat.getMessages(request.chatId);
   const alreadyWritten = existing.some((message) => {
     const vn = submissionMetadata(message).visualNovelPreview;
@@ -63045,6 +63171,11 @@ async function handleFrontendMessage(spindle2, request, userId) {
         if (contextConfigSaves.get(userId) === saving)
           contextConfigSaves.delete(userId);
       }
+      if (request.patch.sidecarCollection !== undefined) {
+        for (const [key, pending] of pendingLoreJobs)
+          if (pending.userId === userId)
+            cancelSplitHorizonLore(key);
+      }
       rememberDebugFlag(userId, config2);
       dbg(spindle2, userId, `config saved (${Object.keys(request.patch).length} field(s) in patch)`);
       if (request.patch.audioDirectory !== undefined) {
@@ -63126,7 +63257,19 @@ async function handleFrontendMessage(spindle2, request, userId) {
     }
     case "vn_submit":
       openView(spindle2, userId, request.chatId);
-      await submit(spindle2, request, userId);
+      try {
+        await submit(spindle2, request, userId);
+      } catch (error61) {
+        if (!request.choiceScope)
+          throw error61;
+        spindle2.sendToFrontend({
+          type: "vn_error",
+          chatId: request.chatId,
+          requestId: request.requestId,
+          operation: "vn_choice_submit",
+          error: errorText2(error61)
+        }, userId);
+      }
       return;
     case "vn_asset_ready":
       await markAssetReady(spindle2, request, userId);

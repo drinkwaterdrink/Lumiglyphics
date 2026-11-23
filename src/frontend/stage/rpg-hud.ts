@@ -369,7 +369,7 @@ export class RpgStageController {
       button.appendChild(lockPill);
       button.title = choice.lockedReason;
     }
-    if (this.rpgMode === "off" || !choice.check) return;
+    if (this.rpgMode === "off" || choice.disabled || !choice.check) return;
     const { check, sources } = evaluateContextualSkillCheckDetailed(choice.check, this.rpgState?.vitals);
     const modStr = check.modifier > 0 ? ` +${check.modifier}` : check.modifier < 0 ? ` ${check.modifier}` : "";
     const rollTag = check.rollMode === "advantage" ? " · ADV" : check.rollMode === "disadvantage" ? " · DIS" : "";
@@ -390,6 +390,8 @@ export class RpgStageController {
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
     badge.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:0.78em;transform:perspective(220px) rotateX(4deg);";
+    const risk = pct < 40 ? "High risk" : pct < 70 ? "Moderate risk" : "Low risk";
+    badge.setAttribute("aria-label", risk + " · estimated " + pct + "%");
     badge.textContent = `🎲 ${check.stat} DC ${check.dc}${modStr}${rollTag} · ${pct}%`;
     const meter = document.createElement("span");
     meter.style.cssText = "display:inline-block;width:36px;height:4px;border-radius:999px;background:rgba(255,255,255,0.16);overflow:hidden;vertical-align:middle;";

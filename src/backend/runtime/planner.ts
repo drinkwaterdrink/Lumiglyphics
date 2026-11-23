@@ -5,7 +5,7 @@ import {plannerImagePromptProfile} from "./image-prompt-profile.js";
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import {freshPlanPreferences} from './presentation-rules.js';
 import { filterStrictStoryDocuments, mergeStoryDocuments, normalizeStoryDocuments, senseDocumentsDeterministically, STORY_DOCUMENT_KINDS } from '../../shared/story-documents.js';
-import { MASTER_LORE_REFERENCE_PROMPT, MASTER_SIDECAR_CURATOR_PROMPT } from '../../shared/master-system-prompts.js';
+import { MASTER_LORE_REFERENCE_PROMPT } from '../../shared/master-system-prompts.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { loadCardRole } from "./storage.js";
@@ -2675,7 +2675,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const finalParagraph = narrative.paragraphs.length - 1;
   const choices = narrative.choices.length > 0
     ? narrative.choices
-    : planner.choices.map((choice, index) => {
+    : (input.config.mode === "cyoa" && input.config.generateChoices ? planner.choices : []).map((choice, index) => {
       const gate = input.config.rpgMode !== "off"
         ? evaluateChoiceGate(choice.requires, choice.lockedReason, rpgState ?? input.previousRpgState)
         : { locked: false, lockedReason: null };
@@ -2780,8 +2780,9 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   });
 
   const loreEnabled = input.config.collectEntityReferences || input.config.tooltips.enabled;
-  const malformedDocs = loreEnabled && planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
-  const llmDocs = loreEnabled && !malformedDocs ? normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) : [];
+  const mainModelDocs = loreEnabled && (!input.splitHorizonLore || input.config.sidecarCollection.selected.includes("storyDocuments"));
+  const malformedDocs = mainModelDocs && planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
+  const llmDocs = mainModelDocs && !malformedDocs ? normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) : [];
   const rawSensedDocs = malformedDocs ? [] : senseDocumentsDeterministically(promptParagraphs);
   const sensedDocs = input.config.strictDocumentSensing !== false
     ? filterStrictStoryDocuments(rawSensedDocs)
@@ -2801,7 +2802,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
-    ...(loreEnabled && (!input.splitHorizonLore || (Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0)) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs, normRefOptions).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
+    ...(loreEnabled && (!input.splitHorizonLore || (input.config.sidecarCollection.selected.includes("storyReferences") && Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0)) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs, normRefOptions).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
     ...(resolvedStoryDocuments !== undefined ? { storyDocuments: resolvedStoryDocuments } : {}),
     ...(worldAtmosphereTimeline.length > 0 ? { worldAtmosphereTimeline } : {}),
     paragraphs: narrative.paragraphs,
@@ -2969,11 +2970,13 @@ export async function extractTurnLoreAsync(
     signal?: AbortSignal;
   },
 ): Promise<SidecarCuratorResult> {
+  const selected = new Set<string>(params.config.sidecarCollection.selected);
+  if (selected.has("storyDocuments")) selected.add("suppressedDocumentNouns");
   const emptyResult = (docs: ReturnType<typeof normalizeStoryDocuments>, status: SidecarChannelStatus): SidecarCuratorResult => ({
     storyReferences: [],
     storyDocuments: docs,
     sidecarSucceeded: false,
-    channels: sidecarChannelStatuses(status),
+    channels: Object.fromEntries(SIDECAR_CHANNELS.map(key => [key, selected.has(key) ? status : "disabled"])) as SidecarCuratorResult["channels"],
     suppressedDocumentNouns: [],
     npcBeliefs: [],
     threadUpdates: [],
@@ -2988,6 +2991,8 @@ export async function extractTurnLoreAsync(
   const fallbackDocs = strict
     ? filterStrictStoryDocuments(rawSensedDocs, { ...(params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {}) })
     : rawSensedDocs;
+  if (!selected.size) return emptyResult(fallbackDocs, "disabled");
+  if (typeof spindle.generate?.raw !== "function") return emptyResult(fallbackDocs, "unavailable");
   let connection: ResolvedPlannerConnection | undefined | null;
   try {
     connection = await resolveSidecarConnection(spindle, params.config, params.userId);
@@ -3015,19 +3020,36 @@ export async function extractTurnLoreAsync(
     ? `Context hints (disambiguation only — extract ONLY facts explicitly stated in the numbered paragraphs below):\n${contextLines.join("\n")}\n\nVisible paragraphs:\n${paragraphText}`
     : paragraphText;
 
+  const outputs: Record<SidecarChannel, string> = {
+    storyReferences: "Salient story references only. Resolve aliases and omit incidental details.",
+    storyDocuments: "Up to 12 explicitly read or inspected documents. Anchor names, aliases, observations and sections to numbered paragraphs. Copy section wording verbatim. Shape: [{name,kind:"
+      + JSON.stringify(STORY_DOCUMENT_KINDS) + ",paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}].",
+    suppressedDocumentNouns: "A list of document-like nouns used figuratively or casually rather than as readable artifacts.",
+    npcBeliefs: 'Only explicitly stated knowledge. Shape: [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}].',
+    threadUpdates: 'Only meaningful narrative threads. Shape: [{title,action:"open"|"advance"|"resolve",summary?}].',
+    wardrobeDeltas: "Only visible outfit changes. Shape: [{character,activeOutfit}].",
+  };
   const systemPrompt = [
-    params.config.referencePromptOverride?.trim() || MASTER_SIDECAR_CURATOR_PROMPT,
-    MASTER_LORE_REFERENCE_PROMPT,
-    `Extract optional storyDocuments: up to 12 physical/digital readable documents or inspected props with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Anchor name/aliases to the paragraph where introduced and copy literal document prose verbatim into sections.`,
-    'Return one JSON object { "storyReferences": [...], "storyDocuments": [...], "suppressedDocumentNouns": [...], "npcBeliefs": [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}], "threadUpdates": [{title,action:"open"|"advance"|"resolve",summary?}], "wardrobeDeltas": [{character,activeOutfit}] } and no prose.'
+    "You are the Master Narrative Sidecar Curator. Extract only the following selected fields from the numbered paragraphs.",
+    ...SIDECAR_CHANNELS.filter(key => selected.has(key)).map(key => key + ": " + outputs[key]),
+    ...(selected.has("storyReferences") ? [params.config.referencePromptOverride?.trim() || MASTER_LORE_REFERENCE_PROMPT] : []),
+    "Return only a JSON object with the selected keys. Return an empty array for each selected field with no supported findings.",
   ].join("\n\n");
 
   const maxTokens = Math.min(12000, 4000 + params.paragraphs.length * 300);
   const parameters = structuredJsonParametersFor(connection, maxTokens, params.config.parserParameters);
 
   let rawContent: unknown;
+  const timeout = new AbortController();
+  const signal = params.signal ? AbortSignal.any([params.signal, timeout.signal]) : timeout.signal;
+  const timer = setTimeout(() => timeout.abort("Sidecar request timed out"), 20_000);
+  let abort = () => {};
+  const stopped = new Promise<never>((_, reject) => {
+    abort = () => reject(new Error("Sidecar request stopped"));
+    signal.addEventListener("abort", abort, { once: true });
+  });
   try {
-    const response = await spindle.generate.raw({
+    const response = await Promise.race([stopped, spindle.generate.raw({
       type: "raw",
       messages: [
         { role: "system", content: systemPrompt },
@@ -3038,14 +3060,17 @@ export async function extractTurnLoreAsync(
         : {}),
       parameters,
       reasoning: { source: "off" },
-      ...(params.signal ? { signal: params.signal } : {}),
+      signal,
       ...(params.userId ? { userId: params.userId } : {}),
-    });
+    })]);
     throwIfAborted(params.signal);
     rawContent = extractResponseContent(response);
   } catch {
     throwIfAborted(params.signal);
     return emptyResult(fallbackDocs, "unavailable");
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", abort);
   }
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
     return emptyResult(fallbackDocs, "invalid");
@@ -3059,7 +3084,9 @@ export async function extractTurnLoreAsync(
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return emptyResult(fallbackDocs, "invalid");
   }
-  const rec = parsed as Record<string, unknown>;
+  const responseFields = parsed as Record<string, unknown>;
+  const rec = Object.fromEntries(SIDECAR_CHANNELS.filter(key => selected.has(key)).map(key => [key, responseFields[key]]));
+
   const scenarioRef = params.scenarioReferenceName ? characterAppearanceKey(params.scenarioReferenceName) : "";
   const storyReferences = normalizeStoryReferences(rec.storyReferences, params.paragraphs, {
     paragraphSpeakers: params.paragraphSpeakers,
@@ -3091,6 +3118,7 @@ export async function extractTurnLoreAsync(
   };
   const channels = sidecarChannelStatuses("unavailable");
   for (const key of SIDECAR_CHANNELS) {
+    if (!selected.has(key)) { channels[key] = "disabled"; continue; }
     const raw = rec[key];
     if (raw === undefined) continue;
     channels[key] = !Array.isArray(raw) || (raw.length > 0 && acceptedCounts[key] === 0)

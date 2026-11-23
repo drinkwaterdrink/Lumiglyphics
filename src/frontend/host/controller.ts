@@ -294,7 +294,7 @@ export function stageTurnInput(
       ...effectForParagraph(next, index, intensity),
       ...ambientForParagraph(next, index, intensity)
     })),
-    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value, ...(choice.disabled ? { disabled: true } : {}), ...(choice.lockedReason ? { lockedReason: choice.lockedReason } : {}), ...(choice.check ? { check: choice.check } : {}), ...(choice.setsFlags ? { setsFlags: choice.setsFlags } : {}) })),
+    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value, ...(choice.source ? { source: choice.source } : {}), ...(choice.disabled ? { disabled: true } : {}), ...(choice.lockedReason ? { lockedReason: choice.lockedReason } : {}), ...(choice.check ? { check: choice.check } : {}), ...(choice.setsFlags ? { setsFlags: choice.setsFlags } : {}) })),
     ...(next.rpgState ? { rpgState: next.rpgState } : {}),
     preserveImage,
     ...(presentation ? {presentation} : {}),
@@ -383,6 +383,7 @@ export type VisualStageThemeTarget = Pick<
   setTextScale?: (scale: number) => void;
   setCastMode?: (enabled:boolean) => void;
   setRpgMode?: (mode: VisualNovelConfig["rpgMode"]) => void;
+  setChoiceMode?: (mode: VisualNovelConfig["mode"], generateChoices: boolean) => void;
   setCastAbsenceDisplay?: (value:"hide"|"dim") => void;
   setTooltipPreferences?: (prefs: VisualNovelConfig["tooltips"]) => void;
   setReaderPreferences?: (preferences: VisualNovelConfig["readerPreferences"]) => void;
@@ -421,6 +422,7 @@ export function applyVisualConfigToStage(
   stage.setSceneImageFit(config.sceneImageFit);
   stage.setCastMode?.(config.castMode);
   stage.setRpgMode?.(config.rpgMode);
+  stage.setChoiceMode?.(config.mode, config.generateChoices);
   stage.setCastAbsenceDisplay?.(config.castAbsenceDisplay);
   stage.setUserCss(config.customCss);
   applyDisplayRulesGuarded(stage, config.displayRegexRules);
@@ -533,6 +535,21 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const vnDebug = (...parts: unknown[]): void => {
     if (configRef.current?.debugLogging) console.info("[VN]", ...parts);
   };
+  let pendingChoice: {
+    requestId: string;
+    source: TurnView;
+    text: string;
+    timer: ReturnType<typeof setTimeout>;
+    resolve: () => void;
+    reject: (cause: Error) => void;
+  } | null = null;
+  function clearPendingChoice(reason: string): void {
+    const pending = pendingChoice;
+    if (!pending) return;
+    pendingChoice = null;
+    clearTimeout(pending.timer);
+    pending.reject(new Error(reason));
+  }
   let turn: TurnView | null = null;
   let retryQueue:ImageRetryQueueView|null=null;
   let localPictureOperations:LocalPictureOperations|null=null;
@@ -713,7 +730,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       const raw = choice.value?.trim() ?? "";
       const isNumeric = /^\s*(?:\d+|choice[_-]?\d+|option\s*\d+)\s*$/i.test(raw);
       const submission = (!raw || isNumeric) ? choice.label : raw;
-      await handleUserSubmission(submission);
+      await commitChoice(choice.id, submission);
     },
     onSubmit: async (content: string) => {
       await handleUserSubmission(content);
@@ -1006,6 +1023,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
   };
   function clearStoryLore(): void {
+    settingsPanel?.setSidecarStatus("");
     for (const [requestId, pending] of storyAutofillRequests) {
       clearTimeout(pending.timer);
       storyAutofillRequests.delete(requestId);
@@ -1343,6 +1361,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (wasActive) saveCursor(stage.getState().currentParagraphIndex, true);
     stage.showReaderText();
     active = false;
+    clearPendingChoice("The reader closed before the choice was confirmed.");
     directorScope = null;
     directorDnaChat = null;
     quickDirector.close(false);
@@ -1370,6 +1389,26 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (!trimmed) throw new Error("Enter a response first.");
     const requestId = createUiId();
     ctx.sendToBackend({ type: "vn_submit", chatId: activeChatId, content: trimmed, requestId });
+  }
+
+  async function commitChoice(choiceId: string, content: string): Promise<void> {
+    const source = loadedReadingCursor.turn;
+    const position = loadedReadingCursor.position(stage.getState().currentParagraphIndex);
+    if (!source || !position || position.key.chatId !== chatId() || pendingChoice || configRef.current?.mode !== "cyoa") {
+      throw new Error("This choice is no longer available.");
+    }
+    const requestId = createUiId();
+    const completion = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => clearPendingChoice("Choice status is unknown. Check the chat before trying again."), 20_000);
+      pendingChoice = { requestId, source, text: content, timer, resolve, reject };
+    });
+    try {
+      ctx.sendToBackend({ type: "vn_submit", chatId: source.chatId, requestId, content,
+        choiceScope: { key: position.key, choiceId, paragraphIndex: position.paragraphIndex } });
+    } catch (error) {
+      clearPendingChoice(error instanceof Error ? error.message : String(error));
+    }
+    await completion;
   }
 
   async function handleUserSubmission(content: string): Promise<void> {
@@ -1451,6 +1490,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       else panelCapture.fingerprint = next.sourceFingerprint;
     }
     if(!turn||turn.chatId!==next.chatId||turn.messageId!==next.messageId||turn.sourceFingerprint!==next.sourceFingerprint||turn.swipeId!==next.swipeId||turn.revision!==next.revision)retryQueue=null;
+    if (pendingChoice && referenceTurnToken(pendingChoice.source) !== referenceTurnToken(next)) {
+      clearPendingChoice("The active reply changed.");
+    }
     turn = next;
     stage.setBondBranch(JSON.stringify([next.chatId, next.messageId, next.sourceFingerprint, next.swipeId]));
     imageStudio.setTurn(next);
@@ -1507,7 +1549,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     const requestedMode = configRef.current?.mode ?? "standard";
     panels.setTurn(next, 0);
-    const mode = requestedMode === "cyoa" && next.choices.length > 0 ? "cyoa" : "standard";
+    const mode = requestedMode;
     const preserveImage = shouldPreserveImage(previous, next);
     if(syncMusicChoices(next,0)){turnOpeningBgm=preserveImage?currentBgm:null;turnOpeningLocation=preserveImage&&loadedReadingCursor.turn?locationForPosition(loadedReadingCursor.turn,stage.getState().currentParagraphIndex):null;}
     const revised = decision.kind === "revised-turn" || recovering;
@@ -1692,6 +1734,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_config" && message.type === "vn_config") {
+      if (JSON.stringify(configRef.current?.sidecarCollection) !== JSON.stringify(message.config.sidecarCollection)) {
+        settingsPanel?.setSidecarStatus("");
+      }
       imageBridge.fit(message.config.sceneImageFit);
       // The echo of a persisted config is the only save acknowledgment the
       // transport offers; "saved" is claimed here and nowhere earlier.
@@ -1729,6 +1774,29 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         pendingNextTurn = next;
       } else {
         applyTurn(next, turn);
+      }
+      return;
+    }
+    if (type === "vn_choice_saved" && message.type === "vn_choice_saved") {
+      const pending = pendingChoice;
+      if (!pending || message.chatId !== chatId() || message.requestId !== pending.requestId) return;
+      pendingChoice = null;
+      clearTimeout(pending.timer);
+      if (active && turn && referenceTurnToken(turn) === referenceTurnToken(pending.source)) {
+        speech.setCursor(null);
+        stage.presentUserParagraph(pending.text, turn.userSpeaker || "You");
+        if (message.generationError) reportStageError({
+          message: "Your choice was saved. Lumiverse could not start the next reply.",
+          detail: message.generationError, source: "generation", retryable: false,
+        });
+      }
+      pending.resolve();
+      return;
+    }
+    if (type === "vn_sidecar_status" && message.type === "vn_sidecar_status") {
+      if (turn && turn.chatId === message.chatId && turn.messageId === message.messageId &&
+          turn.swipeId === message.swipeId && turn.sourceFingerprint === message.sourceFingerprint && turn.revision === message.revision) {
+        settingsPanel?.setSidecarStatus(message.notice);
       }
       return;
     }
@@ -1835,7 +1903,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (message.active) {
         stage.setError(null);
         stage.setAssetProgress(null);stage.workspace.setAttention(0);
-        if (!stage.isReadingUserParagraph()) {
+        if (!pendingChoice && !stage.isReadingUserParagraph()) {
           stage.setPhase("waiting-for-response");
         }
       } else if (message.error) {
@@ -1853,6 +1921,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_error" && message.type === "vn_error") {
+      if (message.operation === "vn_choice_submit") {
+        if (pendingChoice && message.requestId === pendingChoice.requestId && message.chatId === chatId()) clearPendingChoice(message.error);
+        return;
+      }
       if(message.operation==='vn_replan_turn'&&(!message.chatId||message.chatId===chatId())){preparationActive=false;imageStudio.setPlanning(chatId(),false);stage.stopPreparationPreview();}
       if (message.operation === "vn_queue_image_retries" || message.operation === "queue_image_retry" || message.operation === "vn_recover_images" || message.operation === "vn_replan_turn" || message.operation === "vn_correct_image_subject" || message.operation === "vn_set_card_role" || message.operation === "vn_regenerate_image_prompt" || message.operation === "vn_reprepare_image_template" || message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
         if (!message.chatId || message.chatId === chatId()) imageStudio.showError(message.error);
@@ -1894,6 +1966,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const resetChatState = (ensureLauncher = false): void => {
+    clearPendingChoice("The active chat changed.");
     directorScope = null;
     directorDnaChat = null;
     quickDirector.close(false);

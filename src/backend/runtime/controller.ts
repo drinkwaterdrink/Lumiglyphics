@@ -161,7 +161,8 @@ function capEpochMap(map: Map<string, number>, max = 256): void {
     map.delete(oldest);
   }
 }
-const pendingLoreJobs = new Map<string, { timer?: ReturnType<typeof setTimeout>; controller: AbortController }>();
+const scheduledLoreTurns = new Map<string, string>();
+const pendingLoreJobs = new Map<string, { timer?: ReturnType<typeof setTimeout>; controller: AbortController; scheduled: string; userId?: string | undefined }>();
 
 export function cancelSplitHorizonLore(key: string): void {
   const pending = pendingLoreJobs.get(key);
@@ -194,6 +195,8 @@ export function scheduleSplitHorizonLore(
   const { config, paragraphs } = params;
   if (!paragraphs.length || (!config.collectEntityReferences && !config.tooltips.enabled)) return;
   const key = runtimeKey(params.userId, params.chatId);
+  const scheduled = JSON.stringify([params.turnKey, params.intakeEpoch]);
+  if (scheduledLoreTurns.get(key) === scheduled || pendingLoreJobs.get(key)?.scheduled === scheduled) return;
   cancelSplitHorizonLore(key);
   const controller = new AbortController();
   const isCurrent = () =>
@@ -222,6 +225,11 @@ export function scheduleSplitHorizonLore(
         ...(p.sourceIndex !== undefined ? { sourceIndex: p.sourceIndex } : {}),
         text: stripTextEffectTags(p.text),
       }));
+      scheduledLoreTurns.set(key, scheduled);
+      if (scheduledLoreTurns.size > 256) {
+        const oldest = scheduledLoreTurns.keys().next().value;
+        if (oldest !== undefined) scheduledLoreTurns.delete(oldest);
+      }
       const lore = await extractTurnLoreAsync(spindle, {
         config,
         paragraphs: strippedParagraphs,
@@ -237,6 +245,16 @@ export function scheduleSplitHorizonLore(
         signal: controller.signal,
       });
       if (!isCurrent()) return;
+      const selectedStatuses = Object.values(lore.channels).filter(status => status !== "disabled");
+      const notice = !selectedStatuses.length ? ""
+        : selectedStatuses.every(status => status === "unavailable") ? "The latest background request was unavailable. Reading and recognized document quotes remain available."
+        : selectedStatuses.some(status => status !== "valid") ? "Some requested background details were missing or invalid in the latest reply."
+        : "";
+      spindle.sendToFrontend({
+        type: "vn_sidecar_status", chatId: params.chatId, messageId: params.turnKey.assistantMessageId,
+        swipeId: Number(params.turnKey.swipeId ?? 0) || 0, revision: params.turnKey.revision,
+        sourceFingerprint: params.turnKey.sourceFingerprint, notice,
+      }, params.userId);
       if (config.debugLogging) {
         spindle.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name, status]) => `${name}=${status}`).join(", ")}`);
       }
@@ -359,7 +377,7 @@ export function scheduleSplitHorizonLore(
 
   const delayMs = Math.max(0, params.delayMs ?? 1500);
   if (delayMs === 0) {
-    pendingLoreJobs.set(key, { controller });
+    pendingLoreJobs.set(key, { controller, scheduled, userId: params.userId });
     void run();
     return;
   }
@@ -370,7 +388,7 @@ export function scheduleSplitHorizonLore(
     }
     void run();
   }, delayMs);
-  pendingLoreJobs.set(key, { timer, controller });
+  pendingLoreJobs.set(key, { timer, controller, scheduled, userId: params.userId });
 }
 
 function bumpIntakeEpoch(userId: string | undefined, chatId: string): void {
@@ -893,8 +911,11 @@ export function turnView(record: StoredTurnRecord): TurnView {
       id: choice.id,
       label: choice.label,
       value: choice.submission,
+      source: choice.source,
       ...(choice.disabled ? { disabled: true } : {}),
-      ...(choice.lockedReason ? { lockedReason: choice.lockedReason } : {}),
+      ...(choice.disabled ? { lockedReason: choice.lockedReason && record.plan.paragraphs.some(paragraph =>
+        paragraph.text.toLowerCase().includes(choice.lockedReason!.replace(/^Requires\s+/i, "").toLowerCase()))
+          ? choice.lockedReason : "A prerequisite is unmet" } : {}),
       ...(choice.check ? { check: choice.check } : {}),
       ...(choice.setsFlags ? { setsFlags: choice.setsFlags } : {})
     })),
@@ -1911,7 +1932,60 @@ function submit(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "
   return pending;
 }
 
+const pendingChoiceScopes = new Set<string>();
+
+async function submitScopedChoice(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_submit" }>, userId: string): Promise<void> {
+  const scope = request.choiceScope!;
+  if (scope.key.chatId !== request.chatId) throw new Error("This choice belongs to another chat.");
+  const turnScope = JSON.stringify([scope.key.assistantMessageId, String(scope.key.swipeId ?? 0), scope.key.sourceFingerprint]);
+  const owner = JSON.stringify([userId, request.chatId, turnScope]);
+  if (pendingChoiceScopes.has(owner)) throw new Error("A choice for this reply is already saving.");
+  pendingChoiceScopes.add(owner);
+  const runtime = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(runtime) ?? 0;
+
+  try {
+    const messages = await spindle.chat.getMessages(request.chatId) as NormalizedChatMessage[];
+    const wasSaved = (source: readonly NormalizedChatMessage[]) => source.some(message => {
+      const metadata = submissionMetadata(message).visualNovelPreview as { choiceScope?: unknown } | undefined;
+      return metadata?.choiceScope === turnScope;
+    });
+    if (wasSaved(messages)) throw new Error("A choice for this reply has already been saved.");
+    const config = await loadConfig(spindle, userId);
+    const state = await loadChatState(spindle, request.chatId, userId);
+    const record = await loadTurnRecord(spindle, state.activeTurnPath, userId);
+    const latest = messages.at(-1);
+    const intake = latest && !latest.is_user ? await resolveMessageIntake(spindle, request.chatId, latest.content, userId) : undefined;
+    if (!record || record.status !== "ready" || !latest || !intake?.resolved || config.mode !== "cyoa"
+      || !views.isOpen(userId, request.chatId) || epoch !== (intakeEpochs.get(runtime) ?? 0)
+      || !sameLoreSource(record.plan.key, scope.key) || relateRecord(record, latest, intake) !== "current") {
+      throw new Error("This choice is no longer available in the current reply.");
+    }
+    const choice = record.plan.choices.find(item => item.id === scope.choiceId);
+    if (!choice || choice.disabled || (choice.source === "generated" && !config.generateChoices)
+      || scope.paragraphIndex < choice.unlocksAfterParagraph || scope.paragraphIndex >= record.plan.paragraphs.length) {
+      throw new Error("This choice is locked or has been disabled.");
+    }
+    try {
+      await spindle.chat.appendMessage(request.chatId, {
+        role: "user", content: request.content,
+        metadata: { visualNovelPreview: { requestId: request.requestId, choiceScope: turnScope } },
+      }, { triggerGeneration: true });
+    } catch (error) {
+      if (!wasSaved(await spindle.chat.getMessages(request.chatId) as NormalizedChatMessage[])) throw error;
+      spindle.sendToFrontend({
+        type: "vn_choice_saved", chatId: request.chatId, requestId: request.requestId, generationError: errorText(error),
+      }, userId);
+      return;
+    }
+    spindle.sendToFrontend({ type: "vn_choice_saved", chatId: request.chatId, requestId: request.requestId }, userId);
+  } finally {
+    pendingChoiceScopes.delete(owner);
+  }
+}
+
 async function submitOnce(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_submit" }>, userId: string): Promise<void> {
+  if (request.choiceScope) return submitScopedChoice(spindle, request, userId);
   const existing = await spindle.chat.getMessages(request.chatId) as NormalizedChatMessage[];
   const alreadyWritten = existing.some((message) => {
     const vn = submissionMetadata(message).visualNovelPreview;
@@ -2761,6 +2835,9 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       try { config=await saving;dispatch.update(userId,config); }
       catch(error){dispatch.update(userId,await loadConfig(spindle,userId));throw error;}
       finally { if(contextConfigSaves.get(userId)===saving)contextConfigSaves.delete(userId); }
+      if (request.patch.sidecarCollection !== undefined) {
+        for (const [key, pending] of pendingLoreJobs) if (pending.userId === userId) cancelSplitHorizonLore(key);
+      }
       rememberDebugFlag(userId, config);
       dbg(spindle, userId, `config saved (${Object.keys(request.patch).length} field(s) in patch)`);
       if (request.patch.audioDirectory !== undefined) {
@@ -2843,7 +2920,13 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       // Submissions only come from the open view; a restarted backend relearns
       // the open state here so the resulting reply is not skipped.
       openView(spindle, userId, request.chatId);
-      await submit(spindle, request, userId);
+      try {
+        await submit(spindle, request, userId);
+      } catch (error) {
+        if (!request.choiceScope) throw error;
+        spindle.sendToFrontend({ type: "vn_error", chatId: request.chatId, requestId: request.requestId,
+          operation: "vn_choice_submit", error: errorText(error) }, userId);
+      }
       return;
     case "vn_asset_ready":
       await markAssetReady(spindle, request, userId);

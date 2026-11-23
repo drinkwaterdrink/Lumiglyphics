@@ -1,3 +1,4 @@
+import { TurnKeySchema, type TurnKey } from "./shared/turn-key.js";
 import type {ImageActivity} from './shared/image-usage.js';
 import {StoryDnaRequestSchema,type StoryDnaRequest,type StoryDNASet,type StoryAutofillResult} from './shared/story-dna.js';
 import {DnaRequestSchema,type DnaRequest,type DnaProposal} from './shared/character-dna-workflow.js';
@@ -122,7 +123,7 @@ export type FrontendRequest =
   | { type: "vn_set_system_one_key"; key: string }
   | { type: "vn_clear_system_one_key" }
   | { type: "vn_set_config"; patch: Partial<VisualNovelConfig>; chatId?: string; requestId?: string }
-  | { type: "vn_submit"; chatId: string; content: string; requestId: string }
+  | { type: "vn_submit"; chatId: string; content: string; requestId: string; choiceScope?: { key: TurnKey; choiceId: string; paragraphIndex: number } }
   | { type: "vn_asset_ready"; chatId: string; messageId: string; jobId: string; sourceFingerprint: string; swipeId?: number; revision?: number; imageId?: string; imageUrl?: string }
   | { type: "vn_cancel"; chatId: string }
   | { type: "vn_retry_turn"; chatId: string; messageId: string }
@@ -232,7 +233,7 @@ export type TurnView = {
   musicLimits?: Array<'quiet'|'mute'|null>;
   /** Per-paragraph persistent ambient effect ids; null entries mean no ambient. */
   ambients?: Array<string | null>;
-  choices: Array<{ id: string; label: string; value: string; disabled?: boolean; lockedReason?: string; check?: import("./shared/rpg-state.js").SkillCheck; setsFlags?: Record<string, boolean> }>;
+  choices: Array<{ id: string; label: string; value: string; source?: "authored" | "generated"; disabled?: boolean; lockedReason?: string; check?: import("./shared/rpg-state.js").SkillCheck; setsFlags?: Record<string, boolean> }>;
   rpgState?: import("./shared/rpg-state.js").RpgState;
   assets: AssetView[];
   imageRequests?: ImageRequestRecord[];
@@ -280,6 +281,8 @@ export type BackendResponse =
     errors?: ConnectionCatalogErrors;
   }
   | { type: "vn_turn"; turn: TurnView }
+  | { type: "vn_choice_saved"; chatId: string; requestId: string; generationError?: string }
+  | { type: "vn_sidecar_status"; chatId: string; messageId: string; swipeId: number; sourceFingerprint: string; revision: number; notice: string }
   | { type: "vn_turn_lore_patch"; chatId: string; messageId: string; swipeId: number; sourceFingerprint: string; revision: number; presentation?: ReaderPresentation; referenceHistory?: ReferenceHistory }
   | { type: "vn_turn_snapshot"; chatId: string; messageId: string; swipeId: number; turn: TurnView | null; requestId?: string }
   | {type:'vn_reference_history_invalidated';chatId:string}
@@ -348,6 +351,13 @@ export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}).type === "vn_delete_image") return DeleteImageRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_generate_document_image") return GenerateDocumentImageRequestSchema.safeParse(value).success;
   if ((value as { type?: unknown }).type === "vn_get_turn_snapshot") return z.object({ type: z.literal("vn_get_turn_snapshot"), chatId: z.string().min(1).max(128), messageId: z.string().min(1).max(128), swipeId: z.number().int().min(0).optional(), requestId: z.string().min(1).max(128).optional() }).strict().safeParse(value).success;
+  if ((value as { type?: unknown }).type === "vn_submit" && "choiceScope" in value) {
+    return z.object({
+      type: z.literal("vn_submit"), chatId: z.string().min(1).max(256),
+      content: z.string().trim().min(1).max(20000), requestId: z.string().min(1).max(160),
+      choiceScope: z.object({ key: TurnKeySchema, choiceId: z.string().min(1).max(256), paragraphIndex: z.number().int().nonnegative() }).strict(),
+    }).strict().safeParse(value).success;
+  }
   if ((value as { type?: unknown }).type === "vn_reading_position") return ReadingPositionSchema.safeParse((value as { position?: unknown }).position).success;
   return typeof (value as { type?: unknown }).type === "string"
     && String((value as { type: string }).type).startsWith("vn_");

@@ -6,7 +6,7 @@
 2. Shipped in `0.2.13-beta.185`: source-grounded Sidecar and branch-aware story data.
 3. Shipped in `0.2.14-beta.185`: embedded Settings navigation, artwork lightbox focus, passage timeline and picker, camera intensity, presentation presets, and branch-aware bond banners.
 4. Shipped in `0.2.15-beta.185`: exact-picture Director review, prompt format preview, accessible artwork viewing, responsive Atlas, and scoped field-by-field Location and Item autofill.
-5. Add opt-in CYOA enhancements and optional Sidecar profiles.
+5. Shipped in `0.2.16-beta.185`: optional CYOA with scoped submission and a free-text fallback, and configurable background Sidecar collection.
 6. Add Branch Chronicle, Living World clocks, and Scene Rehearsal.
 7. Verify integration, compatibility, and release readiness.
 

@@ -143,7 +143,15 @@ try{
   await disclosure.locator('summary').click();
   const format = disclosure.getByLabel('Prompt preview format');
   const previewText = disclosure.locator('[data-preview-format-text]');
-  assert.match(await previewText.inputValue(), /Keep this accepted picture draft/);
+  await previewText.evaluate((field: HTMLTextAreaElement) => new Promise<void>((resolve, reject) => {
+    const deadline = performance.now() + 1500;
+    const wait = () => {
+      if (field.value.includes('Keep this accepted picture draft')) resolve();
+      else if (performance.now() >= deadline) reject(new Error('Current prompt preview was not rendered'));
+      else requestAnimationFrame(wait);
+    };
+    wait();
+  }));
   await format.selectOption('ideogram-json');
   assert.equal(JSON.parse(await previewText.inputValue()).compositional_deconstruction.elements[0]?.text, 'OPEN');
   assert.equal(await prompt.inputValue(), 'Keep this accepted picture draft');
@@ -240,5 +248,60 @@ try{
   assert.equal(await editableNote.inputValue(), 'Keep this unsaved editor note');
   assert.equal(await page.locator('[data-story-dna-studio] [data-dna-field="lighting"]').inputValue(), 'Warm lamp light');
   assert.deepEqual(errors, []);
-  console.log('Real host controller: revised presentation/draft/cursor, stale chats/state attempts, replacement acknowledgements, close suspension, Director picture ownership, the 31-place Atlas, and selected-field autofill passed.');
+  await page.reload();
+  await page.waitForFunction(() => Boolean((window as any).hostFixture));
+  await page.evaluate(() => {
+    const f = (window as any).hostFixture;
+    const view = f.turn('A', 0, { choices: [
+      { id: 'take', label: 'Walk carefully to the end of the long moonlit hallway and examine the door', value: 'I examine the door.', source: 'authored' },
+      { id: 'generated', label: 'Open the window', value: 'I open the window.', source: 'generated' },
+      { id: 'locked', label: 'Unlock the cabinet', value: 'I unlock the cabinet.', source: 'authored', disabled: true },
+    ] });
+    f.state(view); f.open(); f.state(view);
+    const stage = f.stage();
+    stage.dismissChapterCard();
+    for (let index = 0; index < 8 && stage.getState().phase !== 'awaiting-input'; index++) stage.advance();
+  });
+  const choices = page.locator('[data-vn-choice]');
+  assert.equal(await choices.count(), 0, 'default Standard does not render CYOA controls');
+  const setMode = (mode: string, generateChoices: boolean) => page.evaluate(({ mode, generateChoices }) => {
+    const f = (window as any).hostFixture;
+    f.receive({ type: 'vn_config', config: { ...f.config, mode, generateChoices } });
+  }, { mode, generateChoices });
+  await setMode('cyoa', false);
+  assert.equal(await choices.count(), 2, 'generation off retains authored choices only');
+  const locked = choices.filter({ hasText: 'Unlock the cabinet' });
+  assert.equal(await locked.isDisabled(), true);
+  assert.match(await locked.innerText(), /Requirements are unmet/);
+  await setMode('cyoa', true);
+  assert.equal(await choices.count(), 3);
+  await setMode('standard', true);
+  assert.equal(await choices.count(), 0);
+  await setMode('cyoa', false);
+
+  const take = choices.filter({ hasText: 'Walk carefully' });
+  await take.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  assert.equal(await page.locator('[data-vn-interaction-hint]').isVisible(), true);
+  assert.match(await page.locator('[data-vn-interaction-hint]').innerText(), /Saving your choice/);
+  const outgoingChoices = () => page.evaluate(() => (window as any).hostFixture.sent.filter((message: any) => message.choiceScope));
+  const [firstChoice] = await outgoingChoices();
+  assert.equal((await outgoingChoices()).length, 1);
+  assert.equal(firstChoice.choiceScope.choiceId, 'take');
+  await page.evaluate(requestId => (window as any).hostFixture.receive({
+    type: 'vn_error', chatId: 'A', requestId, operation: 'vn_choice_submit', error: 'Could not append. Try again.',
+  }), firstChoice.requestId);
+  assert.equal(await take.isEnabled(), true);
+  await take.click();
+  const [, retry] = await outgoingChoices();
+  assert.ok(retry && retry.requestId !== firstChoice.requestId);
+  const switched = await page.evaluate(() => {
+    const f = (window as any).hostFixture;
+    f.receive({ type: 'vn_turn', turn: f.turn('A', 1, { swipeId: 1, sourceFingerprint: 'swiperchanged' }) });
+    return f.stage().getState().isUserTurn;
+  });
+  assert.equal(switched, false);
+  await page.evaluate(requestId => (window as any).hostFixture.receive({ type: 'vn_choice_saved', chatId: 'A', requestId }), retry.requestId);
+  assert.equal(await page.evaluate(() => (window as any).hostFixture.stage().getState().isUserTurn), false, 'stale acknowledgement cannot append a local paragraph');
+  assert.deepEqual(errors, []);
+  console.log('Real host controller: revised presentation/draft/cursor, stale chats/state attempts, replacement acknowledgements, close suspension, Director picture ownership, the 31-place Atlas, selected-field autofill, and opt-in CYOA passed.');
 }finally{await browser.close();await server.stop();}

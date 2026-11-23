@@ -1,3 +1,4 @@
+import { normalizeSidecarCollection, SIDECAR_COLLECTION_LABELS, SIDECAR_OUTPUTS } from "../../shared/sidecar-collection.js";
 import {
   MASTER_SCENE_PLANNER_PROMPT,
   MASTER_LORE_REFERENCE_PROMPT,
@@ -1084,6 +1085,20 @@ export class VisualNovelSettingsPanel {
                 <span>Sidecar model override (optional)</span>
                 <input name="sidecarModel" type="text" placeholder="Leave blank to use connection default">
               </label>
+              <details data-sidecar-collection>
+                <summary>Background collection profile</summary>
+                <label data-field><span>Collection profile</span><select name="sidecarCollection">
+                  <option value="essentials">Essentials</option><option value="worldbuilding">Worldbuilding</option><option value="custom">Custom</option>
+                </select></label>
+                <small>Background collection runs when story reference collection or tooltips are on.</small>
+                <small data-sidecar-profile-summary></small>
+                <fieldset data-sidecar-channels hidden><legend>Collect with the background model</legend>
+                  ${SIDECAR_OUTPUTS.map(channel => `<label data-check>
+                    <input type="checkbox" name="sidecar-channel" value="${channel}"><span>${SIDECAR_COLLECTION_LABELS[channel]}</span>
+                  </label>`).join("")}
+                </fieldset>
+                <p data-sidecar-status role="status" hidden></p>
+              </details>
               <label data-check>
                 <input name="sidecarUseForAutofill" type="checkbox">
                 <span>Use Sidecar for manual DNA &amp; Lore Auto-Fill buttons<small>Route Character, Location, and Item DNA auto-fill requests through the Sidecar connection when configured.</small></span>
@@ -2024,6 +2039,15 @@ export class VisualNovelSettingsPanel {
       case "parserConnectionId":
       case "setupParserConnectionId":
         return { parserConnectionId: target.value.trim() || null };
+      case "sidecarCollection": {
+        return { sidecarCollection: normalizeSidecarCollection({ profile: target.value, selected: this.config.sidecarCollection.selected }) };
+      }
+      case "sidecar-channel": {
+        const selected = SIDECAR_OUTPUTS.filter(output => this.root.querySelector<HTMLInputElement>(
+          'input[name="sidecar-channel"][value="' + output + '"]',
+        )?.checked);
+        return { sidecarCollection: normalizeSidecarCollection({ profile: "custom", selected }) };
+      }
       case "sidecarConnectionId":
         return { sidecarConnectionId: target.value.trim() || null };
       case "sidecarModel":
@@ -2531,6 +2555,15 @@ export class VisualNovelSettingsPanel {
   }
 
   private syncEveryday(config: VisualNovelConfig): void {
+    const collection = config.sidecarCollection;
+    this.control<HTMLSelectElement>("sidecarCollection").value = collection.profile;
+    this.root.querySelector<HTMLElement>("[data-sidecar-channels]")!.hidden = collection.profile !== "custom";
+    for (const input of this.root.querySelectorAll<HTMLInputElement>('input[name="sidecar-channel"]')) {
+      input.checked = collection.selected.some(output => input.value === output);
+    }
+    this.root.querySelector<HTMLElement>("[data-sidecar-profile-summary]")!.textContent = collection.selected.length
+      ? collection.selected.map(output => SIDECAR_COLLECTION_LABELS[output]).join(", ")
+      : "Background model off. Recognized document quotes remain available.";
     this.control<HTMLSelectElement>("imagePromptEngineVersion").value = String(config.imagePromptEngineVersion ?? 2);
     this.control<HTMLSelectElement>("ideogramPromptMode").value = config.ideogramPromptMode ?? "auto";
     this.control<HTMLSelectElement>("flux3KleinPromptMode").value = config.flux3KleinPromptMode ?? "auto";
@@ -2770,6 +2803,13 @@ export class VisualNovelSettingsPanel {
   /* ---------------------------------------------------------------------- */
   /* Connections                                                             */
   /* ---------------------------------------------------------------------- */
+
+  setSidecarStatus(message: string): void {
+    const status = this.root.querySelector<HTMLElement>("[data-sidecar-status]");
+    if (!status) return;
+    status.textContent = message;
+    status.hidden = !message;
+  }
 
   setConnectionCatalog(kind: ConnectionCatalogKind, state: ConnectionCatalogState): void {
     this.connectionStates[kind] = state;

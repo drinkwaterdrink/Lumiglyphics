@@ -13,7 +13,7 @@ const paragraphs = [
 ];
 
 test("a prepared CYOA draft exposes the normal composer only at Your turn", () => {
-  let state=reduceVnStage(createInitialVnStageState(),{type:'load-turn',turn:{mode:'cyoa',paragraphs}});
+  let state=reduceVnStage(createInitialVnStageState(),{type:'load-turn',turn:{mode:'cyoa',paragraphs,choices:[{id:'look',label:'Look',value:'I look.'}]}});
   state=reduceVnStage(state,{type:'set-draft',draft:'I try to examine the key.'});
   assert.equal(selectVnStageView(state).showStandardInput,false);
   state={...state,phase:'awaiting-input'};
@@ -31,6 +31,21 @@ test("switching a typed standard reply to CYOA preserves composer access",()=>{
   state=reduceVnStage(state,{type:'set-mode',mode:'cyoa'}) as typeof state;
   assert.equal(selectVnStageView(state).showStandardInput,true);
   assert.equal(state.draft,'My existing reply');
+});
+
+test("CYOA keeps the composer for empty or disabled choices and honors generation off", () => {
+  const state = createInitialVnStageState({ mode: "cyoa", phase: "awaiting-input", paragraphs });
+  assert.equal(selectVnStageView(state).showChoices, false);
+  assert.equal(selectVnStageView(state).showStandardInput, true);
+  const mixed = { ...state, choices: [
+    { id: "a", label: "Authored", value: "I inspect.", source: "authored" as const, disabled: true },
+    { id: "b", label: "Generated", value: "I leave.", source: "generated" as const },
+  ] };
+  const disabled = reduceVnStage(mixed, { type: "set-mode", mode: "cyoa", generateChoices: false });
+  assert.equal(selectVnStageView(disabled).showChoices, true);
+  assert.equal(selectVnStageView(disabled).showStandardInput, true);
+  const standard = reduceVnStage(mixed, { type: "set-mode", mode: "standard" });
+  assert.equal(selectVnStageView(standard).showChoices, false);
 });
 
 test("resume loads the saved paragraph without advances or unlocking the reply", () => {

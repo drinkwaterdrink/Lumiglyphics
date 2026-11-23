@@ -1,3 +1,4 @@
+import { DEFAULT_SIDECAR_COLLECTION, normalizeSidecarCollection, type SidecarCollection } from "./shared/sidecar-collection.js";
 import { normalizeTooltipPreferences, type TooltipPreferences } from "./shared/dossiers.js";
 import { normalizeTrackerMappings, type TrackerMappings } from "./shared/tracker-mappings.js";
 import { normalizeImageOutputRatio, type ImageOutputRatio } from "./shared/image-output.js";
@@ -142,6 +143,7 @@ export type VisualNovelConfig = {
   generateChoices: boolean;
   parserConnectionId: string | null;
   sidecarConnectionId: string | null;
+  sidecarCollection: SidecarCollection;
   sidecarModel: string;
   sidecarUseForAutofill: boolean;
   systemOneMode: "off" | "compare" | "on";
@@ -253,6 +255,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   generateChoices: true,
   parserConnectionId: null,
   sidecarConnectionId: null,
+  sidecarCollection: DEFAULT_SIDECAR_COLLECTION,
   sidecarModel: "",
   sidecarUseForAutofill: true,
   systemOneMode: "off",
@@ -508,6 +511,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     generateChoices: bool(input.generateChoices, DEFAULT_CONFIG.generateChoices),
     parserConnectionId: nullableString(input.parserConnectionId),
     sidecarConnectionId: nullableString(input.sidecarConnectionId),
+    sidecarCollection: normalizeSidecarCollection(input.sidecarCollection),
     sidecarModel: stringValue(input.sidecarModel, DEFAULT_CONFIG.sidecarModel).trim(),
     sidecarUseForAutofill: bool(input.sidecarUseForAutofill, DEFAULT_CONFIG.sidecarUseForAutofill),
     systemOneMode: input.systemOneMode === "compare" || input.systemOneMode === "on" ? input.systemOneMode : "off",
