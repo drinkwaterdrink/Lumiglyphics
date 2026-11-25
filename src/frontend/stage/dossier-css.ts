@@ -87,6 +87,16 @@ export const DOSSIER_CSS = `
 .world-lens.world-lens-preview{display:flex;flex-direction:column;align-items:stretch;gap:8px;cursor:default}
 .world-lens-preview-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .world-threads-card{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.22)}
+[data-world-clocks]{display:block;min-width:0;overflow-wrap:anywhere}
+[data-world-clocks] summary{min-height:44px;align-content:center;cursor:pointer;font-weight:650}
+[data-world-clocks] p{margin-block:6px}
+[data-world-clocks] [data-world-clock-status]:empty{display:none}
+[data-world-clocks] [data-clock-id]{border-block-start:1px solid var(--vn-shell-border,#456);padding-block:4px}
+[data-world-clocks] form{display:grid;gap:8px;margin-block:12px}
+[data-world-clocks] label{display:grid;gap:4px;min-width:0}
+[data-world-clocks] [hidden]{display:none}
+[data-world-clocks] input,[data-world-clocks] select,[data-world-clocks] textarea,[data-world-clocks] button{min-height:44px;min-width:0;max-width:100%;font:inherit}
+[data-world-clocks] progress{display:block;width:100%;accent-color:var(--vn-shell-accent,#85d9fa);margin-block:8px}
 .story-dna-drawer{margin:12px 0;border-top:1px solid var(--vn-panel-border,#666)}
 .input-wrap{display:flex;gap:8px;align-items:center;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));border-radius:var(--vn-shell-radius,10px);background:var(--vn-shell-field,rgba(0,0,0,.15));width:100%;padding:0 10px;height:44px;box-sizing:border-box}
 .input-wrap input{width:100%;min-width:0;background:none;border:none;outline:none;font:inherit;color:var(--vn-shell-text,inherit);padding:0}

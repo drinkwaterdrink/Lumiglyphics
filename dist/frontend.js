@@ -19886,6 +19886,44 @@ var ReadingPositionSchema = exports_external.object({
   paragraphIndex: exports_external.number().int().min(0).max(1e5)
 }).strict();
 
+// src/shared/world-clocks.ts
+var id2 = exports_external.string().trim().min(1).max(160);
+var WorldClockKindSchema = exports_external.enum(["deadline", "relationship", "faction", "objective"]);
+var WorldClockDraftSchema = exports_external.object({
+  title: exports_external.string().trim().min(1).max(100),
+  kind: WorldClockKindSchema,
+  steps: exports_external.number().int().min(2).max(12)
+}).strict();
+var WorldClockSchema = WorldClockDraftSchema.extend({
+  id: id2,
+  paused: exports_external.boolean()
+}).strict();
+var WorldClockEventSchema = exports_external.object({
+  id: id2,
+  clockId: id2,
+  position: ReadingPositionSchema,
+  rawFingerprint: exports_external.string().min(8).max(256),
+  kind: exports_external.enum(["advance", "correct"]),
+  value: exports_external.number().int().min(0).max(12),
+  note: exports_external.string().trim().min(1).max(280)
+}).strict();
+var WorldClockLedgerSchema = exports_external.object({
+  clocks: exports_external.array(WorldClockSchema).max(24),
+  events: exports_external.array(WorldClockEventSchema).max(512)
+}).strict();
+var WorldClockCommandSchema = exports_external.discriminatedUnion("kind", [
+  exports_external.object({ kind: exports_external.literal("create"), clock: WorldClockDraftSchema }).strict(),
+  exports_external.object({ kind: exports_external.literal("pause"), clockId: id2, paused: exports_external.boolean() }).strict(),
+  exports_external.object({ kind: exports_external.literal("advance"), clockId: id2, note: WorldClockEventSchema.shape.note }).strict(),
+  exports_external.object({ kind: exports_external.literal("correct"), clockId: id2, note: WorldClockEventSchema.shape.note, value: WorldClockEventSchema.shape.value }).strict()
+]);
+function visibleClockProgress(ledger, clockId) {
+  const clock = ledger.clocks.find((entry) => entry.id === clockId);
+  if (!clock)
+    return 0;
+  return ledger.events.reduce((progress, event) => event.clockId !== clockId ? progress : Math.min(clock.steps, event.kind === "advance" ? progress + 1 : event.value), 0);
+}
+
 // src/shared/story-dna.ts
 var LocationSpatialAnchorsSchema = exports_external.object({
   lightSourceAxis: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
@@ -20030,6 +20068,7 @@ var StoryDNASetSchema = exports_external.object({
   npcBeliefs: exports_external.record(exports_external.string(), exports_external.array(NpcBeliefSchema).max(12)).optional(),
   loreEvents: exports_external.array(StoryLoreEventSchema).max(96).optional(),
   loreHeads: exports_external.array(TurnKeySchema).max(192).optional(),
+  worldClocks: WorldClockLedgerSchema.optional(),
   hiddenLoreThreads: exports_external.array(exports_external.string().max(200)).max(96).optional(),
   deletedLocations: exports_external.record(exports_external.string(), LocationDNASchema).optional(),
   deletedItems: exports_external.record(exports_external.string(), ItemDNASchema).optional(),
@@ -20458,6 +20497,14 @@ var LOCATION_AUTOFILL_FIELDS = ["environmentDescription", "lighting", "atmospher
 var ITEM_AUTOFILL_FIELDS = ["itemType", "description", "materials", "distinctiveFeatures", "colors", "heldBy", "loreText"];
 var StoryAutofillFieldSchema = exports_external.enum([...LOCATION_AUTOFILL_FIELDS, ...ITEM_AUTOFILL_FIELDS]);
 var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("world_clock"),
+    chatId: exports_external.string().min(1).max(256),
+    requestId: exports_external.string().min(1).max(160),
+    command: WorldClockCommandSchema,
+    readingPosition: ReadingPositionSchema.optional()
+  }).strict(),
   exports_external.object({
     type: exports_external.literal("vn_story_dna"),
     action: exports_external.literal("list"),
@@ -21742,22 +21789,22 @@ var ImageShotSpecSchema = exports_external.object({
 var KLEIN_OUTPUT_SIZES = ["768x768", "1024x1024", "1536x1536", "2048x2048", "4096x4096"];
 var ANIMA_MODELS = new Set(["anima", "anima/text-to-image", "anima/text-to-image-lora", "wavespeed-ai/anima/text-to-image", "wavespeed-ai/anima/text-to-image-lora"]);
 function isFluxKleinModel(model) {
-  const id2 = String(model ?? "").trim().toLowerCase();
-  return Boolean(id2) && id2.includes("klein");
+  const id3 = String(model ?? "").trim().toLowerCase();
+  return Boolean(id3) && id3.includes("klein");
 }
 function isFlux3KleinSquareModel(model) {
-  const id2 = String(model ?? "").trim().toLowerCase();
-  return Boolean(id2) && (/flux[-_./]?3.*klein/i.test(id2) || id2.startsWith("blackforestlabs/flux-3/klein"));
+  const id3 = String(model ?? "").trim().toLowerCase();
+  return Boolean(id3) && (/flux[-_./]?3.*klein/i.test(id3) || id3.startsWith("blackforestlabs/flux-3/klein"));
 }
 function imageOutputRule(provider, model) {
   if (provider?.trim().toLowerCase() !== "nanogpt")
     return null;
-  const id2 = model?.trim().toLowerCase() ?? "";
-  if (ANIMA_MODELS.has(id2))
+  const id3 = model?.trim().toLowerCase() ?? "";
+  if (ANIMA_MODELS.has(id3))
     return "anima";
-  if (id2 === "qwen-image-2.1-turbo")
+  if (id3 === "qwen-image-2.1-turbo")
     return "qwen-turbo";
-  return isFlux3KleinSquareModel(id2) ? "klein-square" : null;
+  return isFlux3KleinSquareModel(id3) ? "klein-square" : null;
 }
 function modelOutputHelp(provider, model, parameters) {
   const rule = imageOutputRule(provider, model);
@@ -22939,29 +22986,29 @@ var TurnPlanSchema = exports_external.object({
 });
 
 // src/shared/presentation-entities.ts
-var id2 = exports_external.string().trim().min(1).max(256);
+var id3 = exports_external.string().trim().min(1).max(256);
 var PresentationAnchorSchema = exports_external.object({ key: TurnKeySchema, paragraphIndex: exports_external.number().int().nonnegative() }).strict();
-var EvidenceSourceSchema = exports_external.object({ provider: exports_external.enum(["story", "card", "manual", "lumibooks", "warp", "simtracker", "lumiscript"]), recordId: id2, chatId: id2, messageId: id2.optional(), sourceFingerprint: id2.optional(), observedAt: exports_external.string().max(64) }).strict();
-var EntityFactSchema = exports_external.object({ id: id2, entityId: id2, field: exports_external.string().min(1).max(64), value: exports_external.string().max(1200), visibility: exports_external.enum(["observed", "private", "unclassified"]), source: EvidenceSourceSchema, revealedAt: PresentationAnchorSchema.optional() }).strict();
-var PresentationEntitySchema = exports_external.object({ id: id2, kind: exports_external.enum(["npc", "place", "object"]), name: id2, aliases: exports_external.array(id2).max(12), firstParagraph: exports_external.number().int().nonnegative(), legacyCharacterId: id2.optional(), facts: exports_external.array(EntityFactSchema).max(128) }).strict();
+var EvidenceSourceSchema = exports_external.object({ provider: exports_external.enum(["story", "card", "manual", "lumibooks", "warp", "simtracker", "lumiscript"]), recordId: id3, chatId: id3, messageId: id3.optional(), sourceFingerprint: id3.optional(), observedAt: exports_external.string().max(64) }).strict();
+var EntityFactSchema = exports_external.object({ id: id3, entityId: id3, field: exports_external.string().min(1).max(64), value: exports_external.string().max(1200), visibility: exports_external.enum(["observed", "private", "unclassified"]), source: EvidenceSourceSchema, revealedAt: PresentationAnchorSchema.optional() }).strict();
+var PresentationEntitySchema = exports_external.object({ id: id3, kind: exports_external.enum(["npc", "place", "object"]), name: id3, aliases: exports_external.array(id3).max(12), firstParagraph: exports_external.number().int().nonnegative(), legacyCharacterId: id3.optional(), facts: exports_external.array(EntityFactSchema).max(128) }).strict();
 var PresentationStateSchema = exports_external.object({ appearance: exports_external.string().max(1200).optional(), outfit: exports_external.string().max(1200).optional(), condition: exports_external.string().max(1200).optional(), owner: exports_external.string().max(256).optional(), location: exports_external.string().max(256).optional(), presence: exports_external.enum(["present", "absent"]).optional() }).strict();
-var EntityStateDeltaSchema = exports_external.object({ entityId: id2, at: PresentationAnchorSchema, changes: PresentationStateSchema.partial().extend({ appearance: exports_external.string().max(1200).nullable().optional(), outfit: exports_external.string().max(1200).nullable().optional(), condition: exports_external.string().max(1200).nullable().optional(), owner: exports_external.string().max(256).nullable().optional(), location: exports_external.string().max(256).nullable().optional(), presence: exports_external.enum(["present", "absent"]).nullable().optional() }) }).strict();
+var EntityStateDeltaSchema = exports_external.object({ entityId: id3, at: PresentationAnchorSchema, changes: PresentationStateSchema.partial().extend({ appearance: exports_external.string().max(1200).nullable().optional(), outfit: exports_external.string().max(1200).nullable().optional(), condition: exports_external.string().max(1200).nullable().optional(), owner: exports_external.string().max(256).nullable().optional(), location: exports_external.string().max(256).nullable().optional(), presence: exports_external.enum(["present", "absent"]).nullable().optional() }) }).strict();
 var ReaderEntitySchema = PresentationEntitySchema.omit({ facts: true }).extend({ facts: exports_external.array(EntityFactSchema.extend({ visibility: exports_external.literal("observed") })).max(128) });
-var PresentationSnapshotSchema = exports_external.object({ at: PresentationAnchorSchema, locationId: id2.nullable(), presentEntityIds: exports_external.array(id2).max(32), speakerEntityId: id2.nullable(), drawableEntityId: id2.nullable(), stateByEntity: exports_external.record(id2, PresentationStateSchema), entities: exports_external.array(ReaderEntitySchema).max(32) }).strict();
+var PresentationSnapshotSchema = exports_external.object({ at: PresentationAnchorSchema, locationId: id3.nullable(), presentEntityIds: exports_external.array(id3).max(32), speakerEntityId: id3.nullable(), drawableEntityId: id3.nullable(), stateByEntity: exports_external.record(id3, PresentationStateSchema), entities: exports_external.array(ReaderEntitySchema).max(32) }).strict();
 var ReaderPresentationV1Schema = exports_external.object({ version: exports_external.literal(1), snapshots: exports_external.array(PresentationSnapshotSchema).max(1e4), documents: exports_external.array(StoryDocumentSchema).max(12).optional() }).strict();
 var MAX_PRESENTATION_BYTES = 2000000;
 var presentationSerializedBytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
 var MAX_PRESENTATION_PARAGRAPHS = 1e4;
 var MAX_PRESENTATION_CHANGES = MAX_PRESENTATION_PARAGRAPHS * 32;
 var CompactPresentationChangeSchema = EntityStateDeltaSchema.omit({ at: true }).extend({ paragraphIndex: exports_external.number().int().nonnegative() }).strict();
-var PresentationBeatSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), locationId: id2.nullable(), speakerEntityId: id2.nullable(), drawableEntityId: id2.nullable() }).strict();
+var PresentationBeatSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), locationId: id3.nullable(), speakerEntityId: id3.nullable(), drawableEntityId: id3.nullable() }).strict();
 var ReaderPresentationV2Schema = exports_external.object({
   version: exports_external.literal(2),
   key: TurnKeySchema,
   paragraphCount: exports_external.number().int().positive(),
   availableThrough: exports_external.number().int().min(-1).max(MAX_PRESENTATION_PARAGRAPHS - 1),
   entities: exports_external.array(ReaderEntitySchema).max(32),
-  baseline: exports_external.record(id2, PresentationStateSchema),
+  baseline: exports_external.record(id3, PresentationStateSchema),
   changes: exports_external.array(CompactPresentationChangeSchema).max(MAX_PRESENTATION_CHANGES),
   beats: exports_external.array(PresentationBeatSchema).max(MAX_PRESENTATION_PARAGRAPHS),
   documents: exports_external.array(StoryDocumentSchema).max(12).optional(),
@@ -23033,7 +23080,7 @@ function parseReaderPresentation(raw, key, paragraphCount) {
         const ids = new Set(snapshot.entities.map((e) => e.id));
         if (ids.size !== snapshot.entities.length || snapshot.entities.some((e) => e.firstParagraph > index || e.facts.some((f) => f.entityId !== e.id || f.source.chatId !== ownKey.chatId || f.source.messageId !== ownKey.assistantMessageId || f.source.sourceFingerprint !== ownKey.sourceFingerprint || !f.revealedAt || !samePresentationTurn(f.revealedAt.key, ownKey) || f.revealedAt.paragraphIndex > index)))
           return;
-        if (Object.keys(snapshot.stateByEntity).some((id3) => !ids.has(id3)) || snapshot.presentEntityIds.some((id3) => !ids.has(id3)) || [snapshot.speakerEntityId, snapshot.drawableEntityId, snapshot.locationId].some((id3) => id3 !== null && !ids.has(id3)))
+        if (Object.keys(snapshot.stateByEntity).some((id4) => !ids.has(id4)) || snapshot.presentEntityIds.some((id4) => !ids.has(id4)) || [snapshot.speakerEntityId, snapshot.drawableEntityId, snapshot.locationId].some((id4) => id4 !== null && !ids.has(id4)))
           return;
       }
     }
@@ -23050,8 +23097,8 @@ function selectPresentationSnapshot(value, index) {
   if (index > value.availableThrough)
     return;
   const state = Object.create(null);
-  for (const [id3, baseline] of Object.entries(value.baseline))
-    state[id3] = { ...baseline };
+  for (const [id4, baseline] of Object.entries(value.baseline))
+    state[id4] = { ...baseline };
   for (const change of value.changes) {
     if (change.paragraphIndex > index)
       break;
@@ -23118,7 +23165,7 @@ function sceneHistoryFor(turn, through) {
   const locations = (turn.sceneLocations ?? []).slice(0, 1e4).filter((entry) => Number.isInteger(entry.paragraphIndex) && entry.paragraphIndex >= 0 && entry.paragraphIndex <= end && typeof entry.location === "string").sort((a, b) => a.paragraphIndex - b.paragraphIndex);
   const previousPresence = new Map;
   let previousLocation, locationIndex = 0, recordedLocation = turn.sceneLocations ? null : turn.location?.trim() || null, changeIndex = 0;
-  const state = projection?.version === 2 ? Object.fromEntries(Object.entries(projection.baseline).map(([id3, value]) => [id3, { ...value }])) : Object.create(null);
+  const state = projection?.version === 2 ? Object.fromEntries(Object.entries(projection.baseline).map(([id4, value]) => [id4, { ...value }])) : Object.create(null);
   model.unavailable = !projection && !locations.length && !recordedLocation;
   if (projection?.version === 2 && projection.availableThrough < end)
     model.truncated = true;
@@ -23147,8 +23194,8 @@ function sceneHistoryFor(turn, through) {
     const covered = projection?.version === 2 ? index <= projection.availableThrough : Boolean(snapshot);
     const entities = covered ? (snapshot?.entities ?? (projection?.version === 2 ? projection.entities : [])).filter((entity) => entity.firstParagraph <= index) : [];
     const byId = new Map(entities.map((entity) => [entity.id, entity])), states = snapshot?.stateByEntity ?? state;
-    const placeName = (id3) => {
-      const place = id3 ? byId.get(id3) : undefined;
+    const placeName = (id4) => {
+      const place = id4 ? byId.get(id4) : undefined;
       return place?.kind === "place" ? place.name : null;
     };
     const locationId = snapshot?.locationId ?? (projection?.version === 2 && covered ? projection.beats[index]?.locationId : null), location = placeName(locationId) ?? recordedLocation;
@@ -23481,6 +23528,612 @@ class RelationshipTracker {
   }
 }
 
+// src/shared/branch-chronicle.ts
+var id4 = exports_external.string().min(1).max(256);
+var ChronicleBookmarkSchema = exports_external.object({
+  id: id4,
+  position: ReadingPositionSchema,
+  replyNumber: exports_external.number().int().positive(),
+  swipeTimestamp: exports_external.number().int().nonnegative().optional()
+}).strict();
+var ChronicleDocumentSchema = exports_external.object({
+  version: exports_external.literal(1),
+  bookmarks: exports_external.array(ChronicleBookmarkSchema).max(100)
+}).strict();
+var scope = { type: exports_external.literal("vn_branch_chronicle"), chatId: id4, requestId: id4 };
+var BranchChronicleRequestSchema = exports_external.discriminatedUnion("action", [
+  exports_external.object({ ...scope, action: exports_external.literal("list") }).strict(),
+  exports_external.object({ ...scope, action: exports_external.literal("bookmark"), position: ReadingPositionSchema }).strict(),
+  exports_external.object({ ...scope, action: exports_external.literal("remove"), bookmarkId: id4 }).strict(),
+  exports_external.object({ ...scope, action: exports_external.literal("compare"), firstId: id4, secondId: id4 }).strict()
+]);
+var ChronicleSideSchema = exports_external.discriminatedUnion("status", [
+  exports_external.object({ status: exports_external.literal("missing") }).strict(),
+  exports_external.object({ status: exports_external.literal("changed") }).strict(),
+  exports_external.object({
+    status: exports_external.literal("ready"),
+    passage: exports_external.string().max(4000),
+    facts: exports_external.array(exports_external.string().max(1000)).max(256),
+    completeFacts: exports_external.boolean(),
+    choices: exports_external.array(exports_external.object({ label: exports_external.string().max(512), locked: exports_external.boolean() }).strict()).max(32),
+    pictures: exports_external.array(exports_external.object({
+      passage: exports_external.number().int().positive(),
+      provider: exports_external.string().max(256),
+      imageId: id4
+    }).strict()).max(128),
+    morePictures: exports_external.boolean()
+  }).strict()
+]);
+var BranchChronicleResultSchema = exports_external.object({
+  bookmarks: ChronicleDocumentSchema.shape.bookmarks,
+  comparison: exports_external.tuple([ChronicleSideSchema, ChronicleSideSchema]).optional()
+}).strict();
+
+// src/frontend/request-id.ts
+var sequence = 0;
+var activeUuidProvider = null;
+function bindFrontendUuidProvider(ctx) {
+  if ((ctx?.host?.capabilities?.["frontend-uuid-v1"] ?? 0) >= 1 && typeof ctx?.uuid?.v4 === "function") {
+    const uuidApi = ctx.uuid;
+    activeUuidProvider = () => uuidApi.v4();
+    return;
+  }
+  activeUuidProvider = null;
+}
+function unbindFrontendUuidProvider() {
+  activeUuidProvider = null;
+}
+function formatUuidV4FromRandomValues(getRandomValues) {
+  const bytes = new Uint8Array(16);
+  getRandomValues(bytes);
+  bytes[6] = bytes[6] & 15 | 64;
+  bytes[8] = bytes[8] & 63 | 128;
+  let hex3 = "";
+  for (let i = 0;i < bytes.length; i += 1) {
+    hex3 += bytes[i].toString(16).padStart(2, "0");
+  }
+  return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-${hex3.slice(12, 16)}-${hex3.slice(16, 20)}-${hex3.slice(20)}`;
+}
+function createUiId(source = globalThis.crypto ?? null) {
+  const defaultSource = globalThis.crypto ?? null;
+  if (source === defaultSource && activeUuidProvider) {
+    return activeUuidProvider();
+  }
+  if (source?.getRandomValues) {
+    return formatUuidV4FromRandomValues((arr) => source.getRandomValues(arr));
+  }
+  sequence++;
+  return `lg-${Date.now().toString(36)}-${sequence.toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+// src/frontend/stage/rich-text.ts
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function parseMarkdown(text) {
+  const codeSpans = [];
+  let md = text.replace(/`([^`]+)`/g, (_, content) => {
+    const idx = codeSpans.push(`<code>${content}</code>`) - 1;
+    return `\x00CODE${idx}\x00`;
+  }).replace(/\*\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*\*/g, "<strong><em>$1</em></strong>").replace(/(^|[^\w])___([^\s_](?:[\s\S]*?[^\s_])?)___(?=[^\w]|$)/g, "$1<strong><em>$2</em></strong>").replace(/\*\*_(.+?)_\*\*/g, "<strong><em>$1</em></strong>").replace(/__\*(.+?)\*__/g, "<strong><em>$1</em></strong>");
+  md = md.replace(/\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^\w])__([^\s_](?:[\s\S]*?[^\s_])?)__(?=[^\w]|$)/g, "$1<strong>$2</strong>");
+  md = md.replace(/\*([^\s*](?:[\s\S]*?[^\s*])?)\*/g, "<em>$1</em>").replace(/(^|[^\w])_([^\s_](?:[\s\S]*?[^\s_])?)_(?=[^\w]|$)/g, "$1<em>$2</em>");
+  md = md.replace(/~~([^\s~](?:[\s\S]*?[^\s~])?)~~/g, "<del>$1</del>");
+  md = md.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeSpans[Number(idx)] ?? "");
+  return md;
+}
+var ALLOWED_TAGS = new Set([
+  "font",
+  "span",
+  "em",
+  "strong",
+  "b",
+  "i",
+  "del",
+  "s",
+  "u",
+  "mark",
+  "ruby",
+  "rt",
+  "rp",
+  "code",
+  "small",
+  "sub",
+  "sup",
+  "br"
+]);
+var ALLOWED_ATTRS = {
+  font: new Set(["color", "style", "face", "size"]),
+  span: new Set(["class", "style", "data-vn-text-fx"]),
+  em: new Set(["class", "style"]),
+  strong: new Set(["class", "style"]),
+  b: new Set(["class", "style"]),
+  i: new Set(["class", "style"]),
+  code: new Set(["class", "style"]),
+  mark: new Set(["class", "style"])
+};
+var NAMED_COLORS = new Set("aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen transparent currentcolor".split(" "));
+var GENERIC_FONTS = /^(?:serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-serif|ui-sans-serif|ui-monospace|ui-rounded)$/i;
+var TEXT_LENGTH = /^(?:0|-?(?:\d{1,3}(?:\.\d{1,3})?|\.\d{1,3})(?:px|em|rem|%))$/i;
+function isTextColor(value) {
+  if (NAMED_COLORS.has(value.toLowerCase()) || /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))
+    return true;
+  const functional = /^(rgb|rgba|hsl|hsla)\(([^()]+)\)$/i.exec(value);
+  if (!functional)
+    return false;
+  const body2 = functional[2].trim();
+  let parts;
+  if (body2.includes(",")) {
+    if (body2.includes("/"))
+      return false;
+    parts = body2.split(",").map((part) => part.trim());
+  } else {
+    const groups = body2.split("/");
+    if (groups.length > 2)
+      return false;
+    parts = groups[0].trim().split(/\s+/);
+    if (parts.length !== 3)
+      return false;
+    if (groups[1] !== undefined)
+      parts.push(groups[1].trim());
+  }
+  if (parts.length !== 3 && parts.length !== 4)
+    return false;
+  const channel = (part, max, percentOnly = false) => {
+    if (!/^(?:\d{1,3}(?:\.\d{1,3})?|\.\d{1,3})%?$/.test(part))
+      return false;
+    const percent = part.endsWith("%");
+    return (!percentOnly || percent) && Number.parseFloat(part) <= (percent ? 100 : max);
+  };
+  const hsl = functional[1].toLowerCase().startsWith("hsl");
+  return parts.slice(0, 3).every((part, index) => channel(part, hsl ? 360 : 255, hsl && index > 0)) && (parts[3] === undefined || channel(parts[3], 1));
+}
+var TEXT_STYLE_VALUES = {
+  color: isTextColor,
+  "background-color": isTextColor,
+  "text-decoration-color": isTextColor,
+  "font-family": (value) => GENERIC_FONTS.test(value),
+  "font-weight": (value) => /^(?:normal|bold|bolder|lighter|[1-9]00)$/.test(value),
+  "font-style": (value) => /^(?:normal|italic|oblique)$/.test(value),
+  "font-size": (value) => TEXT_LENGTH.test(value) || /^(?:xx-small|x-small|small|medium|large|x-large|xx-large|smaller|larger)$/.test(value),
+  "font-variant": (value) => /^(?:normal|small-caps)$/.test(value),
+  "letter-spacing": (value) => value === "normal" || TEXT_LENGTH.test(value),
+  "word-spacing": (value) => value === "normal" || TEXT_LENGTH.test(value),
+  "line-height": (value) => value === "normal" || TEXT_LENGTH.test(value) || /^(?:\d{1,2}(?:\.\d{1,3})?|\.\d{1,3})$/.test(value),
+  "text-decoration": (value) => /^(?:none|(?:underline|overline|line-through)(?: (?:underline|overline|line-through))*)$/.test(value),
+  "text-decoration-line": (value) => /^(?:none|(?:underline|overline|line-through)(?: (?:underline|overline|line-through))*)$/.test(value),
+  "text-decoration-style": (value) => /^(?:solid|double|dotted|dashed|wavy)$/.test(value),
+  "text-transform": (value) => /^(?:none|capitalize|uppercase|lowercase)$/.test(value),
+  "vertical-align": (value) => /^(?:baseline|sub|super|text-top|text-bottom|middle|top|bottom)$/.test(value) || TEXT_LENGTH.test(value),
+  "text-shadow": (value) => value === "none" || value.split(",").every((shadow) => {
+    const parts = shadow.trim().split(/\s+/);
+    if (isTextColor(parts[0] ?? ""))
+      parts.shift();
+    else if (isTextColor(parts.at(-1) ?? ""))
+      parts.pop();
+    return parts.length >= 2 && parts.length <= 3 && parts.every((part) => TEXT_LENGTH.test(part));
+  })
+};
+function sanitizeTextStyle(style) {
+  return style.split(";").flatMap((declaration) => {
+    const match = /^\s*([a-z-]+)\s*:\s*([^:]+?)\s*$/i.exec(declaration);
+    if (!match)
+      return [];
+    const property = match[1].toLowerCase();
+    const value = match[2].trim();
+    if (/[^a-z\d#.%+\-(),\/\s]/i.test(value) || /\/\*|\*\//.test(value))
+      return [];
+    const validate2 = Object.hasOwn(TEXT_STYLE_VALUES, property) ? TEXT_STYLE_VALUES[property] : undefined;
+    return validate2?.(value) ? [`${property}:${value}`] : [];
+  }).join(";");
+}
+function sanitizeAndRestoreAllowedHtml(escapedText) {
+  return escapedText.replace(/&lt;(\/?[a-zA-Z][a-zA-Z0-9]*)(.*?)&gt;/gs, (fullMatch, rawTag, rawAttrs) => {
+    const isClosing = rawTag.startsWith("/");
+    const tagName = (isClosing ? rawTag.slice(1) : rawTag).toLowerCase();
+    if (!ALLOWED_TAGS.has(tagName)) {
+      return fullMatch;
+    }
+    if (isClosing) {
+      return `</${tagName}>`;
+    }
+    if (tagName === "br") {
+      return "<br>";
+    }
+    const allowedAttrSet = ALLOWED_ATTRS[tagName];
+    if (!allowedAttrSet) {
+      return `<${tagName}>`;
+    }
+    const attrRegex = /([a-zA-Z_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
+    const safeAttrs = [];
+    let match;
+    while ((match = attrRegex.exec(rawAttrs)) !== null) {
+      const attrName = match[1].toLowerCase();
+      if (!allowedAttrSet.has(attrName))
+        continue;
+      let val = match[2] ?? match[3] ?? match[4] ?? "";
+      if (attrName === "style") {
+        val = sanitizeTextStyle(val);
+        if (!val)
+          continue;
+      } else if (attrName === "data-vn-text-fx") {
+        val = val.trim().toLowerCase();
+        if (!isTextEffectId(val))
+          continue;
+      } else if (attrName === "class") {
+        val = val.split(/\s+/).filter((token) => token === "vn-transmission").join(" ");
+        if (!val)
+          continue;
+      } else if (attrName === "face") {
+        if (!GENERIC_FONTS.test(val))
+          continue;
+      } else if (attrName === "color") {
+        if (!isTextColor(val))
+          continue;
+      } else if (attrName === "size") {
+        if (!/^[+-]?[1-7]$/.test(val))
+          continue;
+      }
+      safeAttrs.push(`${attrName}="${val}"`);
+    }
+    const attrStr = safeAttrs.length > 0 ? ` ${safeAttrs.join(" ")}` : "";
+    return `<${tagName}${attrStr}>`;
+  });
+}
+var ESCAPED_TEXT_EFFECT_TOKEN = new RegExp(`<code\\b[^>]*>[\\s\\S]*?<\\/code>|&lt;\\s*(\\/?)\\s*(${TEXT_EFFECT_IDS.join("|")})\\s*&gt;`, "gi");
+function restoreTextEffectTags(escapedText) {
+  if (escapedText.indexOf("&lt;") === -1)
+    return escapedText;
+  const tokens = [];
+  for (const match of escapedText.matchAll(ESCAPED_TEXT_EFFECT_TOKEN)) {
+    if (match[2] === undefined)
+      continue;
+    tokens.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      closing: match[1] === "/",
+      id: match[2].toLowerCase()
+    });
+  }
+  if (tokens.length === 0)
+    return escapedText;
+  const replacement = new Map;
+  const open2 = [];
+  for (const token of tokens) {
+    replacement.set(token, "");
+    if (!token.closing) {
+      open2.push(token);
+      continue;
+    }
+    let depth = open2.length - 1;
+    while (depth >= 0 && open2[depth].id !== token.id)
+      depth -= 1;
+    if (depth < 0)
+      continue;
+    open2.length = depth + 1;
+    const opener = open2.pop();
+    replacement.set(opener, `<span data-vn-text-fx="${opener.id}">`);
+    replacement.set(token, "</span>");
+  }
+  let output2 = "";
+  let cursor = 0;
+  for (const token of tokens) {
+    output2 += escapedText.slice(cursor, token.start) + replacement.get(token);
+    cursor = token.end;
+  }
+  return output2 + escapedText.slice(cursor);
+}
+var DANGEROUS_HTML_TAGS = new Set([
+  "script",
+  "style",
+  "iframe",
+  "object",
+  "embed",
+  "svg",
+  "math",
+  "link",
+  "meta",
+  "base",
+  "form",
+  "input",
+  "button",
+  "textarea",
+  "select"
+]);
+function stripUnknownPresetTags(text) {
+  text = text.replace(/<((?:[a-zA-Z0-9_-]+_)?true_thoughts?)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
+  return text.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name) => {
+    const lower = name.toLowerCase();
+    if (ALLOWED_TAGS.has(lower) || isTextEffectId(lower) || lower === "img" || lower === "pimg" || DANGEROUS_HTML_TAGS.has(lower)) {
+      return match;
+    }
+    return "";
+  });
+}
+function stripMarkdown(text) {
+  const codeSpans = [];
+  let md = text.replace(/`([^`]+)`/g, (_, content) => {
+    const idx = codeSpans.push(`<code>${content}</code>`) - 1;
+    return `\x00CODE${idx}\x00`;
+  }).replace(/(?:\*\*|__)?(?:Time|Location|Costume|Scene|Date|Setting)(?:\*\*)?\s*:[^\n]*(?:\r?\n|$)/gi, " ").replace(/\s+/g, " ").trim();
+  md = md.replace(/\*\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*\*/g, "$1").replace(/(^|[^\w])___([^\s_](?:[\s\S]*?[^\s_])?)___(?=[^\w]|$)/g, "$1$2").replace(/\*\*_(.+?)_\*\*/g, "$1").replace(/__\*(.+?)\*__/g, "$1");
+  md = md.replace(/\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*/g, "$1").replace(/(^|[^\w])__([^\s_](?:[\s\S]*?[^\s_])?)__(?=[^\w]|$)/g, "$1$2");
+  md = md.replace(/\*([^\s*](?:[\s\S]*?[^\s*])?)\*/g, "$1").replace(/(^|[^\w])_([^\s_](?:[\s\S]*?[^\s_])?)_(?=[^\w]|$)/g, "$1$2");
+  md = md.replace(/~~([^\s~](?:[\s\S]*?[^\s~])?)~~/g, "$1");
+  md = md.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => (codeSpans[Number(idx)] ?? "").replace(/^<code>|<\/code>$/g, ""));
+  return md;
+}
+function applyDialogueQuotes(text, hasSpeaker) {
+  const trimmed = text.trim();
+  if (!trimmed || !hasSpeaker)
+    return text;
+  if (/[“"”「」]/.test(trimmed))
+    return text;
+  return `"${trimmed}"`;
+}
+function prepareDialogueSource(rawText, stripUnknownTags = false) {
+  let normalized = rawText;
+  if (!/[\u2801-\u28FF]/.test(normalized))
+    normalized = normalized.replace(/\u2800/g, " ");
+  normalized = normalized.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/([^\n]) {2,}/g, "$1 ");
+  let text = normalized.replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp, eff, inner, offset, src) => {
+    if (!sp || !eff || inner === undefined)
+      return m;
+    const id5 = eff.toLowerCase();
+    const wrapped = isTextEffectId(id5) ? `<${id5}>${inner}</${id5}>` : inner;
+    const trimmed = inner.trim();
+    if (trimmed.length >= 2 && src.slice(0, offset).trimEnd().endsWith(trimmed)) {
+      return `\x00DEDUP\x00${trimmed}\x00WITH\x00${wrapped}\x00END\x00`;
+    }
+    return wrapped;
+  }).replace(/([\s\S]*?)\0DEDUP\0([\s\S]*?)\0WITH\0([\s\S]*?)\0END\0/g, (_m, before, dup, rep) => {
+    const idx = before.lastIndexOf(dup);
+    return idx === -1 ? before + rep : before.slice(0, idx) + rep;
+  }).replace(/<img\s*=\s*["'][^"']+["']\s*\/?>/gi, "").replace(/<img\b[^>]*?\bsrc\s*=\s*["'][^"']+["'][^>]*?\/?>/gi, "").replace(/\{\{img::[^\}]+\}\}/gi, "");
+  if (stripUnknownTags) {
+    text = stripUnknownPresetTags(text);
+  }
+  return text;
+}
+function formatDialogueText(rawText, regexRules = [], options = {}) {
+  if (!rawText)
+    return "";
+  let text = options.prepared ? rawText : prepareDialogueSource(rawText, options.stripUnknownTags);
+  const CUSTOM_RULE_TEXT_LIMIT = 1e5;
+  if (text.length <= CUSTOM_RULE_TEXT_LIMIT) {
+    for (const { pattern, replacement } of regexRules) {
+      try {
+        text = text.replace(pattern, replacement);
+      } catch {}
+    }
+  }
+  let formatted = escapeHtml(text);
+  if (options.stripMarkdown) {
+    formatted = stripMarkdown(formatted);
+  } else {
+    formatted = parseMarkdown(formatted);
+  }
+  if (options.forceQuotes) {
+    formatted = applyDialogueQuotes(formatted, Boolean(options.hasSpeaker));
+  }
+  formatted = sanitizeAndRestoreAllowedHtml(formatted);
+  formatted = restoreTextEffectTags(formatted);
+  return formatted;
+}
+
+// src/frontend/image-library/branch-chronicle.ts
+function bookmarkLabel(bookmark) {
+  const { key, paragraphIndex } = bookmark.position;
+  return `Reply ${bookmark.replyNumber} · Version ${Number(key.swipeId ?? 0) + 1} · Passage ${paragraphIndex + 1}`;
+}
+
+class BranchChronicle {
+  send;
+  currentPosition;
+  seek;
+  element = document.createElement("details");
+  chatId = null;
+  bookmarks = [];
+  pending = null;
+  first;
+  second;
+  save;
+  compare;
+  remove;
+  refresh;
+  status;
+  results;
+  constructor(send, currentPosition, seek) {
+    this.send = send;
+    this.currentPosition = currentPosition;
+    this.seek = seek;
+    this.element.dataset.branchChronicle = "";
+    this.element.hidden = true;
+    this.element.innerHTML = `<summary>Branch Chronicle</summary>
+      <p class="note">Bookmark the current passage to compare two saved replies.</p>
+      <button type="button" data-chronicle-save>Bookmark current passage</button>
+      <div data-chronicle-pair>
+        <label>First bookmark<select data-chronicle-first></select></label>
+        <label>Second bookmark<select data-chronicle-second></select></label>
+      </div>
+      <div data-chronicle-actions>
+        <button type="button" data-chronicle-compare>Compare bookmarks</button>
+        <button type="button" data-chronicle-remove>Remove first bookmark</button>
+        <button type="button" data-chronicle-refresh hidden>Retry loading bookmarks</button>
+      </div>
+      <p role="status"></p>
+      <div data-chronicle-pair data-chronicle-results></div>`;
+    this.first = this.element.querySelector("[data-chronicle-first]");
+    this.second = this.element.querySelector("[data-chronicle-second]");
+    this.save = this.element.querySelector("[data-chronicle-save]");
+    this.compare = this.element.querySelector("[data-chronicle-compare]");
+    this.remove = this.element.querySelector("[data-chronicle-remove]");
+    this.refresh = this.element.querySelector("[data-chronicle-refresh]");
+    this.status = this.element.querySelector("[role=status]");
+    this.results = this.element.querySelector("[data-chronicle-results]");
+    this.element.ontoggle = () => {
+      if (this.element.open && this.chatId)
+        this.request({ action: "list" }, "Loading bookmarks…");
+      else
+        this.cancel();
+    };
+    this.save.onclick = () => {
+      const position = this.currentPosition();
+      if (position)
+        this.request({ action: "bookmark", position }, "Saving bookmark…");
+    };
+    this.compare.onclick = () => this.request({
+      action: "compare",
+      firstId: this.first.value,
+      secondId: this.second.value
+    }, "Comparing passages…");
+    this.remove.onclick = () => this.request({ action: "remove", bookmarkId: this.first.value }, "Removing bookmark…");
+    this.refresh.onclick = () => this.request({ action: "list" }, "Loading bookmarks…");
+    this.first.onchange = this.second.onchange = () => {
+      this.results.replaceChildren();
+      this.status.textContent = "";
+      this.syncControls();
+    };
+  }
+  setScope(chatId) {
+    if (this.chatId === chatId) {
+      this.syncControls();
+      return;
+    }
+    this.cancel();
+    this.chatId = chatId;
+    this.bookmarks = [];
+    this.element.open = false;
+    this.element.hidden = chatId === null;
+    this.results.replaceChildren();
+    this.status.textContent = "";
+    this.updateOptions();
+  }
+  cancel() {
+    if (this.pending)
+      clearTimeout(this.pending.timer);
+    this.pending = null;
+  }
+  request(action, status) {
+    const chatId = this.chatId;
+    if (!chatId || !this.element.open || this.pending)
+      return;
+    const id5 = createUiId();
+    this.status.textContent = status;
+    this.results.replaceChildren();
+    this.refresh.hidden = true;
+    this.pending = { id: id5, timer: setTimeout(() => this.error(chatId, id5, "The request timed out. Try again."), 15000) };
+    this.syncControls();
+    try {
+      this.send({ ...action, type: "vn_branch_chronicle", chatId, requestId: id5 });
+    } catch {
+      this.error(chatId, id5, "The request could not be sent.");
+    }
+  }
+  owns(chatId, requestId) {
+    return this.element.open && this.chatId === chatId && Boolean(this.pending && this.pending.id === requestId);
+  }
+  error(chatId, requestId, message) {
+    if (!this.owns(chatId, requestId))
+      return;
+    this.cancel();
+    this.status.textContent = message;
+    this.refresh.hidden = false;
+    this.syncControls();
+  }
+  receive(chatId, requestId, input2) {
+    if (!this.owns(chatId, requestId))
+      return;
+    const parsed = BranchChronicleResultSchema.safeParse(input2);
+    if (!parsed.success || parsed.data.bookmarks.some((bookmark) => bookmark.position.key.chatId !== chatId)) {
+      this.error(chatId, requestId, "The bookmark response could not be read.");
+      return;
+    }
+    this.cancel();
+    this.bookmarks = parsed.data.bookmarks;
+    this.updateOptions();
+    const comparison = parsed.data.comparison;
+    if (comparison)
+      this.renderComparison(comparison);
+    else
+      this.status.textContent = this.bookmarks.length ? `${this.bookmarks.length} saved in this chat.` : "No bookmarks in this chat yet.";
+  }
+  updateOptions() {
+    for (const [index, select] of [this.first, this.second].entries()) {
+      const previous = select.value;
+      select.replaceChildren(...this.bookmarks.map((bookmark) => new Option(bookmarkLabel(bookmark), bookmark.id)));
+      select.selectedIndex = Math.min(index, this.bookmarks.length - 1);
+      if (this.bookmarks.some((bookmark) => bookmark.id === previous))
+        select.value = previous;
+    }
+    if (this.bookmarks.length > 1 && this.first.value === this.second.value) {
+      this.second.selectedIndex = this.first.selectedIndex === 0 ? 1 : 0;
+    }
+    this.syncControls();
+  }
+  syncControls() {
+    const current = this.currentPosition();
+    this.save.disabled = Boolean(this.pending || !current || this.bookmarks.some((bookmark) => samePresentationTurn(bookmark.position.key, current.key) && bookmark.position.paragraphIndex === current.paragraphIndex));
+    this.first.disabled = this.second.disabled = this.remove.disabled = Boolean(this.pending || !this.bookmarks.length);
+    this.compare.disabled = Boolean(this.pending || !this.first.value || !this.second.value || this.first.value === this.second.value);
+  }
+  renderComparison([first, second]) {
+    this.status.textContent = first.status === "ready" && second.status === "ready" ? "Comparing through each bookmarked passage." : "A bookmarked source is unavailable.";
+    for (const [index, side, other] of [[0, first, second], [1, second, first]]) {
+      const bookmark = this.bookmarks.find((item) => item.id === (index === 0 ? this.first.value : this.second.value));
+      if (!bookmark)
+        continue;
+      const card = document.createElement("article");
+      const heading = document.createElement("h4");
+      heading.textContent = bookmarkLabel(bookmark);
+      card.append(heading);
+      const paragraph = (text) => {
+        const element = document.createElement("p");
+        element.textContent = text;
+        card.append(element);
+        return element;
+      };
+      if (side.status !== "ready") {
+        paragraph(side.status === "missing" ? "The saved reply or swipe was removed." : "The saved reply or its passage layout changed.");
+      } else {
+        paragraph(stripUnknownPresetTags(side.passage)).dataset.chronicleProse = "";
+        const facts = other.status === "ready" && other.completeFacts ? side.facts.filter((fact) => !other.facts.includes(fact)) : side.facts;
+        if (facts.length) {
+          const list = document.createElement("ul");
+          for (const fact of facts) {
+            const item = document.createElement("li");
+            item.textContent = fact;
+            list.append(item);
+          }
+          card.append(list);
+        } else if (side.completeFacts && other.status === "ready" && other.completeFacts) {
+          paragraph("No additional visible scene facts.");
+        }
+        if (!side.completeFacts)
+          paragraph("Some scene facts are unavailable.");
+        for (const choice of side.choices)
+          paragraph(`Choice: ${choice.label}${choice.locked ? " (locked)" : ""}`);
+        for (const picture of side.pictures)
+          paragraph(`Saved picture · Passage ${picture.passage} · ${picture.provider}`);
+        if (side.morePictures)
+          paragraph("Additional saved pictures are available in History.");
+        const current = this.currentPosition();
+        if (current && samePresentationTurn(bookmark.position.key, current.key)) {
+          const jump = document.createElement("button");
+          jump.type = "button";
+          jump.textContent = "Open in reader";
+          jump.onclick = () => {
+            if (!this.seek(bookmark.position))
+              this.status.textContent = "This passage is no longer available in the current reader.";
+          };
+          card.append(jump);
+        }
+      }
+      this.results.append(card);
+    }
+  }
+}
+
 // src/frontend/speech/transport.ts
 var BUFFERED_TTS_TIMING = "none";
 var MAX_SPEECH_TEXT_CHARS = 2000;
@@ -23724,10 +24377,10 @@ class ParagraphReadAlong {
   constructor(target) {
     this.target = target;
   }
-  setParagraph(id3, index) {
-    if (id3 !== this.paragraphId || index !== this.index)
+  setParagraph(id5, index) {
+    if (id5 !== this.paragraphId || index !== this.index)
       this.clear();
-    this.paragraphId = id3;
+    this.paragraphId = id5;
     this.index = index;
     this.cachedText = "";
     this.words = [];
@@ -24302,8 +24955,8 @@ function findCharacterDNA(records, identity) {
   const nickMatches = all.filter((c) => areNamesEquivalent(c.name, identity) || c.aliases.some((a) => areNamesEquivalent(a, identity)));
   return nickMatches.length === 1 ? nickMatches[0] : undefined;
 }
-function createEmptyCharacterDNA(name, id3) {
-  const normalizedId = (id3 || name).trim().toLowerCase().replace(/\s+/g, "-");
+function createEmptyCharacterDNA(name, id5) {
+  const normalizedId = (id5 || name).trim().toLowerCase().replace(/\s+/g, "-");
   return CharacterDNASchema.parse({
     id: normalizedId || "unnamed-character",
     name: name.trim() || "Unnamed Character",
@@ -24761,43 +25414,6 @@ function selectHeldBackground(turn, index, current) {
   return ready.filter((a) => a.paragraphIndex <= start).at(-1) ?? ready[0] ?? current;
 }
 
-// src/frontend/request-id.ts
-var sequence = 0;
-var activeUuidProvider = null;
-function bindFrontendUuidProvider(ctx) {
-  if ((ctx?.host?.capabilities?.["frontend-uuid-v1"] ?? 0) >= 1 && typeof ctx?.uuid?.v4 === "function") {
-    const uuidApi = ctx.uuid;
-    activeUuidProvider = () => uuidApi.v4();
-    return;
-  }
-  activeUuidProvider = null;
-}
-function unbindFrontendUuidProvider() {
-  activeUuidProvider = null;
-}
-function formatUuidV4FromRandomValues(getRandomValues) {
-  const bytes = new Uint8Array(16);
-  getRandomValues(bytes);
-  bytes[6] = bytes[6] & 15 | 64;
-  bytes[8] = bytes[8] & 63 | 128;
-  let hex3 = "";
-  for (let i = 0;i < bytes.length; i += 1) {
-    hex3 += bytes[i].toString(16).padStart(2, "0");
-  }
-  return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-${hex3.slice(12, 16)}-${hex3.slice(16, 20)}-${hex3.slice(20)}`;
-}
-function createUiId(source = globalThis.crypto ?? null) {
-  const defaultSource = globalThis.crypto ?? null;
-  if (source === defaultSource && activeUuidProvider) {
-    return activeUuidProvider();
-  }
-  if (source?.getRandomValues) {
-    return formatUuidV4FromRandomValues((arr) => source.getRandomValues(arr));
-  }
-  sequence++;
-  return `lg-${Date.now().toString(36)}-${sequence.toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
 // src/shared/preparation-preview.ts
 var NarrativePreviewSchema = exports_external.object({
   type: exports_external.literal("vn_narrative_preview"),
@@ -24815,14 +25431,14 @@ function previewCursorForTurn(preview, index, turn) {
 }
 
 // src/shared/image-retries.ts
-var id3 = exports_external.string().trim().min(1).max(256);
-var QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id3, messageId: id3, sourceFingerprint: id3, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id3, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id3).min(1).max(24).optional(), priorityJobIds: exports_external.array(id3).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
+var id5 = exports_external.string().trim().min(1).max(256);
+var QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id5, messageId: id5, sourceFingerprint: id5, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id5, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id5).min(1).max(24).optional(), priorityJobIds: exports_external.array(id5).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
 
 // src/shared/cast-art.ts
-var id4 = exports_external.string().trim().min(1).max(256);
+var id6 = exports_external.string().trim().min(1).max(256);
 var AppearanceOriginSchema = exports_external.object({ source: exports_external.string().trim().min(1).max(256), appearance: exports_external.string().min(1).max(2000) }).strict();
-var outfitShape = { id: id4, name: exports_external.string().trim().min(1).max(100), description: exports_external.string().trim().min(1).max(1000) };
-var setupShape = { appearance: exports_external.string().trim().min(1).max(2000), aliases: exports_external.array(exports_external.string().trim().min(1).max(160)).max(16).default([]), defaultOutfitId: id4.nullable().default(null), appearanceOrigin: AppearanceOriginSchema.optional(), anchors: exports_external.array(exports_external.string().trim().min(1).max(100)).max(12).default([]) };
+var outfitShape = { id: id6, name: exports_external.string().trim().min(1).max(100), description: exports_external.string().trim().min(1).max(1000) };
+var setupShape = { appearance: exports_external.string().trim().min(1).max(2000), aliases: exports_external.array(exports_external.string().trim().min(1).max(160)).max(16).default([]), defaultOutfitId: id6.nullable().default(null), appearanceOrigin: AppearanceOriginSchema.optional(), anchors: exports_external.array(exports_external.string().trim().min(1).max(100)).max(12).default([]) };
 var validateSetup = (value, ctx) => {
   if (new Set(value.outfits.map((o) => o.id)).size !== value.outfits.length)
     ctx.addIssue({ code: "custom", path: ["outfits"], message: "Outfit IDs must be distinct." });
@@ -24830,25 +25446,25 @@ var validateSetup = (value, ctx) => {
     ctx.addIssue({ code: "custom", path: ["defaultOutfitId"], message: "Choose an existing outfit." });
 };
 var CastSetupInputSchema = exports_external.object({ ...setupShape, outfits: exports_external.array(exports_external.object(outfitShape).strict()).max(7).default([]) }).strict().superRefine(validateSetup);
-var CastSetupSchema = exports_external.object({ ...setupShape, outfits: exports_external.array(exports_external.object({ ...outfitShape, imageId: id4.optional(), imageAppearance: exports_external.string().max(2000).optional(), imageAttire: exports_external.string().max(1000).optional() }).strict()).max(7).default([]), imageId: id4.optional(), imageAppearance: exports_external.string().max(2000).optional() }).strict().superRefine(validateSetup);
+var CastSetupSchema = exports_external.object({ ...setupShape, outfits: exports_external.array(exports_external.object({ ...outfitShape, imageId: id6.optional(), imageAppearance: exports_external.string().max(2000).optional(), imageAttire: exports_external.string().max(1000).optional() }).strict()).max(7).default([]), imageId: id6.optional(), imageAppearance: exports_external.string().max(2000).optional() }).strict().superRefine(validateSetup);
 var CastArtVariantSchema = exports_external.object({
-  id: id4,
-  imageId: id4,
-  requestFingerprint: id4,
-  appearanceFingerprint: id4,
+  id: id6,
+  imageId: id6,
+  requestFingerprint: id6,
+  appearanceFingerprint: id6,
   description: exports_external.string().max(4000),
-  displayImageId: id4.optional(),
+  displayImageId: id6.optional(),
   approved: exports_external.literal(true),
   createdAt: exports_external.string().max(64),
   lastUsedAt: exports_external.number().nonnegative().optional(),
   pinned: exports_external.boolean().optional()
 }).strict();
 var CastArtRecordSchema = exports_external.object({
-  entityId: id4,
-  name: id4,
+  entityId: id6,
+  name: id6,
   artRevision: exports_external.number().int().nonnegative(),
   description: exports_external.string().max(4000),
-  preferredVariantId: id4.nullable().default(null),
+  preferredVariantId: id6.nullable().default(null),
   variants: exports_external.array(CastArtVariantSchema).max(8),
   setup: CastSetupSchema.optional()
 }).strict();
@@ -24856,13 +25472,13 @@ var CastArtLibrarySchema = exports_external.object({ version: exports_external.l
 var CastArtRequestSchema = exports_external.object({
   type: exports_external.literal("vn_cast_art"),
   version: exports_external.literal(1),
-  chatId: id4,
-  requestId: id4,
+  chatId: id6,
+  requestId: id6,
   action: exports_external.enum(["list", "scan", "select", "forget", "reset", "supply", "restore", "setup", "clear_setup", "setup_supply", "setup_restore"]),
-  characterId: id4.optional(),
-  variantId: id4.optional(),
-  imageId: id4.optional(),
-  outfitId: id4.optional(),
+  characterId: id6.optional(),
+  variantId: id6.optional(),
+  imageId: id6.optional(),
+  outfitId: id6.optional(),
   name: exports_external.string().trim().min(1).max(160).optional(),
   setup: CastSetupInputSchema.optional()
 }).strict().superRefine((value, ctx) => {
@@ -24879,21 +25495,21 @@ var CastArtRequestSchema = exports_external.object({
   if (value.action === "setup_supply" && !value.imageId)
     ctx.addIssue({ code: "custom", path: ["imageId"], message: "Choose artwork." });
 });
-var CastGalleryRequestSchema = exports_external.object({ type: exports_external.literal("vn_cast_gallery"), chatId: id4, requestId: id4, offset: exports_external.number().int().min(0).max(1e4) }).strict();
-var CastGallerySchema = exports_external.object({ offset: exports_external.number().int().nonnegative(), total: exports_external.number().int().nonnegative(), images: exports_external.array(exports_external.object({ id: id4, name: exports_external.string().max(256), url: exports_external.string().max(1024).refine((v) => v.startsWith("/") && !v.startsWith("//") && !v.includes("\\")) }).strict()).max(12) }).strict();
+var CastGalleryRequestSchema = exports_external.object({ type: exports_external.literal("vn_cast_gallery"), chatId: id6, requestId: id6, offset: exports_external.number().int().min(0).max(1e4) }).strict();
+var CastGallerySchema = exports_external.object({ offset: exports_external.number().int().nonnegative(), total: exports_external.number().int().nonnegative(), images: exports_external.array(exports_external.object({ id: id6, name: exports_external.string().max(256), url: exports_external.string().max(1024).refine((v) => v.startsWith("/") && !v.startsWith("//") && !v.includes("\\")) }).strict()).max(12) }).strict();
 var CastSetupDraftSchema = exports_external.object({ ...setupShape, appearance: exports_external.string().trim().max(2000), outfits: exports_external.array(exports_external.object(outfitShape).strict()).max(7).default([]) }).strict().superRefine(validateSetup);
 var CastContextScanSchema = exports_external.object({ candidates: exports_external.array(exports_external.object({ name: exports_external.string().min(1).max(160), source: exports_external.string().max(256), setup: CastSetupDraftSchema }).strict()).max(32), notice: exports_external.string().max(1000) }).strict();
 
 // src/shared/image-library.ts
-var id5 = exports_external.string().min(1).max(256);
+var id7 = exports_external.string().min(1).max(256);
 var SavedLibraryImageSchema = exports_external.object({
   key: TurnKeySchema,
-  imageId: id5,
-  jobId: id5,
+  imageId: id7,
+  jobId: id7,
   paragraphIndex: exports_external.number().int().nonnegative(),
   createdAt: exports_external.string().max(64),
   excerpt: exports_external.string().max(600),
-  rawFingerprint: id5.optional(),
+  rawFingerprint: id7.optional(),
   template: exports_external.string().max(256).optional(),
   role: exports_external.enum(["scene", "background", "portrait"]).default("scene"),
   characters: exports_external.array(exports_external.string().max(160)).max(24).optional(),
@@ -24907,9 +25523,9 @@ var SavedLibraryImageSchema = exports_external.object({
 var ImageLibraryArchiveSchema = exports_external.object({ version: exports_external.literal(1), entries: exports_external.array(SavedLibraryImageSchema).max(128), full: exports_external.boolean().default(false), incomplete: exports_external.boolean().optional() }).strict();
 var ImageLibraryRequestSchema = exports_external.object({
   type: exports_external.literal("vn_image_library"),
-  chatId: id5,
-  requestId: id5,
-  anchor: exports_external.object({ messageId: id5, swipeId: exports_external.number().int().nonnegative(), sourceFingerprint: id5, paragraphIndex: exports_external.number().int().nonnegative() }).strict(),
+  chatId: id7,
+  requestId: id7,
+  anchor: exports_external.object({ messageId: id7, swipeId: exports_external.number().int().nonnegative(), sourceFingerprint: id7, paragraphIndex: exports_external.number().int().nonnegative() }).strict(),
   mode: exports_external.enum(["story", "images"]).default("images"),
   range: exports_external.enum(["read", "all"]),
   versions: exports_external.enum(["active", "all"]),
@@ -24931,6 +25547,27 @@ var LibraryImageViewSchema = SavedLibraryImageSchema.extend({
 var LibraryReplySchema = exports_external.object({ key: TurnKeySchema, messageNumber: exports_external.number().int().positive(), speaker: exports_external.string().max(256), versionLabel: exports_external.enum(["current", "alternate"]).default("current"), paragraphs: exports_external.array(exports_external.object({ index: exports_external.number().int().nonnegative(), text: exports_external.string().max(12000), speaker: exports_external.string().max(256) }).strict()).max(256), truncated: exports_external.boolean() }).strict();
 var ImageLibraryPageSchema = exports_external.object({ entries: exports_external.array(LibraryImageViewSchema).max(120), replies: exports_external.array(LibraryReplySchema).max(120).default([]), nextCursor: exports_external.string().nullable(), notice: exports_external.string().max(1000) }).strict();
 
+// src/shared/rehearsal-presets.ts
+var name = exports_external.string().trim().min(1).max(48);
+var RehearsalLookSchema = exports_external.object({
+  camera: exports_external.enum(["off", "gentle", "full"]),
+  lighting: exports_external.boolean(),
+  captionOpacity: exports_external.number().min(0).max(1)
+}).strict();
+var RehearsalPresetSchema = RehearsalLookSchema.extend({ name }).strict();
+var REHEARSAL_PRESET_LIMIT = 12;
+var RehearsalCommandSchema = exports_external.discriminatedUnion("action", [
+  exports_external.object({ action: exports_external.literal("save"), preset: RehearsalPresetSchema }).strict(),
+  exports_external.object({ action: exports_external.literal("apply"), name }).strict(),
+  exports_external.object({ action: exports_external.literal("remove"), name }).strict()
+]);
+var RehearsalRequestSchema = exports_external.object({
+  type: exports_external.literal("vn_rehearsal_preset"),
+  chatId: exports_external.string().min(1).max(256),
+  requestId: exports_external.string().min(1).max(160),
+  command: RehearsalCommandSchema
+}).strict();
+
 // src/shared/card-role.ts
 var CardRoleSchema = exports_external.enum(["auto", "character", "scenario"]);
 var StoredCardRoleSchema = exports_external.object({
@@ -24940,16 +25577,16 @@ var StoredCardRoleSchema = exports_external.object({
 }).strict();
 var SCENARIO_KEYWORD_RE = /\b(?:academy|rpg|adventure|simulator|simulation|chronicles|campaign|setting|universe|guild|tavern|inn|empire|kingdom|city|realm|station|dungeon|manor|estate|school|university|sanctuary|asylum|narrator|storyteller|game\s*master|dm|gm|cyoa|sandbox)\b/i;
 var TECHNICAL_WRAPPER_NAME_RE = /^(?:setup\s*inherit|inherit|default|system|assistant|user|card|template|wrapper|preset|character|unknown|none|null|undefined|scene|narrator(?:\s*bot)?)$/i;
-function isTechnicalWrapperName(name) {
-  if (!name)
+function isTechnicalWrapperName(name2) {
+  if (!name2)
     return false;
-  const compact = name.trim().replace(/[_-]+/g, "");
-  return TECHNICAL_WRAPPER_NAME_RE.test(compact) || TECHNICAL_WRAPPER_NAME_RE.test(name.trim());
+  const compact = name2.trim().replace(/[_-]+/g, "");
+  return TECHNICAL_WRAPPER_NAME_RE.test(compact) || TECHNICAL_WRAPPER_NAME_RE.test(name2.trim());
 }
-function isScenarioTitle(name) {
-  if (!name)
+function isScenarioTitle(name2) {
+  if (!name2)
     return false;
-  const trimmed = name.trim();
+  const trimmed = name2.trim();
   if (!trimmed)
     return false;
   return SCENARIO_KEYWORD_RE.test(trimmed) || isTechnicalWrapperName(trimmed);
@@ -25290,321 +25927,6 @@ class DisplayRuleExecutor {
   }
 }
 
-// src/frontend/stage/rich-text.ts
-function escapeHtml(text) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function parseMarkdown(text) {
-  const codeSpans = [];
-  let md = text.replace(/`([^`]+)`/g, (_, content) => {
-    const idx = codeSpans.push(`<code>${content}</code>`) - 1;
-    return `\x00CODE${idx}\x00`;
-  }).replace(/\*\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*\*/g, "<strong><em>$1</em></strong>").replace(/(^|[^\w])___([^\s_](?:[\s\S]*?[^\s_])?)___(?=[^\w]|$)/g, "$1<strong><em>$2</em></strong>").replace(/\*\*_(.+?)_\*\*/g, "<strong><em>$1</em></strong>").replace(/__\*(.+?)\*__/g, "<strong><em>$1</em></strong>");
-  md = md.replace(/\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^\w])__([^\s_](?:[\s\S]*?[^\s_])?)__(?=[^\w]|$)/g, "$1<strong>$2</strong>");
-  md = md.replace(/\*([^\s*](?:[\s\S]*?[^\s*])?)\*/g, "<em>$1</em>").replace(/(^|[^\w])_([^\s_](?:[\s\S]*?[^\s_])?)_(?=[^\w]|$)/g, "$1<em>$2</em>");
-  md = md.replace(/~~([^\s~](?:[\s\S]*?[^\s~])?)~~/g, "<del>$1</del>");
-  md = md.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeSpans[Number(idx)] ?? "");
-  return md;
-}
-var ALLOWED_TAGS = new Set([
-  "font",
-  "span",
-  "em",
-  "strong",
-  "b",
-  "i",
-  "del",
-  "s",
-  "u",
-  "mark",
-  "ruby",
-  "rt",
-  "rp",
-  "code",
-  "small",
-  "sub",
-  "sup",
-  "br"
-]);
-var ALLOWED_ATTRS = {
-  font: new Set(["color", "style", "face", "size"]),
-  span: new Set(["class", "style", "data-vn-text-fx"]),
-  em: new Set(["class", "style"]),
-  strong: new Set(["class", "style"]),
-  b: new Set(["class", "style"]),
-  i: new Set(["class", "style"]),
-  code: new Set(["class", "style"]),
-  mark: new Set(["class", "style"])
-};
-var NAMED_COLORS = new Set("aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen transparent currentcolor".split(" "));
-var GENERIC_FONTS = /^(?:serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-serif|ui-sans-serif|ui-monospace|ui-rounded)$/i;
-var TEXT_LENGTH = /^(?:0|-?(?:\d{1,3}(?:\.\d{1,3})?|\.\d{1,3})(?:px|em|rem|%))$/i;
-function isTextColor(value) {
-  if (NAMED_COLORS.has(value.toLowerCase()) || /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))
-    return true;
-  const functional = /^(rgb|rgba|hsl|hsla)\(([^()]+)\)$/i.exec(value);
-  if (!functional)
-    return false;
-  const body2 = functional[2].trim();
-  let parts;
-  if (body2.includes(",")) {
-    if (body2.includes("/"))
-      return false;
-    parts = body2.split(",").map((part) => part.trim());
-  } else {
-    const groups = body2.split("/");
-    if (groups.length > 2)
-      return false;
-    parts = groups[0].trim().split(/\s+/);
-    if (parts.length !== 3)
-      return false;
-    if (groups[1] !== undefined)
-      parts.push(groups[1].trim());
-  }
-  if (parts.length !== 3 && parts.length !== 4)
-    return false;
-  const channel = (part, max, percentOnly = false) => {
-    if (!/^(?:\d{1,3}(?:\.\d{1,3})?|\.\d{1,3})%?$/.test(part))
-      return false;
-    const percent = part.endsWith("%");
-    return (!percentOnly || percent) && Number.parseFloat(part) <= (percent ? 100 : max);
-  };
-  const hsl = functional[1].toLowerCase().startsWith("hsl");
-  return parts.slice(0, 3).every((part, index) => channel(part, hsl ? 360 : 255, hsl && index > 0)) && (parts[3] === undefined || channel(parts[3], 1));
-}
-var TEXT_STYLE_VALUES = {
-  color: isTextColor,
-  "background-color": isTextColor,
-  "text-decoration-color": isTextColor,
-  "font-family": (value) => GENERIC_FONTS.test(value),
-  "font-weight": (value) => /^(?:normal|bold|bolder|lighter|[1-9]00)$/.test(value),
-  "font-style": (value) => /^(?:normal|italic|oblique)$/.test(value),
-  "font-size": (value) => TEXT_LENGTH.test(value) || /^(?:xx-small|x-small|small|medium|large|x-large|xx-large|smaller|larger)$/.test(value),
-  "font-variant": (value) => /^(?:normal|small-caps)$/.test(value),
-  "letter-spacing": (value) => value === "normal" || TEXT_LENGTH.test(value),
-  "word-spacing": (value) => value === "normal" || TEXT_LENGTH.test(value),
-  "line-height": (value) => value === "normal" || TEXT_LENGTH.test(value) || /^(?:\d{1,2}(?:\.\d{1,3})?|\.\d{1,3})$/.test(value),
-  "text-decoration": (value) => /^(?:none|(?:underline|overline|line-through)(?: (?:underline|overline|line-through))*)$/.test(value),
-  "text-decoration-line": (value) => /^(?:none|(?:underline|overline|line-through)(?: (?:underline|overline|line-through))*)$/.test(value),
-  "text-decoration-style": (value) => /^(?:solid|double|dotted|dashed|wavy)$/.test(value),
-  "text-transform": (value) => /^(?:none|capitalize|uppercase|lowercase)$/.test(value),
-  "vertical-align": (value) => /^(?:baseline|sub|super|text-top|text-bottom|middle|top|bottom)$/.test(value) || TEXT_LENGTH.test(value),
-  "text-shadow": (value) => value === "none" || value.split(",").every((shadow) => {
-    const parts = shadow.trim().split(/\s+/);
-    if (isTextColor(parts[0] ?? ""))
-      parts.shift();
-    else if (isTextColor(parts.at(-1) ?? ""))
-      parts.pop();
-    return parts.length >= 2 && parts.length <= 3 && parts.every((part) => TEXT_LENGTH.test(part));
-  })
-};
-function sanitizeTextStyle(style) {
-  return style.split(";").flatMap((declaration) => {
-    const match = /^\s*([a-z-]+)\s*:\s*([^:]+?)\s*$/i.exec(declaration);
-    if (!match)
-      return [];
-    const property = match[1].toLowerCase();
-    const value = match[2].trim();
-    if (/[^a-z\d#.%+\-(),\/\s]/i.test(value) || /\/\*|\*\//.test(value))
-      return [];
-    const validate2 = Object.hasOwn(TEXT_STYLE_VALUES, property) ? TEXT_STYLE_VALUES[property] : undefined;
-    return validate2?.(value) ? [`${property}:${value}`] : [];
-  }).join(";");
-}
-function sanitizeAndRestoreAllowedHtml(escapedText) {
-  return escapedText.replace(/&lt;(\/?[a-zA-Z][a-zA-Z0-9]*)(.*?)&gt;/gs, (fullMatch, rawTag, rawAttrs) => {
-    const isClosing = rawTag.startsWith("/");
-    const tagName = (isClosing ? rawTag.slice(1) : rawTag).toLowerCase();
-    if (!ALLOWED_TAGS.has(tagName)) {
-      return fullMatch;
-    }
-    if (isClosing) {
-      return `</${tagName}>`;
-    }
-    if (tagName === "br") {
-      return "<br>";
-    }
-    const allowedAttrSet = ALLOWED_ATTRS[tagName];
-    if (!allowedAttrSet) {
-      return `<${tagName}>`;
-    }
-    const attrRegex = /([a-zA-Z_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
-    const safeAttrs = [];
-    let match;
-    while ((match = attrRegex.exec(rawAttrs)) !== null) {
-      const attrName = match[1].toLowerCase();
-      if (!allowedAttrSet.has(attrName))
-        continue;
-      let val = match[2] ?? match[3] ?? match[4] ?? "";
-      if (attrName === "style") {
-        val = sanitizeTextStyle(val);
-        if (!val)
-          continue;
-      } else if (attrName === "data-vn-text-fx") {
-        val = val.trim().toLowerCase();
-        if (!isTextEffectId(val))
-          continue;
-      } else if (attrName === "class") {
-        val = val.split(/\s+/).filter((token) => token === "vn-transmission").join(" ");
-        if (!val)
-          continue;
-      } else if (attrName === "face") {
-        if (!GENERIC_FONTS.test(val))
-          continue;
-      } else if (attrName === "color") {
-        if (!isTextColor(val))
-          continue;
-      } else if (attrName === "size") {
-        if (!/^[+-]?[1-7]$/.test(val))
-          continue;
-      }
-      safeAttrs.push(`${attrName}="${val}"`);
-    }
-    const attrStr = safeAttrs.length > 0 ? ` ${safeAttrs.join(" ")}` : "";
-    return `<${tagName}${attrStr}>`;
-  });
-}
-var ESCAPED_TEXT_EFFECT_TOKEN = new RegExp(`<code\\b[^>]*>[\\s\\S]*?<\\/code>|&lt;\\s*(\\/?)\\s*(${TEXT_EFFECT_IDS.join("|")})\\s*&gt;`, "gi");
-function restoreTextEffectTags(escapedText) {
-  if (escapedText.indexOf("&lt;") === -1)
-    return escapedText;
-  const tokens = [];
-  for (const match of escapedText.matchAll(ESCAPED_TEXT_EFFECT_TOKEN)) {
-    if (match[2] === undefined)
-      continue;
-    tokens.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      closing: match[1] === "/",
-      id: match[2].toLowerCase()
-    });
-  }
-  if (tokens.length === 0)
-    return escapedText;
-  const replacement = new Map;
-  const open2 = [];
-  for (const token of tokens) {
-    replacement.set(token, "");
-    if (!token.closing) {
-      open2.push(token);
-      continue;
-    }
-    let depth = open2.length - 1;
-    while (depth >= 0 && open2[depth].id !== token.id)
-      depth -= 1;
-    if (depth < 0)
-      continue;
-    open2.length = depth + 1;
-    const opener = open2.pop();
-    replacement.set(opener, `<span data-vn-text-fx="${opener.id}">`);
-    replacement.set(token, "</span>");
-  }
-  let output2 = "";
-  let cursor = 0;
-  for (const token of tokens) {
-    output2 += escapedText.slice(cursor, token.start) + replacement.get(token);
-    cursor = token.end;
-  }
-  return output2 + escapedText.slice(cursor);
-}
-var DANGEROUS_HTML_TAGS = new Set([
-  "script",
-  "style",
-  "iframe",
-  "object",
-  "embed",
-  "svg",
-  "math",
-  "link",
-  "meta",
-  "base",
-  "form",
-  "input",
-  "button",
-  "textarea",
-  "select"
-]);
-function stripUnknownPresetTags(text) {
-  text = text.replace(/<((?:[a-zA-Z0-9_-]+_)?true_thoughts?)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
-  return text.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name) => {
-    const lower = name.toLowerCase();
-    if (ALLOWED_TAGS.has(lower) || isTextEffectId(lower) || lower === "img" || lower === "pimg" || DANGEROUS_HTML_TAGS.has(lower)) {
-      return match;
-    }
-    return "";
-  });
-}
-function stripMarkdown(text) {
-  const codeSpans = [];
-  let md = text.replace(/`([^`]+)`/g, (_, content) => {
-    const idx = codeSpans.push(`<code>${content}</code>`) - 1;
-    return `\x00CODE${idx}\x00`;
-  }).replace(/(?:\*\*|__)?(?:Time|Location|Costume|Scene|Date|Setting)(?:\*\*)?\s*:[^\n]*(?:\r?\n|$)/gi, " ").replace(/\s+/g, " ").trim();
-  md = md.replace(/\*\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*\*/g, "$1").replace(/(^|[^\w])___([^\s_](?:[\s\S]*?[^\s_])?)___(?=[^\w]|$)/g, "$1$2").replace(/\*\*_(.+?)_\*\*/g, "$1").replace(/__\*(.+?)\*__/g, "$1");
-  md = md.replace(/\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*/g, "$1").replace(/(^|[^\w])__([^\s_](?:[\s\S]*?[^\s_])?)__(?=[^\w]|$)/g, "$1$2");
-  md = md.replace(/\*([^\s*](?:[\s\S]*?[^\s*])?)\*/g, "$1").replace(/(^|[^\w])_([^\s_](?:[\s\S]*?[^\s_])?)_(?=[^\w]|$)/g, "$1$2");
-  md = md.replace(/~~([^\s~](?:[\s\S]*?[^\s~])?)~~/g, "$1");
-  md = md.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => (codeSpans[Number(idx)] ?? "").replace(/^<code>|<\/code>$/g, ""));
-  return md;
-}
-function applyDialogueQuotes(text, hasSpeaker) {
-  const trimmed = text.trim();
-  if (!trimmed || !hasSpeaker)
-    return text;
-  if (/[“"”「」]/.test(trimmed))
-    return text;
-  return `"${trimmed}"`;
-}
-function prepareDialogueSource(rawText, stripUnknownTags = false) {
-  let normalized = rawText;
-  if (!/[\u2801-\u28FF]/.test(normalized))
-    normalized = normalized.replace(/\u2800/g, " ");
-  normalized = normalized.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/([^\n]) {2,}/g, "$1 ");
-  let text = normalized.replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp, eff, inner, offset, src) => {
-    if (!sp || !eff || inner === undefined)
-      return m;
-    const id6 = eff.toLowerCase();
-    const wrapped = isTextEffectId(id6) ? `<${id6}>${inner}</${id6}>` : inner;
-    const trimmed = inner.trim();
-    if (trimmed.length >= 2 && src.slice(0, offset).trimEnd().endsWith(trimmed)) {
-      return `\x00DEDUP\x00${trimmed}\x00WITH\x00${wrapped}\x00END\x00`;
-    }
-    return wrapped;
-  }).replace(/([\s\S]*?)\0DEDUP\0([\s\S]*?)\0WITH\0([\s\S]*?)\0END\0/g, (_m, before, dup, rep) => {
-    const idx = before.lastIndexOf(dup);
-    return idx === -1 ? before + rep : before.slice(0, idx) + rep;
-  }).replace(/<img\s*=\s*["'][^"']+["']\s*\/?>/gi, "").replace(/<img\b[^>]*?\bsrc\s*=\s*["'][^"']+["'][^>]*?\/?>/gi, "").replace(/\{\{img::[^\}]+\}\}/gi, "");
-  if (stripUnknownTags) {
-    text = stripUnknownPresetTags(text);
-  }
-  return text;
-}
-function formatDialogueText(rawText, regexRules = [], options = {}) {
-  if (!rawText)
-    return "";
-  let text = options.prepared ? rawText : prepareDialogueSource(rawText, options.stripUnknownTags);
-  const CUSTOM_RULE_TEXT_LIMIT = 1e5;
-  if (text.length <= CUSTOM_RULE_TEXT_LIMIT) {
-    for (const { pattern, replacement } of regexRules) {
-      try {
-        text = text.replace(pattern, replacement);
-      } catch {}
-    }
-  }
-  let formatted = escapeHtml(text);
-  if (options.stripMarkdown) {
-    formatted = stripMarkdown(formatted);
-  } else {
-    formatted = parseMarkdown(formatted);
-  }
-  if (options.forceQuotes) {
-    formatted = applyDialogueQuotes(formatted, Boolean(options.hasSpeaker));
-  }
-  formatted = sanitizeAndRestoreAllowedHtml(formatted);
-  formatted = restoreTextEffectTags(formatted);
-  return formatted;
-}
-
 // src/frontend/settings/routes.ts
 var SETTINGS_PAGES = [
   { id: "home", section: "reading", title: "All settings", description: "Make the reader your own.", parent: null },
@@ -25632,8 +25954,8 @@ var SETTINGS_PAGES = [
 ];
 var aliases = { look: "appearance", pictures: "images", sound: "music", voice: "speech", cast: "characters", gallery: "characters", prompts: "style", models: "parameters", maintenance: "reset" };
 function settingsPage(value) {
-  const id6 = typeof value === "string" ? aliases[value] ?? value : "home";
-  return SETTINGS_PAGES.find((page) => page.id === id6) ?? SETTINGS_PAGES[0];
+  const id8 = typeof value === "string" ? aliases[value] ?? value : "home";
+  return SETTINGS_PAGES.find((page) => page.id === id8) ?? SETTINGS_PAGES[0];
 }
 var SETTINGS_FIELD_PAGES = {
   dataSaverMode: "images",
@@ -29033,12 +29355,12 @@ function renderPresetTokenVariables(spec) {
   --aperture-choice-border: ${spec.choiceBorder};
   --aperture-choice-hover-bg: ${spec.choiceHoverBg};`;
 }
-var VN_SHELL_PRESET_TOKENS_CSS = Object.entries(THEME_PALETTE_SPECS).map(([id6, spec]) => {
+var VN_SHELL_PRESET_TOKENS_CSS = Object.entries(THEME_PALETTE_SPECS).map(([id8, spec]) => {
   const body2 = renderPresetTokenVariables(spec);
-  return `[data-vn-shell][data-vn-preset="${id6}"],
-[data-vn-root][data-vn-preset="${id6}"],
-body[data-vn-preset="${id6}"],
-:host([data-vn-preset="${id6}"]) {${body2}
+  return `[data-vn-shell][data-vn-preset="${id8}"],
+[data-vn-root][data-vn-preset="${id8}"],
+body[data-vn-preset="${id8}"],
+:host([data-vn-preset="${id8}"]) {${body2}
 }`;
 }).join(`
 `);
@@ -30171,7 +30493,7 @@ var paths = {
   focus: '<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'
 };
-var readerIcon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${paths[name] ?? paths.read}</svg>`;
+var readerIcon = (name2) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${paths[name2] ?? paths.read}</svg>`;
 
 class ReaderWorkspace {
   shell;
@@ -30312,13 +30634,13 @@ class ReaderWorkspace {
       const b = event.target instanceof Element ? event.target.closest("[data-reader-destination]") : null;
       if (!b)
         return;
-      const id6 = b.dataset.readerDestination;
-      if (id6 === "read")
+      const id8 = b.dataset.readerDestination;
+      if (id8 === "read")
         this.close();
-      else if (id6 === "more")
+      else if (id8 === "more")
         this.openMore(b);
-      else if (destinations.some((d) => d.id === id6))
-        this.open(id6, b);
+      else if (destinations.some((d) => d.id === id8))
+        this.open(id8, b);
     }, { signal });
     this.closeButton.addEventListener("click", () => this.close(), { signal });
     this.backButton.addEventListener("click", () => this.goBack(), { signal });
@@ -30532,9 +30854,9 @@ class ReaderWorkspace {
       }
     }
   }
-  register(id6, surface) {
-    this.tools.set(id6, surface);
-    surface.element.dataset.vnWorkspaceTool = id6;
+  register(id8, surface) {
+    this.tools.set(id8, surface);
+    surface.element.dataset.vnWorkspaceTool = id8;
     if (surface.hideAtHome)
       surface.element.hidden = true;
   }
@@ -30578,10 +30900,10 @@ class ReaderWorkspace {
       this.close();
     }
   }
-  open(id6, trigger, pushHistory = true) {
-    if (this.destroyed || this.changing || this.current === id6)
+  open(id8, trigger, pushHistory = true) {
+    if (this.destroyed || this.changing || this.current === id8)
       return;
-    if (pushHistory && this.current && this.current !== id6) {
+    if (pushHistory && this.current && this.current !== id8) {
       this.historyStack.push(this.current);
     }
     if (this.shell.dataset.vnReadingFocus === "true")
@@ -30589,16 +30911,16 @@ class ReaderWorkspace {
     this.changing = true;
     try {
       this.pause();
-      this.opener = trigger ?? this.nav.querySelector(`[data-reader-destination="${id6}"]`);
+      this.opener = trigger ?? this.nav.querySelector(`[data-reader-destination="${id8}"]`);
       this.release();
-      this.current = id6;
-      const d = destinations.find((d2) => d2.id === id6);
-      this.title.textContent = id6 === "story" ? "World Lens" : d.label;
+      this.current = id8;
+      const d = destinations.find((d2) => d2.id === id8);
+      this.title.textContent = id8 === "story" ? "World Lens" : d.label;
       this.subtitle.textContent = d.hint;
       this.panel.hidden = false;
-      this.shell.dataset.vnWorkspace = id6;
-      this.panel.dataset.surface = id6;
-      const tool = this.tools.get(id6);
+      this.shell.dataset.vnWorkspace = id8;
+      this.panel.dataset.surface = id8;
+      const tool = this.tools.get(id8);
       if (tool) {
         this.rememberHome(tool.element);
         this.content.append(tool.element);
@@ -30607,18 +30929,18 @@ class ReaderWorkspace {
       } else {
         const empty = document.createElement("p");
         empty.dataset.workspaceEmpty = "";
-        empty.textContent = id6 === "settings" ? "Settings are available in the host’s Lumiglyphics settings tab." : "There is nothing available here at this reading position yet.";
+        empty.textContent = id8 === "settings" ? "Settings are available in the host’s Lumiglyphics settings tab." : "There is nothing available here at this reading position yet.";
         this.content.append(empty);
       }
-      this.content.scrollTop = this.scroll.get(id6) ?? 0;
+      this.content.scrollTop = this.scroll.get(id8) ?? 0;
       this.syncReader();
       this.closeButton.focus({ preventScroll: true });
     } finally {
       this.changing = false;
     }
   }
-  toolClosed(id6) {
-    if (!this.changing && this.current === id6)
+  toolClosed(id8) {
+    if (!this.changing && this.current === id8)
       this.close();
   }
   setShowPanelsMenu(enabled) {
@@ -31030,13 +31352,13 @@ function selectCastComposition(turn, index, selectedName, absenceDisplay = "hide
   for (const asset of local) {
     if (asset.stageAsset?.role !== "portrait" || !asset.stageAsset.character)
       continue;
-    const name = asset.stageAsset.character;
-    if (!byName.has(nameKey(name)) && byName.size >= 32) {
-      if (nameKey(name) !== nameKey(speaker))
+    const name2 = asset.stageAsset.character;
+    if (!byName.has(nameKey(name2)) && byName.size >= 32) {
+      if (nameKey(name2) !== nameKey(speaker))
         continue;
       byName.delete(byName.keys().next().value);
     }
-    byName.set(nameKey(name), { name, asset: asset.stageAsset.displayImageUrl ? { ...asset, imageUrl: asset.stageAsset.displayImageUrl, previousImage: false, status: "generated" } : usable(asset) ? asset : null, active: nameKey(name) === nameKey(speaker) });
+    byName.set(nameKey(name2), { name: name2, asset: asset.stageAsset.displayImageUrl ? { ...asset, imageUrl: asset.stageAsset.displayImageUrl, previousImage: false, status: "generated" } : usable(asset) ? asset : null, active: nameKey(name2) === nameKey(speaker) });
   }
   const candidate = turn.presentation ? selectPresentationSnapshot(turn.presentation, index) : undefined;
   const snapshot = candidate && samePresentationTurn(candidate.at.key, { chatId: turn.chatId, assistantMessageId: turn.messageId, swipeId: turn.swipeId, sourceFingerprint: turn.sourceFingerprint, revision: turn.revision }) ? candidate : undefined;
@@ -31180,6 +31502,14 @@ class CastStage {
     this.index = index;
     return this.refresh();
   }
+  rehearsalPortraits() {
+    if (this.host.hidden || this.collapsed)
+      return [];
+    return [...this.host.querySelectorAll("[data-vn-cast-portraits] [data-vn-cast-card]")].flatMap((card) => {
+      const image = card.querySelector("img[data-vn-cast-current]");
+      return image?.complete && image.naturalWidth > 0 ? [{ url: image.currentSrc || image.src, name: image.alt, active: card.dataset.active === "true" }] : [];
+    });
+  }
   refresh() {
     const rootNode = typeof this.host.getRootNode === "function" ? this.host.getRootNode() : this.host.ownerDocument;
     const active = rootNode?.activeElement ?? null;
@@ -31234,9 +31564,9 @@ class CastStage {
       const dot = document.createElement("span");
       dot.dataset.vnCastReadiness = portrait.attireMismatch ? "mismatch" : portrait.asset ? "ready" : "pending";
       dot.setAttribute("aria-hidden", "true");
-      const name = document.createElement("span");
-      name.textContent = portrait.name;
-      button.append(dot, name);
+      const name2 = document.createElement("span");
+      name2.textContent = portrait.name;
+      button.append(dot, name2);
       button.onclick = (e) => {
         e.stopPropagation();
         this.selected = portrait.name;
@@ -31466,8 +31796,8 @@ class PreparationPreview {
         this.move(event.key === "ArrowRight" ? 1 : -1);
       }
     });
-    for (const name of ["pointerdown", "wheel"])
-      this.host.addEventListener(name, (event) => event.stopPropagation());
+    for (const name2 of ["pointerdown", "wheel"])
+      this.host.addEventListener(name2, (event) => event.stopPropagation());
     mount.append(this.host);
   }
   show(preview) {
@@ -31600,16 +31930,16 @@ function availableInteractionVerbs(entity, snapshot) {
   return present ? ["ask", "approach", "custom"] : ["custom"];
 }
 function formatInteractionText(entityName, verb) {
-  const name = entityName.replace(/[\r\n]+/g, " ").trim();
+  const name2 = entityName.replace(/[\r\n]+/g, " ").trim();
   if (verb === "ask")
-    return `I ask ${name} about `;
+    return `I ask ${name2} about `;
   if (verb === "approach")
-    return `I try to approach ${name}.`;
+    return `I try to approach ${name2}.`;
   if (verb === "examine")
-    return `I try to examine ${name}.`;
+    return `I try to examine ${name2}.`;
   if (verb === "use")
-    return `I try to use ${name} to `;
-  return `I want to interact with ${name}: `;
+    return `I try to use ${name2} to `;
+  return `I want to interact with ${name2}: `;
 }
 function buildInteractionDraft(entity, verb, snapshot) {
   if (!availableInteractionVerbs(entity, snapshot).includes(verb))
@@ -31677,11 +32007,11 @@ function createReferenceLinkBudget(value, paragraphs, prefs, salientByParagraph)
       }
       counts[processed + 1] = used;
     }
-    return { used: counts[target2] ?? 0, priorIds: new Set([...firstLinkedAt].filter(([, at]) => at < target2).map(([id6]) => id6)) };
+    return { used: counts[target2] ?? 0, priorIds: new Set([...firstLinkedAt].filter(([, at]) => at < target2).map(([id8]) => id8)) };
   };
 }
-function isShadowFallbackId(id6) {
-  return id6.startsWith("dna:") || id6.startsWith("earlier:");
+function isShadowFallbackId(id8) {
+  return id8.startsWith("dna:") || id8.startsWith("earlier:");
 }
 function buildEntityMatchPattern(rawTerm, allowPlural) {
   const escaped = rawTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -31699,8 +32029,8 @@ function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.ma
     const suppressedNonExcluded = !isShadowFallbackId(e.id) && entityOverride(prefs, chatId, e)?.suppressed === true && !excludedEntityIds.has(e.id);
     if (isShadowFallbackId(e.id) || suppressedNonExcluded)
       continue;
-    for (const name of [e.name, ...e.aliases]) {
-      const key = name.trim().toLowerCase();
+    for (const name2 of [e.name, ...e.aliases]) {
+      const key = name2.trim().toLowerCase();
       if (!key)
         continue;
       const ids = owners.get(key) ?? new Set;
@@ -31711,11 +32041,11 @@ function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.ma
   const excluded = [...protectedRanges, ...[...text.matchAll(/`[^`]*`|\[[^\]]*\]\([^)]*\)/g)].map((m) => [m.index, m.index + m[0].length])];
   const candidates = [];
   for (const e of eligible)
-    for (const name of [e.name, ...e.aliases]) {
-      const trimmed = name.trim(), key = trimmed.toLowerCase();
+    for (const name2 of [e.name, ...e.aliases]) {
+      const trimmed = name2.trim(), key = trimmed.toLowerCase();
       const keyOwners = owners.get(key);
       const ownedSolelyBySelf = keyOwners ? keyOwners.size === 1 && keyOwners.has(e.id) : isShadowFallbackId(e.id);
-      const resolvedUnique = ownedSolelyBySelf || keyOwners && [...keyOwners].filter((id6) => eligibleIds.has(id6) || excludedEntityIds.has(id6)).length === 1 && (eligibleIds.has(e.id) && keyOwners.has(e.id));
+      const resolvedUnique = ownedSolelyBySelf || keyOwners && [...keyOwners].filter((id8) => eligibleIds.has(id8) || excludedEntityIds.has(id8)).length === 1 && (eligibleIds.has(e.id) && keyOwners.has(e.id));
       if (/^[\x00-\x7F]+$/.test(key) && key.length < 3 || !resolvedUnique || /^(?:he|she|they|it|you|we|i|him|her|them|me|us|the|a|an|in|on|at|to|of|or|by|as|is|go|do|so|no|up|my)$/i.test(key))
         continue;
       const allowPlural = (e.kind === "object" || e.kind === "place") && !owners.get(`${key}s`)?.size && !owners.get(`${key}es`)?.size;
@@ -31772,17 +32102,17 @@ function applyOverrideFactEdits(dossier, override) {
   }
   return { ...dossier, entity: { ...dossier.entity, facts }, facts, state };
 }
-function selectReaderDossier(id6, snapshot, detail, fieldGroups = {}, maxFacts) {
-  const entity = snapshot.entities.find((e) => e.id === id6 && e.firstParagraph <= snapshot.at.paragraphIndex);
+function selectReaderDossier(id8, snapshot, detail, fieldGroups = {}, maxFacts) {
+  const entity = snapshot.entities.find((e) => e.id === id8 && e.firstParagraph <= snapshot.at.paragraphIndex);
   if (!entity)
     return null;
-  const facts = entity.facts.filter((f) => f.entityId === id6 && f.visibility === "observed" && f.source.chatId === snapshot.at.key.chatId && f.source.messageId === snapshot.at.key.assistantMessageId && f.source.sourceFingerprint === snapshot.at.key.sourceFingerprint && f.revealedAt && samePresentationTurn(f.revealedAt.key, snapshot.at.key) && f.revealedAt.paragraphIndex <= snapshot.at.paragraphIndex);
+  const facts = entity.facts.filter((f) => f.entityId === id8 && f.visibility === "observed" && f.source.chatId === snapshot.at.key.chatId && f.source.messageId === snapshot.at.key.assistantMessageId && f.source.sourceFingerprint === snapshot.at.key.sourceFingerprint && f.revealedAt && samePresentationTurn(f.revealedAt.key, snapshot.at.key) && f.revealedAt.paragraphIndex <= snapshot.at.paragraphIndex);
   const latest = new Map;
   for (const f of facts)
     latest.set(f.field, f);
   const limit = detail === "brief" ? 1 : detail === "standard" ? Math.max(1, Math.min(32, maxFacts ?? 4)) : 32;
   const visible = [...latest.values()].filter((fact) => fieldGroups[referenceFieldInfo(fact.field).section] !== false).slice(0, limit);
-  const state = Object.fromEntries(Object.entries(snapshot.stateByEntity[id6] ?? {}).filter((entry) => typeof entry[1] === "string"));
+  const state = Object.fromEntries(Object.entries(snapshot.stateByEntity[id8] ?? {}).filter((entry) => typeof entry[1] === "string"));
   if (state.location)
     state.location = snapshot.entities.find((e) => e.id === state.location)?.name ?? state.location;
   const visibleState = Object.fromEntries(Object.entries(state).filter(([field]) => fieldGroups.state !== false && fieldGroups[referenceFieldInfo(field).section] !== false));
@@ -31802,24 +32132,24 @@ function referenceEntriesWithHistory(snapshot, prefs, history) {
   const current = referenceEntries(snapshot, prefs), seen = new Set(current.map((e) => JSON.stringify([e.entity.kind, e.entity.name])));
   const previous = [];
   for (const [index, entry] of earlierEntries(snapshot, prefs, history).entries()) {
-    const { kind, name } = entry.reference, identity = JSON.stringify([kind, name]);
+    const { kind, name: name2 } = entry.reference, identity = JSON.stringify([kind, name2]);
     if (seen.has(identity))
       continue;
     seen.add(identity);
-    const entity = { id: `earlier:${index}`, kind, name, aliases: [], firstParagraph: 0, facts: [] };
+    const entity = { id: `earlier:${index}`, kind, name: name2, aliases: [], firstParagraph: 0, facts: [] };
     previous.push({ entity, pinned: entityOverride(prefs, snapshot.at.key.chatId, entity)?.pinned === true, current: false, label: "Previously observed" });
   }
   return [...current, ...previous].sort((a, b) => Number(b.pinned) - Number(a.pinned) || Number(b.current) - Number(a.current) || a.entity.name.localeCompare(b.entity.name));
 }
-function selectEarlierDossier(id6, snapshot, prefs, history) {
-  const entry = referenceEntriesWithHistory(snapshot, prefs, history).find((e) => e.entity.id === id6 && id6.startsWith("earlier:"));
+function selectEarlierDossier(id8, snapshot, prefs, history) {
+  const entry = referenceEntriesWithHistory(snapshot, prefs, history).find((e) => e.entity.id === id8 && id8.startsWith("earlier:"));
   if (!entry)
     return null;
   return dossierWithHistory({ entity: entry.entity, facts: [], state: {} }, snapshot, prefs, history);
 }
 function referenceEntries(snapshot, prefs, query = "", kind = "all") {
   const search = query.trim().toLocaleLowerCase().slice(0, 160), chatId = snapshot.at.key.chatId;
-  return eligibleEntities(snapshot.entities, prefs, chatId).filter((entity) => entity.firstParagraph <= snapshot.at.paragraphIndex && (kind === "all" || entity.kind === kind) && (!search || [entity.name, ...entity.aliases].some((name) => name.toLocaleLowerCase().includes(search)))).map((entity) => {
+  return eligibleEntities(snapshot.entities, prefs, chatId).filter((entity) => entity.firstParagraph <= snapshot.at.paragraphIndex && (kind === "all" || entity.kind === kind) && (!search || [entity.name, ...entity.aliases].some((name2) => name2.toLocaleLowerCase().includes(search)))).map((entity) => {
     const state = snapshot.stateByEntity[entity.id] ?? {};
     const location = state.location ? snapshot.entities.find((e) => e.kind === "place" && (e.id === state.location || e.name.toLocaleLowerCase() === state.location.toLocaleLowerCase())) : undefined;
     const elsewhere = !!(location && snapshot.locationId && location.id !== snapshot.locationId);
@@ -32943,8 +33273,8 @@ class ReplyDraftEditor {
     this.apply = apply;
     this.host.hidden = true;
     this.host.dataset.vnDraftEditor = "";
-    for (const name of ["click", "pointerdown", "keydown", "wheel"])
-      this.host.addEventListener(name, (event) => event.stopPropagation());
+    for (const name2 of ["click", "pointerdown", "keydown", "wheel"])
+      this.host.addEventListener(name2, (event) => event.stopPropagation());
     const label = document.createElement("label");
     label.textContent = "Your intended action";
     this.input.maxLength = 6000;
@@ -33017,6 +33347,187 @@ class InteractionTray {
       choices.append(button);
     }
     this.host.append(choices, editor.host);
+  }
+}
+
+// src/frontend/stage/world-clock-panel.ts
+var kindLabels = {
+  objective: "Objective",
+  deadline: "Deadline",
+  relationship: "Relationship",
+  faction: "Faction objective"
+};
+function labelled(label, control) {
+  const element = document.createElement("label");
+  control.setAttribute("aria-label", label);
+  element.append(label, control);
+  return element;
+}
+function button(label, type = "button") {
+  const element = document.createElement("button");
+  element.type = type;
+  element.className = "chip";
+  element.textContent = label;
+  return element;
+}
+function addOption(select, label, value) {
+  const option = document.createElement("option");
+  option.textContent = label;
+  option.value = value;
+  select.append(option);
+}
+
+class WorldClockPanel {
+  send;
+  element = document.createElement("details");
+  status = document.createElement("p");
+  list = document.createElement("div");
+  form = document.createElement("form");
+  pending = false;
+  closed = false;
+  signature;
+  constructor(send) {
+    this.send = send;
+    this.element.className = "world-threads-card";
+    this.element.dataset.worldClocks = "";
+    const title = document.createElement("summary");
+    title.textContent = "Living World clocks";
+    const hint = document.createElement("p");
+    hint.textContent = "Track a goal one passage at a time. Record the story beat behind each step.";
+    this.status.setAttribute("role", "status");
+    this.status.dataset.worldClockStatus = "";
+    const name2 = document.createElement("input");
+    name2.type = "text";
+    name2.maxLength = 100;
+    name2.required = true;
+    name2.placeholder = "Catch the last ferry";
+    const kind = document.createElement("select");
+    for (const key of ["objective", "deadline", "relationship", "faction"])
+      addOption(kind, kindLabels[key], key);
+    const steps = document.createElement("input");
+    steps.type = "number";
+    steps.min = "2";
+    steps.max = "12";
+    steps.value = "4";
+    steps.required = true;
+    this.form.append(labelled("Clock name", name2), labelled("Type", kind), labelled("Steps", steps), button("Create clock", "submit"));
+    this.form.onsubmit = (event) => {
+      event.preventDefault();
+      this.submit({ kind: "create", clock: { title: name2.value, steps: steps.valueAsNumber, kind: kind.value } }, () => this.form.reset());
+    };
+    this.element.append(title, hint, this.status, this.list, this.form);
+    this.setLedger(undefined);
+  }
+  setLedger(ledger) {
+    const signature = JSON.stringify(ledger ?? null);
+    if (this.signature === signature)
+      return;
+    this.signature = signature;
+    const expanded = new Set([...this.list.querySelectorAll("details[open]")].map((row) => row.dataset.clockId));
+    this.list.replaceChildren();
+    if (!ledger?.clocks.length) {
+      const empty = document.createElement("p");
+      empty.className = "world-scene-empty";
+      empty.textContent = "No clocks in this chat yet.";
+      this.list.append(empty);
+    } else {
+      for (const clock of ledger.clocks) {
+        const row = this.renderClock(ledger, clock);
+        row.open = expanded.has(clock.id);
+        this.list.append(row);
+      }
+    }
+    this.form.hidden = (ledger?.clocks.length ?? 0) >= 24;
+    this.updateControls();
+  }
+  close() {
+    this.closed = true;
+  }
+  renderClock(ledger, clock) {
+    const current = visibleClockProgress(ledger, clock.id);
+    const complete = current === clock.steps;
+    const row = document.createElement("details");
+    row.dataset.clockId = clock.id;
+    const heading = document.createElement("summary");
+    heading.textContent = `${clock.title} · ${current}/${clock.steps}${complete ? " · Complete" : clock.paused ? " · Paused" : ""}`;
+    const progress = document.createElement("progress");
+    progress.max = clock.steps;
+    progress.value = current;
+    progress.setAttribute("aria-label", `${clock.title} progress`);
+    const kind = document.createElement("p");
+    kind.textContent = kindLabels[clock.kind];
+    const pause = button(clock.paused ? "Resume clock" : "Pause clock");
+    pause.onclick = () => this.submit({ kind: "pause", clockId: clock.id, paused: !clock.paused });
+    row.append(heading, kind, progress, pause);
+    const evidence = ledger.events.filter((event) => event.clockId === clock.id).slice(-5).reverse();
+    if (evidence.length) {
+      const list = document.createElement("ul");
+      list.setAttribute("aria-label", "Recent progress evidence");
+      for (const event of evidence) {
+        const item = document.createElement("li");
+        const change = event.kind === "advance" ? "+1 step" : `Set to ${event.value}`;
+        item.textContent = `${change} · Passage ${event.position.paragraphIndex + 1} · ${event.note}`;
+        list.append(item);
+      }
+      row.append(list);
+    }
+    const edit = document.createElement("form");
+    const action = document.createElement("select");
+    if (!clock.paused && !complete)
+      addOption(action, "Record one step", "advance");
+    addOption(action, "Correct progress", "correct");
+    const value = document.createElement("input");
+    value.type = "number";
+    value.min = "0";
+    value.max = String(clock.steps);
+    value.value = String(current);
+    value.required = true;
+    const valueLabel = labelled("New progress", value);
+    const updateFields = () => {
+      valueLabel.hidden = action.value !== "correct";
+      value.disabled = valueLabel.hidden || this.pending;
+    };
+    action.onchange = updateFields;
+    const note = document.createElement("textarea");
+    note.rows = 2;
+    note.maxLength = 280;
+    note.required = true;
+    edit.append(labelled("Progress action", action), valueLabel, labelled("What happened in this passage?", note), button("Save progress", "submit"));
+    edit.onsubmit = (event) => {
+      event.preventDefault();
+      this.submit(action.value === "advance" ? { kind: "advance", clockId: clock.id, note: note.value } : { kind: "correct", clockId: clock.id, value: value.valueAsNumber, note: note.value }, () => {
+        note.value = "";
+      });
+    };
+    row.append(edit);
+    updateFields();
+    return row;
+  }
+  updateControls() {
+    for (const control of this.element.querySelectorAll("button,input,textarea,select")) {
+      control.disabled = this.pending || Boolean(control.closest("label[hidden]"));
+    }
+  }
+  submit(command, saved) {
+    if (this.pending || this.closed)
+      return;
+    const parsed = WorldClockCommandSchema.safeParse(command);
+    if (!parsed.success) {
+      this.status.textContent = "Enter a clock name, or complete the progress fields before saving.";
+      return;
+    }
+    this.pending = true;
+    this.status.textContent = "Saving clock…";
+    this.updateControls();
+    this.send(parsed.data, (error61) => {
+      if (this.closed)
+        return;
+      this.pending = false;
+      this.status.textContent = error61 || "Clock saved.";
+      if (!error61)
+        saved?.();
+      this.updateControls();
+    });
   }
 }
 
@@ -33108,6 +33619,16 @@ var DOSSIER_CSS = `
 .world-lens.world-lens-preview{display:flex;flex-direction:column;align-items:stretch;gap:8px;cursor:default}
 .world-lens-preview-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .world-threads-card{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.22)}
+[data-world-clocks]{display:block;min-width:0;overflow-wrap:anywhere}
+[data-world-clocks] summary{min-height:44px;align-content:center;cursor:pointer;font-weight:650}
+[data-world-clocks] p{margin-block:6px}
+[data-world-clocks] [data-world-clock-status]:empty{display:none}
+[data-world-clocks] [data-clock-id]{border-block-start:1px solid var(--vn-shell-border,#456);padding-block:4px}
+[data-world-clocks] form{display:grid;gap:8px;margin-block:12px}
+[data-world-clocks] label{display:grid;gap:4px;min-width:0}
+[data-world-clocks] [hidden]{display:none}
+[data-world-clocks] input,[data-world-clocks] select,[data-world-clocks] textarea,[data-world-clocks] button{min-height:44px;min-width:0;max-width:100%;font:inherit}
+[data-world-clocks] progress{display:block;width:100%;accent-color:var(--vn-shell-accent,#85d9fa);margin-block:8px}
 .story-dna-drawer{margin:12px 0;border-top:1px solid var(--vn-panel-border,#666)}
 .input-wrap{display:flex;gap:8px;align-items:center;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));border-radius:var(--vn-shell-radius,10px);background:var(--vn-shell-field,rgba(0,0,0,.15));width:100%;padding:0 10px;height:44px;box-sizing:border-box}
 .input-wrap input{width:100%;min-width:0;background:none;border:none;outline:none;font:inherit;color:var(--vn-shell-text,inherit);padding:0}
@@ -33289,16 +33810,16 @@ function ledgerEntryToStoryDocument(entry) {
     }))
   };
 }
-function entityInitials(name) {
-  const parts = name.trim().split(/[\s·\-]+/).filter(Boolean);
+function entityInitials(name2) {
+  const parts = name2.trim().split(/[\s·\-]+/).filter(Boolean);
   if (!parts.length)
     return "?";
   if (parts.length === 1)
     return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
 }
-function fallbackSvgForKind(kind, name) {
-  const initials = entityInitials(name).replace(/[<>&"']/g, "");
+function fallbackSvgForKind(kind, name2) {
+  const initials = entityInitials(name2).replace(/[<>&"']/g, "");
   if (kind === "npc") {
     return `<svg viewBox="0 0 120 140" aria-hidden="true" focusable="false"><defs><linearGradient id="vnNpcGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(158,198,240,0.32)"/><stop offset="100%" stop-color="rgba(20,26,42,0.92)"/></linearGradient></defs><rect width="120" height="140" rx="14" fill="url(#vnNpcGrad)"/><circle cx="60" cy="48" r="22" fill="rgba(255,255,255,0.14)" stroke="rgba(255,255,255,0.32)" stroke-width="1.5"/><path d="M24 126c4-24 20-38 36-38s32 14 36 38" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.28)" stroke-width="1.5"/><text x="60" y="54" text-anchor="middle" fill="currentColor" font-size="16" font-weight="700" opacity="0.9">${initials}</text></svg>`;
   }
@@ -33327,6 +33848,7 @@ class DossierCard {
   storyDna = { locations: {}, items: {}, revision: 0 };
   storyDnaRequester = null;
   storyDnaError = null;
+  worldClockPanel = null;
   locationArtLibrary = { version: 1, locations: [] };
   locationArtRequester = null;
   sceneHubContext = null;
@@ -33421,6 +33943,7 @@ class DossierCard {
   }
   setStoryDna(storyDna) {
     this.storyDna = storyDna;
+    this.worldClockPanel?.setLedger(storyDna.worldClocks);
     this.storyDnaError = null;
     if (this.awaitingDnaSync && this.activeDossierContext && this.isOpen()) {
       this.awaitingDnaSync = false;
@@ -34195,20 +34718,20 @@ class DossierCard {
       option.value = value;
       option.textContent = label;
       category.append(option);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "chip";
-      button.textContent = label;
-      button.dataset.referenceCategory = value;
-      button.setAttribute("aria-pressed", value === this.category ? "true" : "false");
-      button.onclick = () => {
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.className = "chip";
+      button2.textContent = label;
+      button2.dataset.referenceCategory = value;
+      button2.setAttribute("aria-pressed", value === this.category ? "true" : "false");
+      button2.onclick = () => {
         category.value = value;
         for (const child of tabs.querySelectorAll("[data-reference-category]")) {
           child.setAttribute("aria-pressed", child.dataset.referenceCategory === value ? "true" : "false");
         }
         render2();
       };
-      tabs.append(button);
+      tabs.append(button2);
     }
     const folioBtn = document.createElement("button");
     folioBtn.type = "button";
@@ -34229,18 +34752,18 @@ class DossierCard {
     tabs.append(addRefBtn);
     category.value = this.category;
     filters.append(inputWrap, category);
-    const scope = document.createElement("select");
-    scope.setAttribute("aria-label", "Reference scope");
-    scope.dataset.referenceScope = "";
+    const scope2 = document.createElement("select");
+    scope2.setAttribute("aria-label", "Reference scope");
+    scope2.dataset.referenceScope = "";
     for (const [value, label] of [["all", "Reply & earlier"], ["reply", "This reply"]]) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = label;
-      scope.append(option);
+      scope2.append(option);
     }
-    scope.value = this.scope;
-    scope.hidden = !entries.some((e) => e.entity.id.startsWith("earlier:"));
-    filters.append(scope);
+    scope2.value = this.scope;
+    scope2.hidden = !entries.some((e) => e.entity.id.startsWith("earlier:"));
+    filters.append(scope2);
     panel.append(tabs, filters);
     if (note) {
       const hint = document.createElement("small");
@@ -34270,23 +34793,23 @@ class DossierCard {
       const nameInput = addRefPanel.querySelector("[data-add-ref-name]");
       const kindSelect = addRefPanel.querySelector("[data-add-ref-kind]");
       const descInput = addRefPanel.querySelector("[data-add-ref-desc]");
-      const name = nameInput.value.trim();
+      const name2 = nameInput.value.trim();
       const kind = kindSelect.value;
       const desc = descInput.value.trim();
-      if (!name || !desc) {
-        addErrEl.textContent = !name ? "Enter a name for the location or item." : "Enter a brief visual or story description before saving.";
+      if (!name2 || !desc) {
+        addErrEl.textContent = !name2 ? "Enter a name for the location or item." : "Enter a brief visual or story description before saving.";
         addErrEl.hidden = false;
         return;
       }
       addErrEl.hidden = true;
-      const slug = kind === "place" ? createLocationId(name) : createItemId(name);
+      const slug = kind === "place" ? createLocationId(name2) : createItemId(name2);
       const canonicalId = kind === "place" ? `dna:loc:${slug}` : `dna:item:${slug}`;
       const nowTs = Date.now();
       const newEntity = {
         id: canonicalId,
-        name,
+        name: name2,
         kind,
-        aliases: deriveShortAliases(name),
+        aliases: deriveShortAliases(name2),
         firstParagraph: 0,
         facts: [{
           id: `f_custom_${nowTs}`,
@@ -34298,7 +34821,7 @@ class DossierCard {
           revealedAt: { key: { chatId: "manual" }, paragraphIndex: 0 }
         }]
       };
-      const existingIdx = entries.findIndex((e) => e.entity.id === canonicalId || e.entity.kind === kind && e.entity.name.toLowerCase() === name.toLowerCase());
+      const existingIdx = entries.findIndex((e) => e.entity.id === canonicalId || e.entity.kind === kind && e.entity.name.toLowerCase() === name2.toLowerCase());
       if (existingIdx >= 0)
         entries.splice(existingIdx, 1);
       entries.unshift({
@@ -34313,8 +34836,8 @@ class DossierCard {
             action: "save_location",
             location: {
               id: slug,
-              name,
-              aliases: deriveShortAliases(name),
+              name: name2,
+              aliases: deriveShortAliases(name2),
               environmentDescription: desc.slice(0, 2000),
               persistentElements: [],
               connectedLocations: [],
@@ -34327,8 +34850,8 @@ class DossierCard {
             action: "save_item",
             item: {
               id: slug,
-              name,
-              aliases: deriveShortAliases(name),
+              name: name2,
+              aliases: deriveShortAliases(name2),
               description: desc.slice(0, 2000),
               distinctiveFeatures: [],
               colors: [],
@@ -34393,17 +34916,17 @@ class DossierCard {
     const hiddenDrawerHost = document.createElement("div");
     panel.append(hiddenDrawerHost);
     const render2 = () => {
-      for (const button of tabs.querySelectorAll("button[data-reference-category]")) {
-        const isActive = button.dataset.referenceCategory === category.value;
-        button.setAttribute("aria-pressed", String(isActive));
+      for (const button2 of tabs.querySelectorAll("button[data-reference-category]")) {
+        const isActive = button2.dataset.referenceCategory === category.value;
+        button2.setAttribute("aria-pressed", String(isActive));
         if (isActive)
-          button.classList.add("active");
+          button2.classList.add("active");
         else
-          button.classList.remove("active");
+          button2.classList.remove("active");
       }
       this.query = search.value;
       this.category = category.value;
-      this.scope = scope.value;
+      this.scope = scope2.value;
       list.replaceChildren();
       hiddenDrawerHost.replaceChildren();
       sceneTabBtn.setAttribute("aria-pressed", String(this.hubView === "scene"));
@@ -34421,7 +34944,7 @@ class DossierCard {
       const qLower = this.query.trim().toLocaleLowerCase();
       const filteredDocs = allCombinedDocs.filter(({ doc: doc2 }) => !qLower || [doc2.name, ...doc2.aliases ?? [], doc2.kind].some((n) => n.toLocaleLowerCase().includes(qLower)));
       const isDocumentMode = this.category === "document";
-      const filtered = entries.filter(({ entity }) => entity.kind !== "npc" && (this.scope === "all" || !entity.id.startsWith("earlier:")) && (this.category === "all" || !isDocumentMode && entity.kind === this.category) && (!qLower || [entity.name, ...entity.aliases].some((name) => name.toLocaleLowerCase().includes(qLower)))).sort((a, b) => Number(b.current) - Number(a.current) || Number(b.pinned) - Number(a.pinned) || a.entity.name.localeCompare(b.entity.name));
+      const filtered = entries.filter(({ entity }) => entity.kind !== "npc" && (this.scope === "all" || !entity.id.startsWith("earlier:")) && (this.category === "all" || !isDocumentMode && entity.kind === this.category) && (!qLower || [entity.name, ...entity.aliases].some((name2) => name2.toLocaleLowerCase().includes(qLower)))).sort((a, b) => Number(b.current) - Number(a.current) || Number(b.pinned) - Number(a.pinned) || a.entity.name.localeCompare(b.entity.name));
       if (isDocumentMode) {
         sectionHeadLabel.textContent = "Revealed Documents";
         count2.textContent = filteredDocs.length ? `${filteredDocs.length} document${filteredDocs.length === 1 ? "" : "s"}` : "No revealed documents match.";
@@ -34934,6 +35457,11 @@ class DossierCard {
         worldSheet.append(threadsCard);
       }
       if (this.hubView === "atlas") {
+        if (this.storyDnaRequester) {
+          this.worldClockPanel ??= new WorldClockPanel((command, finish) => this.storyDnaRequester?.({ action: "world_clock", command }, undefined, finish));
+          this.worldClockPanel.setLedger(this.storyDna.worldClocks);
+          worldSheet.append(this.worldClockPanel.element);
+        }
         const perspCard = document.createElement("details");
         perspCard.open = this.perspectivesOpen;
         perspCard.ontoggle = () => {
@@ -35134,7 +35662,7 @@ class DossierCard {
           this.scope = "all";
           category.value = "all";
           search.value = "";
-          scope.value = "all";
+          scope2.value = "all";
           render2();
         };
         lensCard.append(resetBtn);
@@ -35172,13 +35700,13 @@ class DossierCard {
       lensSlot.replaceChildren(lensCard);
       if (isDocumentMode) {
         for (const { doc: doc2, customNote, inCurrentTurn } of filteredDocs) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.dataset.referenceCurrent = String(inCurrentTurn);
-          button.dataset.referenceKindItem = "document";
-          button.dataset.documentRowId = doc2.id;
+          const button2 = document.createElement("button");
+          button2.type = "button";
+          button2.dataset.referenceCurrent = String(inCurrentTurn);
+          button2.dataset.referenceKindItem = "document";
+          button2.dataset.documentRowId = doc2.id;
           const displayTitle = formatDocumentDisplayTitle(doc2.name, doc2.kind);
-          button.setAttribute("aria-label", displayTitle);
+          button2.setAttribute("aria-label", displayTitle);
           const thumb = document.createElement("span");
           thumb.dataset.referenceThumb = "object";
           const docImgUrl = this.documentOptionsResolver?.(doc2.id)?.asset?.imageUrl;
@@ -35199,22 +35727,22 @@ class DossierCard {
           const detail = document.createElement("small");
           detail.textContent = `${doc2.kind.toUpperCase()} · ${doc2.sections.length ? `${doc2.sections.length} passage${doc2.sections.length === 1 ? "" : "s"}` : doc2.observations?.length ? "Visual details observed" : "Spotted"}${customNote ? " · ✎ Note" : ""}`;
           body2.append(nameSpan, detail);
-          button.append(thumb, body2);
-          button.onclick = () => {
+          button2.append(thumb, body2);
+          button2.onclick = () => {
             this.selectedEntityId = doc2.id;
             this.openDocument(doc2, () => this.openTray(entries, trigger, open2, note, visualResolver), trigger);
           };
-          list.append(button);
+          list.append(button2);
         }
       } else {
         for (const { entity, pinned, label, current: isCurrent } of filtered) {
           const vis = visualResolver?.(entity);
-          const button = document.createElement("button");
-          button.type = "button";
-          button.dataset.referenceCurrent = String(isCurrent);
-          button.dataset.referenceKindItem = entity.kind;
-          button.setAttribute("aria-label", entity.name);
-          button.setAttribute("aria-description", `${pinned ? "Pinned. " : ""}${label}`);
+          const button2 = document.createElement("button");
+          button2.type = "button";
+          button2.dataset.referenceCurrent = String(isCurrent);
+          button2.dataset.referenceKindItem = entity.kind;
+          button2.setAttribute("aria-label", entity.name);
+          button2.setAttribute("aria-description", `${pinned ? "Pinned. " : ""}${label}`);
           const thumb = document.createElement("span");
           thumb.dataset.referenceThumb = entity.kind;
           const itemRefUrl = entity.kind === "object" ? findMatchingItem(this.storyDna.items, entity.name)?.referenceImageUrl : undefined;
@@ -35242,9 +35770,9 @@ class DossierCard {
             snippet.textContent = vis.summarySnippet.length > 90 ? `${vis.summarySnippet.slice(0, 90).trimEnd()}…` : vis.summarySnippet;
             body2.append(snippet);
           }
-          button.append(thumb, body2);
-          button.onclick = () => open2(entity.id, trigger);
-          list.append(button);
+          button2.append(thumb, body2);
+          button2.onclick = () => open2(entity.id, trigger);
+          list.append(button2);
         }
       }
       const suppressedList = (this.sceneHubContext?.hiddenOverrides ?? []).filter((o) => o.kind !== "npc");
@@ -35314,7 +35842,7 @@ class DossierCard {
     this.trayRender = render2;
     search.oninput = render2;
     category.onchange = render2;
-    scope.onchange = render2;
+    scope2.onchange = render2;
     render2();
     this.host.append(panel);
     this.host.hidden = false;
@@ -35733,8 +36261,8 @@ class DossierCard {
       const heading2 = document.createElement("h4");
       heading2.textContent = "Review suggestions for " + proposal.name;
       heading2.tabIndex = -1;
-      const scope = document.createElement("small");
-      scope.textContent = "Revealed through passage " + (proposal.paragraphIndex + 1);
+      const scope2 = document.createElement("small");
+      scope2.textContent = "Revealed through passage " + (proposal.paragraphIndex + 1);
       const evidence = document.createElement("details");
       const summary = document.createElement("summary");
       summary.textContent = "Read the source excerpts";
@@ -35830,7 +36358,7 @@ Suggested: ` + format(change.after);
       const actions = document.createElement("div");
       actions.className = "story-dna-footer";
       actions.append(cancel, apply);
-      review.replaceChildren(heading2, scope, evidence, choices, note, actions);
+      review.replaceChildren(heading2, scope2, evidence, choices, note, actions);
       review.hidden = false;
       heading2.focus({ preventScroll: true });
     };
@@ -35861,6 +36389,8 @@ Suggested: ` + format(change.after);
     return wrap;
   }
   close() {
+    this.worldClockPanel?.close();
+    this.worldClockPanel = null;
     this.activeDossierContext = null;
     this.activeDocumentRecord = null;
     this.trayRender = null;
@@ -36257,8 +36787,8 @@ class StageDossiers {
       activeItems,
       sceneDocuments: visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, this.index)),
       hiddenOverrides,
-      onUnhideOverride: (kind, name) => {
-        this.updateOverride({ id: `unhide:${kind}:${name}`, kind, name, aliases: [], firstParagraph: 0, facts: [] }, { suppressed: false });
+      onUnhideOverride: (kind, name2) => {
+        this.updateOverride({ id: `unhide:${kind}:${name2}`, kind, name: name2, aliases: [], firstParagraph: 0, facts: [] }, { suppressed: false });
         this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
       },
       actionsEnabled: Boolean(this.prefs.enabled && this.prefs.actionsEnabled && this.draftTools),
@@ -36326,7 +36856,7 @@ class StageDossiers {
     this.dismissTooltipPopover();
     this.dismissTrackPill();
     this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
-    this.card.openTray(this.mergedTrayEntries(snapshot), this.tray, (id6, trigger) => this.open(id6, trigger), !this.prefs.enabled ? "Story references are disabled. You can enable them in Reading settings." : this.limitationNote() ?? (!snapshot && !Object.keys(this.storyDna.locations).length && !Object.keys(this.storyDna.items).length ? "No established references are available at this reading position." : this.prefs.rememberReferences && this.history?.truncated ? "Showing a limited recent selection of earlier descriptions." : undefined), (entity) => this.resolveVisualContext(entity));
+    this.card.openTray(this.mergedTrayEntries(snapshot), this.tray, (id8, trigger) => this.open(id8, trigger), !this.prefs.enabled ? "Story references are disabled. You can enable them in Reading settings." : this.limitationNote() ?? (!snapshot && !Object.keys(this.storyDna.locations).length && !Object.keys(this.storyDna.items).length ? "No established references are available at this reading position." : this.prefs.rememberReferences && this.history?.truncated ? "Showing a limited recent selection of earlier descriptions." : undefined), (entity) => this.resolveVisualContext(entity));
   }
   limitationNote() {
     if (this.presentation?.version !== 2 || !this.presentation.warnings?.length)
@@ -36397,11 +36927,11 @@ class StageDossiers {
       this.workspace.open("story", this.root.querySelector('[data-vn-control="lens"]') ?? this.tray);
       return true;
     }
-    this.card.openTray(entries, this.tray, (id6, trigger) => this.open(id6, trigger), this.prefs.rememberReferences && this.history?.truncated ? "Showing a limited recent selection of earlier descriptions." : undefined, (entity) => this.resolveVisualContext(entity));
+    this.card.openTray(entries, this.tray, (id8, trigger) => this.open(id8, trigger), this.prefs.rememberReferences && this.history?.truncated ? "Showing a limited recent selection of earlier descriptions." : undefined, (entity) => this.resolveVisualContext(entity));
     return true;
   }
-  openEntityFromStage(id6, trigger) {
-    this.open(id6, trigger);
+  openEntityFromStage(id8, trigger) {
+    this.open(id8, trigger);
   }
   sceneHudEntries() {
     if (!this.ready || !this.prefs.enabled)
@@ -36631,23 +37161,23 @@ class StageDossiers {
     if (this.ready && this.index >= 0)
       this.refresh(this.index);
   }
-  showTooltipPopover(id6, trigger) {
+  showTooltipPopover(id8, trigger) {
     const snapshot = this.snapshot();
     if (!snapshot) {
-      this.open(id6, trigger);
+      this.open(id8, trigger);
       return;
     }
-    if (this.tooltipPopover?.dataset.entityId === id6) {
+    if (this.tooltipPopover?.dataset.entityId === id8) {
       this.dismissTooltipPopover();
       return;
     }
     this.dismissTooltipPopover();
     this.tooltipHolding = true;
     this.hold();
-    const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id6);
-    const rawSelected = current ? selectReaderDossier(id6, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id6, snapshot, this.prefs, this.history);
+    const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id8);
+    const rawSelected = current ? selectReaderDossier(id8, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id8, snapshot, this.prefs, this.history);
     if (!rawSelected) {
-      this.open(id6, trigger);
+      this.open(id8, trigger);
       return;
     }
     const selected = applyOverrideFactEdits(rawSelected, entityOverride(this.prefs, snapshot.at.key.chatId, rawSelected.entity));
@@ -36657,7 +37187,7 @@ class StageDossiers {
     const docAsset = matchedDoc ? this.documentAssets[matchedDoc.id] : undefined;
     const pop = document.createElement("div");
     pop.className = "vn-inline-tooltip-popover";
-    pop.dataset.entityId = id6;
+    pop.dataset.entityId = id8;
     if (matchedDoc)
       pop.dataset.docId = matchedDoc.id;
     pop.setAttribute("role", "dialog");
@@ -36740,7 +37270,7 @@ class StageDossiers {
           this.workspace.open("story", trigger);
           this.card.clearBack();
         }
-        this.card.openDocument(matchedDoc, () => this.open(id6, trigger), trigger);
+        this.card.openDocument(matchedDoc, () => this.open(id8, trigger), trigger);
         return;
       }
       if (entity.kind === "npc" && this.folioOpener) {
@@ -36748,7 +37278,7 @@ class StageDossiers {
         this.folioOpener(entity.name);
         this.workspace?.open("character");
       } else
-        this.open(id6, trigger);
+        this.open(id8, trigger);
     };
     if (microRow.childElementCount > 0)
       pop.append(head, body2, microRow, cta);
@@ -36803,11 +37333,11 @@ class StageDossiers {
     const docEntityIds = new Set(eligible.filter((e) => e.kind === "object" && Boolean(this.matchStoryDocument(e, visibleDocs))).map((e) => e.id));
     const salient = this.salientByParagraph.get(index) ?? new Set;
     const anchors = linkEntityMentions(this.text.textContent ?? "", snapshot.entities, this.prefs, snapshot.at.key.chatId, Math.min(this.prefs.maxLinksPerParagraph, 24 - used), protectedEntityRanges(this.text), this.prefs.linking === "important" ? priorIds : new Set, salient);
-    applyEntityAnchors(this.text, anchors, (id6, trigger) => this.showTooltipPopover(id6, trigger), (id6) => {
-      const raw = selectReaderDossier(id6, snapshot, "brief", this.prefs.fieldGroups);
+    applyEntityAnchors(this.text, anchors, (id8, trigger) => this.showTooltipPopover(id8, trigger), (id8) => {
+      const raw = selectReaderDossier(id8, snapshot, "brief", this.prefs.fieldGroups);
       const edited = raw ? applyOverrideFactEdits(raw, entityOverride(this.prefs, snapshot.at.key.chatId, raw.entity)) : undefined;
       return edited?.facts[0]?.value ?? "View established story information";
-    }, (id6) => docEntityIds.has(id6));
+    }, (id8) => docEntityIds.has(id8));
   }
   resolveVisualContext(entity) {
     const snapshot = this.snapshot();
@@ -36880,17 +37410,17 @@ class StageDossiers {
       onSelectEntity: (targetId, trigger) => this.open(targetId, trigger)
     };
   }
-  open(id6, trigger) {
+  open(id8, trigger) {
     this.dismissTooltipPopover();
     this.dismissTrackPill();
     const snapshot = this.snapshot();
-    if (id6.startsWith("dna:loc:") || id6.startsWith("dna:item:")) {
-      const isLoc = id6.startsWith("dna:loc:");
-      const slug = id6.slice(isLoc ? "dna:loc:".length : "dna:item:".length);
+    if (id8.startsWith("dna:loc:") || id8.startsWith("dna:item:")) {
+      const isLoc = id8.startsWith("dna:loc:");
+      const slug = id8.slice(isLoc ? "dna:loc:".length : "dna:item:".length);
       const loc = isLoc ? this.storyDna.locations[slug] : undefined;
       const item = !isLoc ? this.storyDna.items[slug] : undefined;
       if (loc || item) {
-        const entity = loc ? { id: id6, kind: "place", name: loc.name, aliases: loc.aliases, firstParagraph: 0, facts: [] } : { id: id6, kind: "object", name: item.name, aliases: item.aliases, firstParagraph: 0, facts: [] };
+        const entity = loc ? { id: id8, kind: "place", name: loc.name, aliases: loc.aliases, firstParagraph: 0, facts: [] } : { id: id8, kind: "object", name: item.name, aliases: item.aliases, firstParagraph: 0, facts: [] };
         const rawSynthetic = { entity, facts: [], overview: [], earlier: [], state: {} };
         const synthetic = snapshot ? applyOverrideFactEdits(rawSynthetic, entityOverride(this.prefs, snapshot.at.key.chatId, entity)) : rawSynthetic;
         const syntheticActions = this.prefs.actionsEnabled && this.draftTools ? {
@@ -36918,8 +37448,8 @@ class StageDossiers {
     }
     if (!snapshot)
       return;
-    const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id6);
-    const selected = current ? selectReaderDossier(id6, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id6, snapshot, this.prefs, this.history);
+    const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id8);
+    const selected = current ? selectReaderDossier(id8, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id8, snapshot, this.prefs, this.history);
     if (!selected)
       return;
     if (selected.entity.kind === "npc" && this.folioOpener) {
@@ -37327,12 +37857,12 @@ function isElement(node2) {
 function effectIdOf(node2) {
   if (!isElement(node2))
     return null;
-  const id6 = node2.getAttribute(TEXT_EFFECT_ATTRIBUTE);
-  return isTextEffectId(id6) ? id6 : null;
+  const id8 = node2.getAttribute(TEXT_EFFECT_ATTRIBUTE);
+  return isTextEffectId(id8) ? id8 : null;
 }
 function isSplitEffect(node2) {
-  const id6 = effectIdOf(node2);
-  return id6 !== null && SPLIT_TEXT_EFFECTS.has(id6);
+  const id8 = effectIdOf(node2);
+  return id8 !== null && SPLIT_TEXT_EFFECTS.has(id8);
 }
 function isDecoration(node2) {
   return isElement(node2) && (node2.hasAttribute(TEXT_EFFECT_LETTER_ATTRIBUTE) || node2.hasAttribute(TEXT_EFFECT_WORD_ATTRIBUTE));
@@ -37622,6 +38152,10 @@ var DEFAULT_READER_PREFERENCES = {
 };
 function normalizeReaderPreferences(value) {
   const input2 = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const savedLooks = Array.isArray(input2.rehearsalPresets) ? input2.rehearsalPresets.slice(0, REHEARSAL_PRESET_LIMIT).flatMap((value2) => {
+    const parsed = RehearsalPresetSchema.safeParse(value2);
+    return parsed.success ? [parsed.data] : [];
+  }) : [];
   return {
     adjustableSheetEnabled: input2.adjustableSheetEnabled === true,
     layout: input2.layout === "image-first" ? "image-first" : "overlay",
@@ -37645,7 +38179,15 @@ function normalizeReaderPreferences(value) {
     ...input2.cameraMotionIntensity === "gentle" || input2.cameraMotionIntensity === "full" ? { cameraMotionIntensity: input2.cameraMotionIntensity } : {},
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
     confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true,
-    adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true
+    adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true,
+    ...savedLooks.length ? { rehearsalPresets: savedLooks } : {}
+  };
+}
+function sceneLook(preferences) {
+  return {
+    camera: preferences.virtualCameraEnabled === false ? "off" : preferences.cameraMotionIntensity ?? "full",
+    lighting: preferences.atmosphericLighting !== false,
+    captionOpacity: preferences.backgroundOpacity
   };
 }
 var MOBILE_SHEET_DETENTS = { compact: 48, reading: 142, expandedRatio: 0.65 };
@@ -41312,13 +41854,13 @@ class RpgStageController {
     this.barEl.title = "Adventure Time Lite is active — click for Lite rules & recent checks.";
     this.barEl.hidden = false;
   }
-  decorateChoiceButton(button, choice) {
+  decorateChoiceButton(button2, choice) {
     if (choice.disabled && choice.lockedReason) {
       const lockPill = document.createElement("span");
       lockPill.dataset.vnChoiceLock = "";
       lockPill.textContent = `\uD83D\uDD12 ${choice.lockedReason}`;
-      button.appendChild(lockPill);
-      button.title = choice.lockedReason;
+      button2.appendChild(lockPill);
+      button2.title = choice.lockedReason;
     }
     if (this.rpgMode === "off" || choice.disabled || !choice.check)
       return;
@@ -41330,8 +41872,8 @@ class RpgStageController {
     const odds = check2.rollMode === "advantage" ? 1 - Math.pow(1 - singleProb, 2) : check2.rollMode === "disadvantage" ? Math.pow(singleProb, 2) : singleProb;
     const pct = Math.round(odds * 100);
     const breakdownText = sources.length > 0 ? sources.map((src) => `${src.label}: ${src.delta >= 0 ? `+${src.delta}` : src.delta}${src.advantage ? " (ADV)" : ""}`).join(", ") : "";
-    if (breakdownText && !button.title) {
-      button.title = breakdownText;
+    if (breakdownText && !button2.title) {
+      button2.title = breakdownText;
     }
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
@@ -41358,14 +41900,14 @@ class RpgStageController {
       const toggleInfo = (event) => {
         event.preventDefault();
         event.stopPropagation();
-        const scope = button.closest("ol, ul, [data-vn-choices]") ?? button.parentElement;
-        if (!scope)
+        const scope2 = button2.closest("ol, ul, [data-vn-choices]") ?? button2.parentElement;
+        if (!scope2)
           return;
-        const existing = scope.querySelector(".vn-rpg-check-breakdown");
+        const existing = scope2.querySelector(".vn-rpg-check-breakdown");
         const isSameChoice = existing?.dataset.vnCheckFor === choiceKey;
         if (existing)
           existing.remove();
-        scope.querySelectorAll("[data-vn-check-info]").forEach((el) => {
+        scope2.querySelectorAll("[data-vn-check-info]").forEach((el) => {
           el.setAttribute("aria-expanded", "false");
         });
         if (isSameChoice)
@@ -41374,10 +41916,10 @@ class RpgStageController {
         card.className = "vn-rpg-check-breakdown";
         card.dataset.vnCheckFor = choiceKey;
         card.textContent = `Modifiers (${check2.stat} DC ${check2.dc}): ${breakdownText}`;
-        if (typeof button.insertAdjacentElement === "function") {
-          button.insertAdjacentElement("afterend", card);
+        if (typeof button2.insertAdjacentElement === "function") {
+          button2.insertAdjacentElement("afterend", card);
         } else {
-          button.parentElement?.insertBefore(card, button.nextSibling);
+          button2.parentElement?.insertBefore(card, button2.nextSibling);
         }
         info.setAttribute("aria-expanded", "true");
       };
@@ -41388,7 +41930,7 @@ class RpgStageController {
       });
       badge.appendChild(info);
     }
-    button.appendChild(badge);
+    button2.appendChild(badge);
   }
   resolveChoiceSubmission(choice) {
     let payload = choice.value;
@@ -44325,8 +44867,8 @@ var ATELIER_PALETTES = {
   "neon-rain": { accent: "#78f7dc", text: "#e6fff9", muted: "#b0d5d0", solid: "#0b191e", glow: "#fa83c4", font: '"Cascadia Code", ui-monospace, monospace', radius: ".35rem", texture: "repeating-linear-gradient(0deg, transparent 0 5px, #78f7dc05 5px 6px), linear-gradient(120deg, #78f7dc12, transparent 45%, #fa83c410)" },
   "obsidian-reliquary": { accent: "#d1b6f5", text: "#f5effc", muted: "#cbbfd7", solid: "#1a1422", glow: "#dbe2ed", font: 'Georgia, "Times New Roman", serif', radius: ".65rem", texture: "radial-gradient(ellipse at 50% 0%, #d1b6f51c, transparent 65%), repeating-linear-gradient(135deg, transparent 0 20px, #dbe2ed04 20px 21px)" }
 };
-function plate(id6, p) {
-  const root = `[data-vn-root][data-vn-preset="${id6}"]`;
+function plate(id8, p) {
+  const root = `[data-vn-root][data-vn-preset="${id8}"]`;
   return `${root} {
     --vn-accent: ${p.accent}; --vn-text: ${p.text}; --vn-muted-text: ${p.muted};
     --vn-dialogue-bg: ${p.texture}, ${p.solid}; --vn-dialogue-border: ${p.accent}80;
@@ -44338,7 +44880,7 @@ function plate(id6, p) {
     --vn-panel-solid: ${p.solid}; --vn-panel-border: ${p.accent}70;
     --vn-focus-ring: ${p.accent}; --vn-button-radius: ${p.radius};
   }
-  ${root} [data-vn-ornament-group][data-vn-preset="${id6}"] { display: block; }
+  ${root} [data-vn-ornament-group][data-vn-preset="${id8}"] { display: block; }
   ${root} [data-vn-dialogue] {
     border-radius: ${p.radius}; border: 1px solid var(--vn-dialogue-border);
     font-family: var(--vn-font-family);
@@ -44356,9 +44898,9 @@ function plate(id6, p) {
     pointer-events: none;
   }
   @media (prefers-reduced-motion: no-preference) {
-    ${root}[data-vn-effect-intensity="full"] [data-vn-dialogue]::before { animation: vn-${id6}-edge 8s ease-in-out infinite; }
+    ${root}[data-vn-effect-intensity="full"] [data-vn-dialogue]::before { animation: vn-${id8}-edge 8s ease-in-out infinite; }
   }
-  @keyframes vn-${id6}-edge { 0%,100% { opacity: .45; } 50% { opacity: .95; } }
+  @keyframes vn-${id8}-edge { 0%,100% { opacity: .45; } 50% { opacity: .95; } }
   ${root} [data-vn-control]:hover:not(:disabled),
   ${root} [data-vn-control][data-vn-active="true"] { color: ${p.accent}; background: ${p.accent}18; box-shadow: inset 0 -1px 0 ${p.accent}70; }
   ${root} [data-vn-choice]:hover:not(:disabled), ${root} [data-vn-choice]:focus-visible {
@@ -44371,16 +44913,16 @@ function plate(id6, p) {
   ${root} [data-vn-dialogue-text] { scrollbar-color: ${p.accent}80 transparent; }
   `;
 }
-var ATELIER_CSS = Object.fromEntries(Object.entries(ATELIER_PALETTES).map(([id6, p]) => [id6, plate(id6, p)]));
-function ornament(id6, shapes) {
-  return `<g data-vn-ornament-group="" data-vn-preset="${id6}" aria-hidden="true" focusable="false" vector-effect="non-scaling-stroke" fill="none" stroke="currentColor" opacity="0.42">${shapes}</g>`;
+var ATELIER_CSS = Object.fromEntries(Object.entries(ATELIER_PALETTES).map(([id8, p]) => [id8, plate(id8, p)]));
+function ornament(id8, shapes) {
+  return `<g data-vn-ornament-group="" data-vn-preset="${id8}" aria-hidden="true" focusable="false" vector-effect="non-scaling-stroke" fill="none" stroke="currentColor" opacity="0.42">${shapes}</g>`;
 }
 var ATELIER_ORNAMENTS = {
   "astral-glass": ornament("astral-glass", '<path d="M45 155V55H145 M1455 55H1555V155" stroke-width="1.5"/><g stroke-width="1"><circle cx="105" cy="105" r="32"/><path d="M73 105H137 M105 73V137 M80 80L130 130 M80 130L130 80"/><path d="M1460 80L1490 110L1520 80L1490 50Z M1450 135L1525 160"/></g><circle cx="1460" cy="138" r="3" fill="currentColor"/>'),
   "neon-rain": ornament("neon-rain", '<path d="M45 155V55H135 M1465 55H1555V155 M45 740V825H100 M1500 825H1555V740" stroke-width="2"/><path d="M65 75H105 M65 85H90 M1495 75H1535 M1510 85H1535" stroke-width="1"/><g opacity=".5"><path d="M75 220L65 260 M100 280L90 320 M1510 200L1500 240 M1535 310L1525 350"/></g>'),
   "obsidian-reliquary": ornament("obsidian-reliquary", '<path d="M45 165V75L75 45H165 M1435 45H1525L1555 75V165" stroke-width="1.8"/><path d="M57 150V80L80 57H150 M1450 57H1520L1543 80V150"/><path d="M85 100L100 85L115 100L100 115Z M1485 100L1500 85L1515 100L1500 115Z"/><path d="M650 45H755L780 60L800 40L820 60L845 45H950" stroke-width="1"/>')
 };
-var ATELIER_SHELL_CSS = Object.entries(ATELIER_PALETTES).map(([id6, p]) => `[data-vn-shell][data-vn-preset="${id6}"] {
+var ATELIER_SHELL_CSS = Object.entries(ATELIER_PALETTES).map(([id8, p]) => `[data-vn-shell][data-vn-preset="${id8}"] {
   --vn-shell-bg: ${p.solid}; --vn-shell-bg-hover: color-mix(in srgb, ${p.accent} 15%, ${p.solid});
   --vn-shell-panel: ${p.solid}; --vn-shell-field: color-mix(in srgb, ${p.solid} 85%, black);
   --vn-shell-button: color-mix(in srgb, ${p.accent} 10%, ${p.solid}); --vn-shell-text: ${p.text};
@@ -46932,6 +47474,15 @@ function bondTier(affinity) {
     return "Warming";
   return affinity <= -50 ? "Rival / Hostile" : "Guarded";
 }
+var SCENE_LIGHTS = {
+  danger_crimson: { glow: "rgba(244, 63, 94, 0.45)", tint: "rgba(225, 29, 72, 0.12)" },
+  sepia_flashback: { glow: "rgba(217, 119, 6, 0.40)", tint: "rgba(180, 83, 9, 0.12)" },
+  romance_rose: { glow: "rgba(244, 114, 182, 0.45)", tint: "rgba(236, 72, 153, 0.12)" },
+  cold_mist: { glow: "rgba(56, 189, 248, 0.40)", tint: "rgba(14, 165, 233, 0.12)" },
+  warm_amber: { glow: "rgba(245, 158, 11, 0.45)", tint: "rgba(217, 119, 6, 0.12)" },
+  nocturne: { glow: "rgba(99, 102, 241, 0.40)", tint: "rgba(79, 70, 229, 0.12)" },
+  neon_violet: { glow: "rgba(217, 70, 239, 0.45)", tint: "rgba(168, 85, 247, 0.14)" }
+};
 
 class VnStage {
   panelMount;
@@ -47557,10 +48108,10 @@ class VnStage {
       this.closeSpeakerPeek();
       return;
     }
-    const name = this.speaker.textContent?.trim() || "";
-    if (!name)
+    const name2 = this.speaker.textContent?.trim() || "";
+    if (!name2)
       return;
-    const char = findCharacterDNA(this.characterDnaLibrary, name);
+    const char = findCharacterDNA(this.characterDnaLibrary, name2);
     const card = document.createElement("div");
     card.dataset.vnSpeakerPeek = "";
     card.style.cssText = "position:relative;margin-top:6px;padding:10px 12px;border-radius:12px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.16));background:var(--vn-shell-panel, rgba(15,23,42,0.95));color:var(--vn-shell-text, #f8fafc);box-shadow:var(--vn-shell-shadow, 0 12px 28px rgba(0,0,0,0.45));display:flex;flex-direction:column;gap:8px;max-width:340px;z-index:24;";
@@ -47569,7 +48120,7 @@ class VnStage {
     head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
     const title = document.createElement("strong");
     title.style.cssText = "font-size:13px;color:var(--vn-shell-text, #fff);";
-    title.textContent = char ? char.name : name;
+    title.textContent = char ? char.name : name2;
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.textContent = "×";
@@ -47580,7 +48131,7 @@ class VnStage {
     card.append(head);
     if (char) {
       const authoredOutfit = char.locked || char.activeWardrobeKey || char.activeOutfit && !char.autoDiscovered;
-      const outfit = (authoredOutfit ? char.activeOutfit : this.inferredOutfits.get(name.toLowerCase()) ?? char.activeOutfit) || char.signatureOutfit;
+      const outfit = (authoredOutfit ? char.activeOutfit : this.inferredOutfits.get(name2.toLowerCase()) ?? char.activeOutfit) || char.signatureOutfit;
       const summary = [
         char.demeanor ? char.demeanor : "",
         outfit ? `Wearing: ${outfit}` : ""
@@ -47631,15 +48182,15 @@ class VnStage {
     const askBtn = document.createElement("button");
     askBtn.type = "button";
     askBtn.dataset.vnQuickAsk = "";
-    askBtn.textContent = `Ask ${name}`;
+    askBtn.textContent = `Ask ${name2}`;
     askBtn.style.cssText = "min-height:44px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:650;cursor:pointer;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.18));background:var(--vn-shell-button,rgba(255,255,255,0.08));color:var(--vn-shell-text,#f8fafc);";
-    askBtn.addEventListener("click", () => draftIntoComposer(`${name}, `));
+    askBtn.addEventListener("click", () => draftIntoComposer(`${name2}, `));
     const examBtn = document.createElement("button");
     examBtn.type = "button";
     examBtn.dataset.vnQuickExamine = "";
     examBtn.textContent = "Examine";
     examBtn.style.cssText = "min-height:44px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:650;cursor:pointer;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.18));background:var(--vn-shell-button,rgba(255,255,255,0.08));color:var(--vn-shell-text,#f8fafc);";
-    examBtn.addEventListener("click", () => draftIntoComposer(`*looks closely at ${name}* `));
+    examBtn.addEventListener("click", () => draftIntoComposer(`*looks closely at ${name2}* `));
     quickRow.append(askBtn, examBtn);
     card.append(quickRow);
     if (this.folioOpenCallback) {
@@ -47649,7 +48200,7 @@ class VnStage {
       openBtn.style.cssText = "align-self:flex-start;min-height:44px;padding:8px 14px;border-radius:6px;border:1px solid rgba(110,231,183,0.45);background:rgba(110,231,183,0.12);color:#a7f3d0;font-size:12px;font-weight:600;cursor:pointer;";
       openBtn.addEventListener("click", () => {
         this.closeSpeakerPeek();
-        this.folioOpenCallback?.(name);
+        this.folioOpenCallback?.(name2);
       });
       card.append(openBtn);
     }
@@ -47960,7 +48511,7 @@ class VnStage {
     if (shell)
       shell.dataset.apertureMode = mode;
   }
-  openEntity(id6, trigger) {
+  openEntity(id8, trigger) {
     if (this.destroyed)
       return;
     if (this.isTyping)
@@ -47969,7 +48520,7 @@ class VnStage {
     const shell = this.outerRoot.querySelector("[data-vn-shell]");
     if (shell)
       shell.dataset.vnDossierOpen = "true";
-    this.dossiers.openEntityFromStage(id6, trigger ?? this.root);
+    this.dossiers.openEntityFromStage(id8, trigger ?? this.root);
   }
   getRevealedThrough() {
     return this.state.paragraphs.length ? Math.min(this.state.highestRevealedIndex, this.state.paragraphs.length - 1) : -1;
@@ -48513,6 +49064,23 @@ class VnStage {
   getActiveSceneImage() {
     return this.activeImageEl;
   }
+  sceneForRehearsal() {
+    const paragraph = this.state.paragraphs[this.state.currentParagraphIndex];
+    if (!paragraph || this.isReadingUserParagraph())
+      return null;
+    const image = this.isCrossfading() && this.incomingImageEl.complete && this.incomingImageEl.naturalWidth ? this.incomingImageEl : this.activeImageEl;
+    const art = image.dataset.vnEmpty === "true" || !image.complete || !image.naturalWidth ? null : image.currentSrc || image.getAttribute("src");
+    const cap = paragraph.effectLimit;
+    return {
+      art,
+      fit: image.dataset.vnSceneImageFit === "contain" ? "contain" : "cover",
+      portraits: this.castStage.rehearsalPortraits(),
+      text: stripUnknownPresetTags(paragraph.text).slice(0, 6000),
+      speaker: paragraph.speaker ?? "",
+      effectCap: this.effectIntensity === "off" || cap === "off" ? "off" : this.effectIntensity === "gentle" || cap === "gentle" ? "gentle" : "full",
+      tint: SCENE_LIGHTS[this.atmosphereFor(paragraph.text, paragraph.ambient ?? paragraph.cue?.ambient)]?.tint ?? "transparent"
+    };
+  }
   getIncomingSceneImage() {
     return this.incomingImageEl;
   }
@@ -48954,34 +49522,34 @@ class VnStage {
       this.pageBackdrop.alt = "";
       this.pageBackdrop.setAttribute("aria-hidden", "true");
       this.scene.prepend(this.pageBackdrop);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.vnPageView = "";
-      button.textContent = "⛶";
-      button.setAttribute("aria-label", "View whole page");
-      button.title = "View whole page";
-      button.setAttribute("aria-pressed", "false");
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.dataset.vnPageView = "";
+      button2.textContent = "⛶";
+      button2.setAttribute("aria-label", "View whole page");
+      button2.title = "View whole page";
+      button2.setAttribute("aria-pressed", "false");
       const toggle = () => {
         this.toggleAutoPlay(false);
         this.toggleSkip(false);
         const focused = this.root.dataset.vnPageFocus !== "true";
         this.root.dataset.vnPageFocus = String(focused);
-        button.setAttribute("aria-pressed", String(focused));
-        button.setAttribute("aria-label", focused ? "Return to reading" : "View whole page");
-        button.title = focused ? "Return to reading" : "View whole page";
+        button2.setAttribute("aria-pressed", String(focused));
+        button2.setAttribute("aria-label", focused ? "Return to reading" : "View whole page");
+        button2.title = focused ? "Return to reading" : "View whole page";
       };
-      button.addEventListener("click", (event) => {
+      button2.addEventListener("click", (event) => {
         event.stopPropagation();
         toggle();
       });
-      button.addEventListener("keydown", (event) => {
+      button2.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && this.root.dataset.vnPageFocus === "true") {
           event.stopPropagation();
           toggle();
         }
       });
-      this.pageViewButton = button;
-      this.root.append(button);
+      this.pageViewButton = button2;
+      this.root.append(button2);
     }
     if (this.pageBackdrop) {
       this.pageBackdrop.hidden = !page;
@@ -49396,18 +49964,18 @@ class VnStage {
       this.advance();
     });
     this.choiceList.addEventListener("click", (event) => {
-      const button = event.target instanceof Element ? event.target.closest("[data-vn-choice]") : null;
-      if (!button || button.disabled)
+      const button2 = event.target instanceof Element ? event.target.closest("[data-vn-choice]") : null;
+      if (!button2 || button2.disabled)
         return;
-      const choice = this.state.choices.find((item) => item.id === button.dataset.vnChoiceId);
+      const choice = this.state.choices.find((item) => item.id === button2.dataset.vnChoiceId);
       if (choice)
         this.submitChoice(choice);
     });
     this.gameChoiceList.addEventListener("click", (event) => {
-      const button = event.target instanceof Element ? event.target.closest("[data-vn-game-choice]") : null;
-      if (!button || button.disabled)
+      const button2 = event.target instanceof Element ? event.target.closest("[data-vn-game-choice]") : null;
+      if (!button2 || button2.disabled)
         return;
-      const choice = this.gameChoices.find((item) => gameMoveKey(item) === button.dataset.vnGameChoiceKey);
+      const choice = this.gameChoices.find((item) => gameMoveKey(item) === button2.dataset.vnGameChoiceKey);
       if (choice)
         this.submitGameChoice(choice);
     });
@@ -49721,7 +50289,7 @@ class VnStage {
       if (this.state.paragraphs === paragraphs && this.state.phase === "submitting") {
         this.pendingChoiceId = null;
         this.dispatch({ type: "submit-failed", error: errorMessage(error61) });
-        [...this.choiceList.querySelectorAll("[data-vn-choice]")].find((button) => button.dataset.vnChoiceId === choice.id)?.focus({ preventScroll: true });
+        [...this.choiceList.querySelectorAll("[data-vn-choice]")].find((button2) => button2.dataset.vnChoiceId === choice.id)?.focus({ preventScroll: true });
       }
     } finally {
       if (this.state.paragraphs === paragraphs && this.pendingChoiceId === choice.id)
@@ -49994,10 +50562,10 @@ class VnStage {
       this.skipTimer = null;
     }
   }
-  recordBacklogAndRead(id6, speaker, text, formatted, paragraphIndex) {
-    if (this.readParagraphIds.has(id6))
+  recordBacklogAndRead(id8, speaker, text, formatted, paragraphIndex) {
+    if (this.readParagraphIds.has(id8))
       return;
-    this.readParagraphIds.add(id6);
+    this.readParagraphIds.add(id8);
     const last = this.backlogEntries[this.backlogEntries.length - 1];
     if (!last || last.text !== text || last.speaker !== speaker) {
       this.backlogEntries.push({ speaker, text, formatted, paragraphIndex });
@@ -50292,11 +50860,7 @@ class VnStage {
       this.activeImageEl.dataset.vnCameraMotion = "drift";
     }
   }
-  updateAtmosphericLighting(text, ambient) {
-    if (this.readerPreferences?.atmosphericLighting === false || this.effectIntensity === "off") {
-      delete this.scene.dataset.vnAtmosphere;
-      return;
-    }
+  atmosphereFor(text, ambient) {
     const lower = text.toLocaleLowerCase();
     const unquotedLower = text.replace(/["“”][^"“”]*["“”]/g, " ").toLocaleLowerCase();
     let atmosphere = "";
@@ -50320,19 +50884,18 @@ class VnStage {
         atmosphere = "neon_violet";
       }
     }
+    return atmosphere;
+  }
+  updateAtmosphericLighting(text, ambient) {
+    if (this.readerPreferences?.atmosphericLighting === false || this.effectIntensity === "off") {
+      delete this.scene.dataset.vnAtmosphere;
+      return;
+    }
+    const atmosphere = this.atmosphereFor(text, ambient);
     if (atmosphere) {
       this.scene.dataset.vnAtmosphere = atmosphere;
-      const glowMap = {
-        danger_crimson: { glow: "rgba(244, 63, 94, 0.45)", tint: "rgba(225, 29, 72, 0.12)" },
-        sepia_flashback: { glow: "rgba(217, 119, 6, 0.40)", tint: "rgba(180, 83, 9, 0.12)" },
-        romance_rose: { glow: "rgba(244, 114, 182, 0.45)", tint: "rgba(236, 72, 153, 0.12)" },
-        cold_mist: { glow: "rgba(56, 189, 248, 0.40)", tint: "rgba(14, 165, 233, 0.12)" },
-        warm_amber: { glow: "rgba(245, 158, 11, 0.45)", tint: "rgba(217, 119, 6, 0.12)" },
-        nocturne: { glow: "rgba(99, 102, 241, 0.40)", tint: "rgba(79, 70, 229, 0.12)" },
-        neon_violet: { glow: "rgba(217, 70, 239, 0.45)", tint: "rgba(168, 85, 247, 0.14)" }
-      };
       const shell = this.outerRoot.querySelector("[data-vn-shell]");
-      const conf = glowMap[atmosphere];
+      const conf = SCENE_LIGHTS[atmosphere];
       if (conf) {
         if (typeof this.root.style?.setProperty === "function") {
           this.root.style.setProperty("--vn-atmosphere-glow", conf.glow);
@@ -50526,15 +51089,15 @@ class VnStage {
         const row = document.createElement("span");
         row.setAttribute("data-vn-badge-actions", "");
         for (const item of actions) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.setAttribute("data-vn-badge-action", "");
-          button.textContent = item.label;
-          button.addEventListener("click", (e) => {
+          const button2 = document.createElement("button");
+          button2.type = "button";
+          button2.setAttribute("data-vn-badge-action", "");
+          button2.textContent = item.label;
+          button2.addEventListener("click", (e) => {
             e.stopPropagation();
             item.action();
           });
-          row.appendChild(button);
+          row.appendChild(button2);
           if (item.note) {
             const note = document.createElement("span");
             note.setAttribute("data-vn-badge-note", "");
@@ -50600,14 +51163,14 @@ class VnStage {
         section.append(heading);
       }
       for (const choice of choices) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.setAttribute("data-vn-game-choice", "");
-        button.dataset.vnGameChoiceId = choice.id;
-        button.dataset.vnGameChoiceKey = gameMoveKey(choice);
-        button.disabled = isBusy;
+        const button2 = document.createElement("button");
+        button2.type = "button";
+        button2.setAttribute("data-vn-game-choice", "");
+        button2.dataset.vnGameChoiceId = choice.id;
+        button2.dataset.vnGameChoiceKey = gameMoveKey(choice);
+        button2.disabled = isBusy;
         if (choice.detail)
-          button.title = choice.detail;
+          button2.title = choice.detail;
         const label = document.createElement("span");
         label.textContent = choice.label;
         if (choice.provider) {
@@ -50616,16 +51179,16 @@ class VnStage {
           provider.textContent = choice.provider;
           label.append(provider);
         }
-        button.append(label);
+        button2.append(label);
         if (choice.odds !== null) {
           const odds = document.createElement("span");
           odds.setAttribute("data-vn-game-odds", choice.odds >= 0.7 ? "good" : choice.odds >= 0.4 ? "fair" : "poor");
           odds.textContent = `${Math.round(choice.odds * 100)}%`;
-          button.append(odds);
+          button2.append(odds);
         }
         const row = document.createElement("div");
         row.dataset.vnGameMoveRow = "";
-        row.append(button);
+        row.append(button2);
         let detailPanel = null;
         if (choice.detail) {
           const info = document.createElement("button");
@@ -50694,22 +51257,22 @@ class VnStage {
     if (showChoices) {
       this.choiceList.replaceChildren(...availableChoices(this.state).map((choice) => {
         const item = document.createElement("li");
-        const button = document.createElement("button");
-        button.type = "button";
-        button.setAttribute("data-vn-choice", "");
-        button.dataset.vnChoiceId = choice.id;
-        button.textContent = choice.label;
-        this.rpgHud.decorateChoiceButton(button, choice);
+        const button2 = document.createElement("button");
+        button2.type = "button";
+        button2.setAttribute("data-vn-choice", "");
+        button2.dataset.vnChoiceId = choice.id;
+        button2.textContent = choice.label;
+        this.rpgHud.decorateChoiceButton(button2, choice);
         if (choice.disabled && !choice.lockedReason) {
           const reason = document.createElement("span");
           reason.dataset.vnChoiceLock = "";
           reason.textContent = "Requirements are unmet";
-          button.append(reason);
+          button2.append(reason);
         }
-        button.disabled = Boolean(choice.disabled) || isBusy;
+        button2.disabled = Boolean(choice.disabled) || isBusy;
         if (choice.disabled)
-          button.setAttribute("aria-disabled", "true");
-        item.append(button);
+          button2.setAttribute("aria-disabled", "true");
+        item.append(button2);
         return item;
       }));
     } else if (this.choiceList.childElementCount > 0) {
@@ -51720,24 +52283,24 @@ class QuickTunerDrawer {
     presetsWrap.className = "tuner-presets";
     presetsWrap.setAttribute("role", "group");
     presetsWrap.setAttribute("aria-label", "Theme preset");
-    for (const id6 of THEME_PRESET_IDS) {
+    for (const id8 of THEME_PRESET_IDS) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "tuner-pill";
-      btn.dataset.tunerPreset = id6;
-      btn.textContent = PRESET_SHORT_LABELS[id6];
+      btn.dataset.tunerPreset = id8;
+      btn.textContent = PRESET_SHORT_LABELS[id8];
       btn.setAttribute("aria-pressed", "false");
       btn.addEventListener("click", () => {
         if (!this.config)
           return;
-        this.config = { ...this.config, themePreset: id6 };
+        this.config = { ...this.config, themePreset: id8 };
         this.syncUi();
-        this.options.onPatch({ themePreset: id6 });
+        this.options.onPatch({ themePreset: id8 });
       });
-      this.presetButtons.set(id6, btn);
+      this.presetButtons.set(id8, btn);
       presetsWrap.appendChild(btn);
     }
-    const makeRange = (labelText, min, max, step, name) => {
+    const makeRange = (labelText, min, max, step, name2) => {
       const wrap = document.createElement("label");
       wrap.className = "tuner-field";
       const row = document.createElement("div");
@@ -51752,7 +52315,7 @@ class QuickTunerDrawer {
       input2.min = String(min);
       input2.max = String(max);
       input2.step = String(step);
-      input2.dataset.tunerRange = name;
+      input2.dataset.tunerRange = name2;
       wrap.append(row, input2);
       return { wrap, input: input2, val };
     };
@@ -51862,8 +52425,8 @@ class QuickTunerDrawer {
     if (!cfg)
       return;
     this.host.dataset.vnPreset = cfg.themePreset;
-    for (const [id6, btn] of this.presetButtons.entries()) {
-      btn.setAttribute("aria-pressed", id6 === cfg.themePreset ? "true" : "false");
+    for (const [id8, btn] of this.presetButtons.entries()) {
+      btn.setAttribute("aria-pressed", id8 === cfg.themePreset ? "true" : "false");
     }
     const opacity = cfg.readerPreferences.backgroundOpacity ?? 0.9;
     this.opacityInput.value = String(opacity);
@@ -51879,9 +52442,217 @@ class QuickTunerDrawer {
   }
 }
 
+// src/frontend/stage/scene-rehearsal.ts
+var REHEARSAL_CSS = `
+[data-scene-rehearsal]{padding:0 10px 8px;border-radius:10px;border:1px solid var(--vn-shell-border,#456);min-width:0;overflow-wrap:anywhere}
+[data-scene-rehearsal]>summary{min-height:44px;align-content:center;font-weight:650;cursor:pointer;color:var(--vn-shell-accent,#85d9fa)}
+[data-rehearsal-preview]{position:relative;isolation:isolate;display:grid;min-height:200px;align-content:end;border-radius:8px;overflow:hidden;background:linear-gradient(165deg,#202b3b,#0c121c)}
+[data-rehearsal-art],[data-rehearsal-light]{position:absolute;inset:0;width:100%;height:100%;z-index:-2}
+[data-rehearsal-art]{object-fit:var(--rehearsal-fit,cover);transform-origin:50% 45%}
+[data-rehearsal-light]{z-index:-1;background:linear-gradient(155deg,var(--rehearsal-tint,transparent),transparent 75%)}
+[data-rehearsal-art][data-camera=full]{animation:rehearsal-drift 14s ease-in-out infinite alternate;--rehearsal-scale:1.10}
+[data-rehearsal-art][data-camera=gentle]{animation:rehearsal-drift 22s ease-in-out infinite alternate;--rehearsal-scale:1.04}
+@keyframes rehearsal-drift{from{transform:scale(1)}to{transform:scale(var(--rehearsal-scale))}}
+@media(prefers-reduced-motion:reduce){[data-rehearsal-art][data-camera]{animation:none}}
+[data-rehearsal-cast]{display:flex;gap:4px;justify-content:center}
+[data-rehearsal-cast] img{min-width:0;max-width:34%;height:clamp(48px,15vh,145px);object-fit:contain;opacity:.82}
+[data-rehearsal-cast] img[data-active]{opacity:1;filter:drop-shadow(0 0 10px var(--vn-shell-accent,#85d9fa))}
+[data-rehearsal-caption]{margin:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(207,227,244,.38);color:white;background:rgb(14 23 37 / var(--rehearsal-opacity));text-shadow:0 1px 4px #000}
+[data-rehearsal-caption] p{margin:4px 0 0;font:1em/1.55 Georgia,serif;max-height:8em;overflow:auto;white-space:pre-wrap}
+[data-rehearsal-fields]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}
+[data-rehearsal-fields] label{min-width:0;display:grid;gap:4px}
+[data-scene-rehearsal] input,[data-scene-rehearsal] select{min-width:0;width:100%;box-sizing:border-box;min-height:44px;font:inherit}
+[data-scene-rehearsal] input[type=checkbox]{width:22px}
+[data-scene-rehearsal] [role=status]:empty{display:none}
+`;
+
+class SceneRehearsal {
+  send;
+  element = document.createElement("details");
+  preferences = null;
+  pending = false;
+  epoch = 0;
+  constructor(send) {
+    this.send = send;
+    this.element.dataset.sceneRehearsal = "";
+    this.element.hidden = true;
+  }
+  reset() {
+    this.epoch++;
+    this.pending = false;
+    this.preferences = null;
+    this.element.open = false;
+    this.element.hidden = true;
+    this.element.ontoggle = null;
+    this.element.replaceChildren();
+  }
+  setScene(scene, preferences) {
+    this.reset();
+    this.preferences = preferences;
+    const summary = document.createElement("summary");
+    summary.textContent = "Scene rehearsal";
+    this.element.append(summary);
+    this.element.hidden = false;
+    this.element.ontoggle = () => {
+      if (!this.element.open)
+        return;
+      this.build(scene, preferences);
+    };
+  }
+  build(scene, preferences) {
+    const view = document.createElement("div");
+    view.dataset.rehearsalPreview = "";
+    view.style.setProperty("--rehearsal-fit", scene.fit);
+    const art = document.createElement("img");
+    art.dataset.rehearsalArt = "";
+    art.alt = "";
+    art.hidden = !scene.art;
+    const empty = document.createElement("p");
+    empty.className = "dir-empty";
+    empty.textContent = "No saved artwork is visible at this passage.";
+    empty.hidden = Boolean(scene.art);
+    art.onerror = () => {
+      art.hidden = true;
+      empty.hidden = false;
+    };
+    if (scene.art)
+      art.src = scene.art;
+    const light = document.createElement("div");
+    light.dataset.rehearsalLight = "";
+    const cast = document.createElement("div");
+    cast.dataset.rehearsalCast = "";
+    for (const portrait of scene.portraits) {
+      const image = document.createElement("img");
+      image.src = portrait.url;
+      image.alt = portrait.name;
+      image.toggleAttribute("data-active", portrait.active);
+      image.onerror = () => {
+        image.hidden = true;
+      };
+      cast.append(image);
+    }
+    const caption = document.createElement("div");
+    caption.dataset.rehearsalCaption = "";
+    const speaker = document.createElement("strong");
+    speaker.textContent = scene.speaker;
+    const text = document.createElement("p");
+    text.textContent = scene.text;
+    text.tabIndex = 0;
+    caption.append(speaker, text);
+    view.append(art, light, cast, caption);
+    const camera = document.createElement("select");
+    for (const [value, label] of [["off", "Still"], ["gentle", "Gentle drift"], ["full", "Cinematic"]]) {
+      camera.add(new Option(label, value));
+    }
+    const lighting = document.createElement("input");
+    lighting.type = "checkbox";
+    const opacity = document.createElement("input");
+    opacity.type = "range";
+    opacity.min = "0";
+    opacity.max = "1";
+    opacity.step = "0.01";
+    const name2 = document.createElement("input");
+    name2.placeholder = "Evening read";
+    name2.maxLength = 48;
+    const presets2 = document.createElement("select");
+    const status = document.createElement("p");
+    status.setAttribute("role", "status");
+    const fields2 = document.createElement("div");
+    fields2.dataset.rehearsalFields = "";
+    const addField = (label, control) => {
+      const item = document.createElement("label");
+      control.setAttribute("aria-label", label);
+      item.append(label, control);
+      fields2.append(item);
+    };
+    addField("Camera move", camera);
+    addField("Atmospheric lighting", lighting);
+    addField("Caption opacity", opacity);
+    addField("Saved presentation", presets2);
+    addField("Preset name", name2);
+    const look = () => ({
+      camera: camera.value,
+      lighting: lighting.checked,
+      captionOpacity: opacity.valueAsNumber
+    });
+    const repaint = () => {
+      const settings = look();
+      const movement = scene.effectCap === "off" ? "off" : scene.effectCap === "gentle" && settings.camera === "full" ? "gentle" : settings.camera;
+      art.dataset.camera = this.element.open ? movement : "off";
+      view.style.setProperty("--rehearsal-tint", settings.lighting && scene.effectCap !== "off" ? scene.tint : "transparent");
+      caption.style.setProperty("--rehearsal-opacity", String(settings.captionOpacity));
+    };
+    const setLook = (settings) => {
+      camera.value = settings.camera;
+      lighting.checked = settings.lighting;
+      opacity.value = String(settings.captionOpacity);
+      repaint();
+    };
+    const controls = document.createElement("div");
+    controls.className = "dir-row";
+    const addButton = (label, action) => {
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.className = "dir-pill";
+      button2.textContent = label;
+      button2.onclick = action;
+      controls.append(button2);
+      return button2;
+    };
+    const updateOptions = (focusName = presets2.value) => {
+      const choices = this.preferences?.rehearsalPresets ?? [];
+      presets2.replaceChildren(new Option("Select a preset", ""), ...choices.map((preset) => new Option(preset.name, preset.name)));
+      if (choices.some((preset) => preset.name === focusName))
+        presets2.value = focusName;
+    };
+    const syncControls = () => {
+      save.disabled = this.pending || !name2.value.trim();
+      apply.disabled = remove.disabled = this.pending || !presets2.value;
+    };
+    const send = (command, success2) => {
+      if (this.pending)
+        return;
+      const epoch = this.epoch;
+      this.pending = true;
+      status.textContent = "Saving presentation…";
+      syncControls();
+      this.send(command, (current, error61) => {
+        if (epoch !== this.epoch)
+          return;
+        this.pending = false;
+        if (current) {
+          this.preferences = current;
+          updateOptions(command.action === "save" ? command.preset.name : presets2.value);
+        }
+        status.textContent = error61 || success2;
+        syncControls();
+      });
+    };
+    const save = addButton("Save preset", () => send({ action: "save", preset: { name: name2.value.trim(), ...look() } }, "Preset saved."));
+    const apply = addButton("Apply selected preset", () => send({ action: "apply", name: presets2.value }, "Preset applied to the reader."));
+    const remove = addButton("Remove selected preset", () => send({ action: "remove", name: presets2.value }, "Preset removed."));
+    presets2.onchange = () => {
+      const picked = this.preferences?.rehearsalPresets?.find((preset) => preset.name === presets2.value);
+      if (picked) {
+        setLook(picked);
+        name2.value = picked.name;
+      }
+      syncControls();
+    };
+    name2.oninput = syncControls;
+    camera.onchange = lighting.onchange = opacity.oninput = repaint;
+    this.element.ontoggle = repaint;
+    this.element.append(empty, view, fields2, controls, status);
+    updateOptions();
+    setLook(sceneLook(preferences));
+    syncControls();
+  }
+}
+
 // src/frontend/stage/quick-director.ts
 var DIRECTOR_CSS = `
 ${VN_SHELL_PRESET_TOKENS_CSS}
+${REHEARSAL_CSS}
 :host {
   position: absolute;
   inset: 0;
@@ -52020,6 +52791,7 @@ class QuickDirectorPopover {
   selectedButton;
   openState = false;
   opener = null;
+  rehearsal;
   constructor(options) {
     this.options = options;
     this.host = document.createElement("div");
@@ -52151,6 +52923,10 @@ class QuickDirectorPopover {
     });
     this.controls.append(regenRow, shotGroup, relightGroup, outfitWrap, this.direction, this.prepareBtn);
     sheet.append(head, target2, this.controls, this.openArtworkBtn);
+    if (options.onRehearsalPreset) {
+      this.rehearsal = new SceneRehearsal(options.onRehearsalPreset);
+      sheet.append(this.rehearsal.element);
+    }
     backdrop.appendChild(sheet);
     this.shadow.append(style, backdrop);
     options.mount.appendChild(this.host);
@@ -52168,10 +52944,10 @@ class QuickDirectorPopover {
     else
       this.picture.src = picture.imageUrl;
   }
-  preview(button, command) {
+  preview(button2, command) {
     this.selectedButton?.setAttribute("aria-pressed", "false");
-    this.selectedButton = button;
-    button.setAttribute("aria-pressed", "true");
+    this.selectedButton = button2;
+    button2.setAttribute("aria-pressed", "true");
     this.staged = command;
     this.direction.textContent = command.guidance;
     this.prepareBtn.disabled = false;
@@ -52213,6 +52989,12 @@ class QuickDirectorPopover {
   setPreset(preset) {
     this.host.dataset.vnPreset = preset;
   }
+  setRehearsalScene(scene, preferences) {
+    if (scene && preferences)
+      this.rehearsal?.setScene(scene, preferences);
+    else
+      this.rehearsal?.reset();
+  }
   isOpen() {
     return this.openState;
   }
@@ -52236,6 +53018,7 @@ class QuickDirectorPopover {
     if (!this.openState)
       return;
     this.openState = false;
+    this.rehearsal?.reset();
     this.host.dataset.open = "false";
     this.host.style.display = "none";
     if (restoreFocus)
@@ -52433,7 +53216,7 @@ Place the most critical information first:
 function renderAdvancedRoutes({ group, find, more, pageLink }) {
   return `
             <p class="muted">Focused technical editors. Save each page explicitly; ordinary preferences save as you change them.</p>
-            <div data-page-links>${["parameters", "filtering", "css", "storage", "reset"].map((id6) => pageLink(id6)).join("")}</div>
+            <div data-page-links>${["parameters", "filtering", "css", "storage", "reset"].map((id8) => pageLink(id8)).join("")}</div>
             <section data-workspace-page="filtering">${group("Text filtering", `
               <label data-field ${find("Ignored tags", "status inventory hide strip blocks filter")}><span>Ignored tags</span><input name="ignoredTags" type="text" placeholder="status, stats, system, inventory" /><small>Comma-separated tag names. Removes the whole matching block from dialogue and image planning.</small>${more("For example status, inventory, WORLD_VOICE. Multiline blocks are removed too. Recognized status blocks stay available as plain-text cards in Panels. The chat message is not edited.")}</label>
               <label data-field ${find("Display regex rules", "regex replace formatting dialogue pattern")}><span>Display regex rules</span><textarea name="displayRegexRules" spellcheck="false" placeholder="/§([^§]+)§/g => <em class=&quot;vn-transmission&quot;>$1</em>"></textarea><small>One rule per line: <code>/pattern/flags =&gt; replacement</code>. Dialogue formatting only.</small>${more("<code>pattern =&gt; replacement</code> also works. An empty replacement hides a match from dialogue, not from image planning. Only safe inline formatting renders here. For full HTML/SVG cards, open Panels in the novel view.")}</label>
@@ -52841,17 +53624,17 @@ var guidance = {
   generic: "Use clear visual descriptions with principal subject and action first. Preserve identity, wardrobe, scene and composition. Model-specific syntax and tokenizer limits are unverified."
 };
 function resolveImagePromptProfile(provider, model, settings = {}, live, liveOutputs) {
-  const p = provider?.trim().toLowerCase() ?? "", id6 = model?.trim() ?? "", f = family(id6.toLowerCase(), p), auto = settings.automaticImagePromptSettings !== false;
-  const isIdeogram = /ideogram/i.test(id6) || /ideogram/i.test(model ?? "");
-  const liveLimit = p === "nanogpt" ? live?.get(id6) : undefined;
-  const catalogueLimit = p === "nanogpt" ? Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id6) ? NANOGPT_PROMPT_CAPABILITIES[id6] : isIdeogram ? 1e4 : undefined : undefined;
+  const p = provider?.trim().toLowerCase() ?? "", id8 = model?.trim() ?? "", f = family(id8.toLowerCase(), p), auto = settings.automaticImagePromptSettings !== false;
+  const isIdeogram = /ideogram/i.test(id8) || /ideogram/i.test(model ?? "");
+  const liveLimit = p === "nanogpt" ? live?.get(id8) : undefined;
+  const catalogueLimit = p === "nanogpt" ? Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id8) ? NANOGPT_PROMPT_CAPABILITIES[id8] : isIdeogram ? 1e4 : undefined : undefined;
   const providerLimit = liveLimit ?? catalogueLimit;
   const budget = typeof settings.imagePromptBudget === "number" && Number.isFinite(settings.imagePromptBudget) ? settings.imagePromptBudget : 3000;
   const manual = settings.imagePromptBudgetOverride ? Math.min(50000, Math.max(256, Math.trunc(budget))) : undefined;
   const fallbackTarget = isIdeogram ? 1e4 : 3000;
   const maximum = Math.min(manual ?? (auto ? providerLimit ?? fallbackTarget : fallbackTarget), providerLimit ?? 50000);
-  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id6) : undefined;
-  const output2 = auto && p === "nanogpt" ? liveOutput ?? (Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id6) ? NANOGPT_OUTPUT_CAPABILITIES[id6] : undefined) : undefined;
+  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id8) : undefined;
+  const output2 = auto && p === "nanogpt" ? liveOutput ?? (Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id8) ? NANOGPT_OUTPUT_CAPABILITIES[id8] : undefined) : undefined;
   return {
     version: 1,
     family: f,
@@ -52861,7 +53644,7 @@ function resolveImagePromptProfile(provider, model, settings = {}, live, liveOut
     ...manual !== undefined ? { manualBudget: manual } : {},
     format: !auto ? settings.imagePromptFormat ?? "description" : f === "novelai" ? "tags" : f === "anima" ? "hybrid" : "description",
     ...output2 ? { output: output2, outputSource: liveOutput ? "live" : "catalogue" } : {},
-    negativeMode: auto && (isIdeogram || p === "nanogpt" && (/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id6) || Boolean(output2) && /^flux-2-/.test(id6) || /^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id6) || /^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id6))) ? "positive-only" : "supported-or-unknown",
+    negativeMode: auto && (isIdeogram || p === "nanogpt" && (/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id8) || Boolean(output2) && /^flux-2-/.test(id8) || /^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id8) || /^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id8))) ? "positive-only" : "supported-or-unknown",
     guidance: auto ? guidance[f] : `Keep the user's ${settings.imagePromptFormat ?? "description"} prompt format and weighting syntax.`
   };
 }
@@ -53239,8 +54022,8 @@ class PresentationRulesPanel {
     this.el("[data-refresh]").onclick = () => this.request({ action: "list" });
     this.el("[data-new]").onclick = () => this.begin();
     this.el("[data-test-scene]").onclick = () => this.runSceneSimulation();
-    this.root.querySelectorAll("[data-pack]").forEach((button) => {
-      button.onclick = () => this.applyStarterPack(button.dataset.pack);
+    this.root.querySelectorAll("[data-pack]").forEach((button2) => {
+      button2.onclick = () => this.applyStarterPack(button2.dataset.pack);
     });
     this.el("form").oninput = () => {
       this.dirty = true;
@@ -53349,8 +54132,8 @@ class PresentationRulesPanel {
   document() {
     return this.catalog?.[this.scope] ?? null;
   }
-  name(id6) {
-    return this.config?.imageTemplates.find((t) => t.id === id6)?.name ?? id6;
+  name(id8) {
+    return this.config?.imageTemplates.find((t) => t.id === id8)?.name ?? id8;
   }
   setConfig(config2) {
     this.config = config2;
@@ -53399,20 +54182,20 @@ class PresentationRulesPanel {
       this.status("Open a chat before saving a chat preference.");
       return;
     }
-    const id6 = `preference-${createUiId()}`, chat = this.getChat();
+    const id8 = `preference-${createUiId()}`, chat = this.getChat();
     const request = {
       ...action,
       type: "vn_presentation_rules",
       version: 1,
-      requestId: id6,
+      requestId: id8,
       ...chat ? { chatId: chat } : {},
       ...action.action === "list" ? {} : { expectedRevision: this.document().revision }
     };
-    this.pending = { id: id6, chat, mutation: action.action !== "list" };
+    this.pending = { id: id8, chat, mutation: action.action !== "list" };
     this.busy(true);
     this.status(action.action === "list" ? "Loading preferences…" : "Saving rule…");
     this.timer = setTimeout(() => {
-      if (this.pending?.id !== id6)
+      if (this.pending?.id !== id8)
         return;
       const mutation = this.pending.mutation;
       this.pending = null;
@@ -53424,14 +54207,14 @@ class PresentationRulesPanel {
     try {
       this.send(request);
     } catch {
-      this.error("Could not send the request. Refresh to verify saved state.", id6);
+      this.error("Could not send the request. Refresh to verify saved state.", id8);
     }
   }
   busy(value) {
     this.el("fieldset").disabled = value;
     this.el("[data-scope]").disabled = value;
-    for (const button of this.root.querySelectorAll("[data-list] button,[data-new],[data-refresh],[data-pack],[data-test-scene]")) {
-      button.disabled = value;
+    for (const button2 of this.root.querySelectorAll("[data-list] button,[data-new],[data-refresh],[data-pack],[data-test-scene]")) {
+      button2.disabled = value;
     }
   }
   receive(chat, requestId, raw) {
@@ -53516,7 +54299,7 @@ Refresh to verify saved state. Your draft is kept.`);
         title.append(warnBadge);
       }
       const description = document.createElement("small");
-      description.textContent = `${describePresentationCondition(rule.when, (id6) => this.name(id6))} → ${describePresentationAction(rule.then, (id6) => this.name(id6))} · ${rule.enabled ? "On" : "Off"} · priority ${rule.priority}`;
+      description.textContent = `${describePresentationCondition(rule.when, (id8) => this.name(id8))} → ${describePresentationAction(rule.then, (id8) => this.name(id8))} · ${rule.enabled ? "On" : "Off"} · priority ${rule.priority}`;
       const row = document.createElement("div");
       row.className = "row";
       for (const [label, action] of [
@@ -53537,12 +54320,12 @@ Refresh to verify saved state. Your draft is kept.`);
           row.append(confirmBtn);
         }]
       ]) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = label;
-        button.disabled = Boolean(this.pending);
-        button.onclick = action;
-        row.append(button);
+        const button2 = document.createElement("button");
+        button2.type = "button";
+        button2.textContent = label;
+        button2.disabled = Boolean(this.pending);
+        button2.onclick = action;
+        row.append(button2);
       }
       card.append(title, description, row);
       list.append(card);
@@ -53691,8 +54474,8 @@ Refresh to verify saved state. Your draft is kept.`);
   }
   draft() {
     const kind = this.el("[data-condition]").value;
-    const name = this.el("[data-preference-name]").value.trim();
-    if (!name) {
+    const name2 = this.el("[data-preference-name]").value.trim();
+    if (!name2) {
       this.status("Rule name is required.");
       return null;
     }
@@ -53761,7 +54544,7 @@ Refresh to verify saved state. Your draft is kept.`);
     const parsedPriority = Number(this.el("[data-priority]").value);
     const parsed = PresentationRuleDraftSchema.safeParse({
       id: this.editingId,
-      name,
+      name: name2,
       enabled: this.el("[data-preference-enabled]").checked,
       priority: Number.isFinite(parsedPriority) ? parsedPriority : 50,
       when,
@@ -53780,8 +54563,8 @@ Refresh to verify saved state. Your draft is kept.`);
       return;
     }
     const previewEl = this.el("[data-preference-preview]");
-    previewEl.textContent = `${describePresentationCondition(rule.when, (id6) => this.name(id6))}
-↳ Action: ${describePresentationAction(rule.then, (id6) => this.name(id6))}
+    previewEl.textContent = `${describePresentationCondition(rule.when, (id8) => this.name(id8))}
+↳ Action: ${describePresentationAction(rule.then, (id8) => this.name(id8))}
 Scope: ${this.scope === "chat" ? "This chat" : "All my chats"} · Priority: ${rule.priority} · ${rule.enabled ? "Enabled" : "Saved Off"}`;
     previewEl.hidden = false;
     this.el("[data-preference-save]").disabled = Boolean(this.pending) || !this.document();
@@ -53895,8 +54678,8 @@ function collapse(value) {
 function normalizeCharacterName(value) {
   return typeof value === "string" ? collapse(value) : "";
 }
-function characterAppearanceKey(name) {
-  return normalizeCharacterName(name).toLowerCase();
+function characterAppearanceKey(name2) {
+  return normalizeCharacterName(name2).toLowerCase();
 }
 var SPECIES_WORD = "(?:cat|dog|fox|wolf|bunny|rabbit|horse|cow|sheep|goat|deer|mouse|rat|bear|tiger|lion|leopard|panther|dragon|shark|snake|lizard|bird|raven|crow|owl|bat|spider|slime|kitsune|tanuki|neko|inu|usagi|okami|monster|demon|devil|angel|elf|orc|goblin|fairy|beast|animal|anthro|furry)";
 var ANATOMY_WORD = "(?:ears?|tails?|paws?|claws?|fangs?|whiskers|fur|scales?|horns?|wings?|fins?|snout|muzzle|teeth|eyes?|hair|markings?|pattern|print|hood|hoodie|mask|plush|plushie|motif|pin|charm|accessory|hairpin|hairclip|ribbon|bow|collar|costume|onesie|pajamas?|slippers?|kigurumi)";
@@ -53933,7 +54716,7 @@ function applyCastSuggestion(draft, source, field, createId, sourceLabel) {
       notices.push("The 16-alias limit is reached. Remaining suggestions stay in the source.");
   }
   if (field === "outfits") {
-    const key = (name) => name.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const key = (name2) => name2.trim().replace(/\s+/g, " ").toLocaleLowerCase();
     const names = new Map(setup.outfits.map((outfit) => [key(outfit.name), outfit]));
     const ids = new Set(setup.outfits.map((outfit) => outfit.id));
     let full = false;
@@ -53948,14 +54731,14 @@ function applyCastSuggestion(draft, source, field, createId, sourceLabel) {
         full = true;
         continue;
       }
-      const id6 = createId();
-      if (ids.has(id6)) {
+      const id8 = createId();
+      if (ids.has(id8)) {
         notices.push(`Could not add ${outfit.name} because its new identifier collided. Try again.`);
         continue;
       }
-      const added = { id: id6, name: outfit.name, description: outfit.description };
+      const added = { id: id8, name: outfit.name, description: outfit.description };
       setup.outfits.push(added);
-      ids.add(id6);
+      ids.add(id8);
       names.set(key(outfit.name), added);
     }
     if (full)
@@ -54031,12 +54814,12 @@ class CastArtPanel {
     fields2.dataset.castFieldSuggestions = "";
     fields2.innerHTML = "<summary>Choose individual fields</summary><p>These actions change only your unsaved draft. Save changes separately. Existing outfits and your default outfit are kept.</p><div data-cast-actions></div>";
     for (const [field, label] of [["appearance", "Use appearance only"], ["aliases", "Add suggested aliases"], ["outfits", "Add suggested outfits"]]) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = label;
-      button.dataset.castSuggestionField = field;
-      button.onclick = () => this.applyScanField(field);
-      fields2.querySelector("[data-cast-actions]").append(button);
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.textContent = label;
+      button2.dataset.castSuggestionField = field;
+      button2.onclick = () => this.applyScanField(field);
+      fields2.querySelector("[data-cast-actions]").append(button2);
     }
     this.el("[data-cast-scan-results]").append(fields2);
     const style = document.createElement("style");
@@ -54058,8 +54841,8 @@ class CastArtPanel {
     this.el("[data-cast-setup-new]").onclick = () => this.guardNavigation(() => this.withLibrary(() => this.startNew()));
     this.el("[data-cast-art-refresh]").onclick = () => this.request({ action: "list" });
     this.el("[data-cast-back]").onclick = () => this.navigate(this.page === "overview" || !this.session ? "roster" : "overview");
-    for (const button of this.host.querySelectorAll("[data-cast-go]"))
-      button.onclick = () => this.navigate(button.dataset.castGo);
+    for (const button2 of this.host.querySelectorAll("[data-cast-go]"))
+      button2.onclick = () => this.navigate(button2.dataset.castGo);
     this.el("[data-cast-full-appearance]").onclick = () => {
       const guidance2 = this.el("[data-cast-guidance]");
       guidance2.toggleAttribute("data-expanded");
@@ -54107,9 +54890,9 @@ class CastArtPanel {
       if (!this.session)
         return;
       this.readDraft();
-      const id6 = this.session.outfit;
-      this.session.setup.outfits = this.session.setup.outfits.filter((o) => o.id !== id6);
-      if (this.session.setup.defaultOutfitId === id6)
+      const id8 = this.session.outfit;
+      this.session.setup.outfits = this.session.setup.outfits.filter((o) => o.id !== id8);
+      if (this.session.setup.defaultOutfitId === id8)
         this.session.setup.defaultOutfitId = null;
       this.session.outfit = "";
       this.renderOutfits();
@@ -54296,18 +55079,18 @@ class CastArtPanel {
     this.afterLoad = callback;
     this.ensureLoaded();
   }
-  openCharacter(id6) {
+  openCharacter(id8) {
     this.stash();
-    const record2 = this.library.characters.find((r) => r.entityId === id6);
+    const record2 = this.library.characters.find((r) => r.entityId === id8);
     if (!record2)
       return;
-    this.session = structuredClone(this.sessions.get(this.loadedChat)?.get(id6) ?? this.createSession(record2));
+    this.session = structuredClone(this.sessions.get(this.loadedChat)?.get(id8) ?? this.createSession(record2));
     this.variantId = record2.preferredVariantId ?? record2.variants[0]?.id ?? "";
     this.writeDraft();
     this.closeGallery();
   }
   createSession(record2) {
-    const session = { key: record2.entityId, name: record2.name, setup: { appearance: record2.setup?.appearance ?? record2.description, aliases: [...record2.setup?.aliases ?? []], outfits: record2.setup?.outfits.map(({ id: id6, name, description }) => ({ id: id6, name, description })) ?? [], defaultOutfitId: record2.setup?.defaultOutfitId ?? null, anchors: [...record2.setup?.anchors ?? []], ...record2.setup?.appearanceOrigin ? { appearanceOrigin: structuredClone(record2.setup.appearanceOrigin) } : {} }, aliases: record2.setup?.aliases.join(`
+    const session = { key: record2.entityId, name: record2.name, setup: { appearance: record2.setup?.appearance ?? record2.description, aliases: [...record2.setup?.aliases ?? []], outfits: record2.setup?.outfits.map(({ id: id8, name: name2, description }) => ({ id: id8, name: name2, description })) ?? [], defaultOutfitId: record2.setup?.defaultOutfitId ?? null, anchors: [...record2.setup?.anchors ?? []], ...record2.setup?.appearanceOrigin ? { appearanceOrigin: structuredClone(record2.setup.appearanceOrigin) } : {} }, aliases: record2.setup?.aliases.join(`
 `) ?? "", baseline: "", outfit: "", portrait: "" };
     session.baseline = JSON.stringify({ name: session.name, setup: session.setup, aliases: session.aliases });
     return session;
@@ -54402,11 +55185,11 @@ class CastArtPanel {
       }
       const copy = document.createElement("span");
       copy.dataset.castRowCopy = "";
-      const name = document.createElement("strong");
-      name.textContent = record2.name;
+      const name2 = document.createElement("strong");
+      name2.textContent = record2.name;
       const info = document.createElement("small");
       info.textContent = `${setup ? "Appearance saved" : "From saved picture · No saved setup"} · ${setup?.outfits.length ?? 0} outfits${setup?.imageId ? " · Portrait assigned" : ""}${this.sessions.get(this.loadedChat)?.has(record2.entityId) ? " · Unsaved draft" : ""}`;
-      copy.append(name, info);
+      copy.append(name2, info);
       const chevron = document.createElement("span");
       chevron.textContent = "›";
       row.append(avatar, copy, chevron);
@@ -54438,18 +55221,18 @@ class CastArtPanel {
     const list = this.el("[data-cast-outfit-list]");
     list.replaceChildren();
     for (const outfit of this.session?.setup.outfits ?? []) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.castOutfitRow = "";
-      button.textContent = `${outfit.name || "Unnamed outfit"}${outfit.id === this.session?.setup.defaultOutfitId ? " · Default" : ""} ›`;
-      button.setAttribute("aria-label", `Edit ${outfit.name || "unnamed outfit"}`);
-      button.onclick = () => {
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.dataset.castOutfitRow = "";
+      button2.textContent = `${outfit.name || "Unnamed outfit"}${outfit.id === this.session?.setup.defaultOutfitId ? " · Default" : ""} ›`;
+      button2.setAttribute("aria-label", `Edit ${outfit.name || "unnamed outfit"}`);
+      button2.onclick = () => {
         this.readDraft();
         if (this.session)
           this.session.outfit = outfit.id;
         this.renderOutfitFields();
       };
-      list.append(button);
+      list.append(button2);
     }
     if (!list.childElementCount)
       list.textContent = "No named outfits yet. Base appearance stays separate from clothing.";
@@ -54617,13 +55400,13 @@ class CastArtPanel {
     if (!this.session)
       return;
     this.readDraft();
-    const parsed = CastSetupInputSchema.safeParse(this.session.setup), name = this.session.name.trim();
-    if (!parsed.success || !name) {
+    const parsed = CastSetupInputSchema.safeParse(this.session.setup), name2 = this.session.name.trim();
+    if (!parsed.success || !name2) {
       this.afterSave = null;
-      this.status(!name ? "Enter a character name." : !parsed.success ? parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") : "");
+      this.status(!name2 ? "Enter a character name." : !parsed.success ? parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") : "");
       return;
     }
-    this.request({ action: "setup", name, setup: parsed.data, ...this.record() ? { characterId: this.record().entityId } : {} });
+    this.request({ action: "setup", name: name2, setup: parsed.data, ...this.record() ? { characterId: this.record().entityId } : {} });
   }
   finish() {
     if (this.timer)
@@ -54734,18 +55517,18 @@ class CastArtPanel {
     const grid = this.el("[data-cast-art-gallery-grid]");
     grid.replaceChildren();
     for (const item of page.images) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.setAttribute("aria-label", `Use ${item.name || "gallery image"}`);
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.setAttribute("aria-label", `Use ${item.name || "gallery image"}`);
       const image = document.createElement("img");
       image.src = item.url;
       image.alt = "";
       image.loading = "lazy";
       image.onerror = () => image.hidden = true;
-      const name = document.createElement("span");
-      name.textContent = item.name || "Gallery image";
-      button.append(image, name);
-      button.onclick = () => {
+      const name2 = document.createElement("span");
+      name2.textContent = item.name || "Gallery image";
+      button2.append(image, name2);
+      button2.onclick = () => {
         if (target2.chatId !== this.chat() || target2.characterId !== this.session?.key || target2.snapshot !== this.snapshot() || (target2.variantId ? target2.variantId !== this.variantId : (target2.outfitId ?? "") !== (this.session?.portrait ?? ""))) {
           this.status("Story, character or draft changed. Choose gallery artwork again.");
           return;
@@ -54753,7 +55536,7 @@ class CastArtPanel {
         this.request(target2.variantId ? { action: "supply", characterId: target2.characterId, variantId: target2.variantId, imageId: item.id } : { action: "setup_supply", characterId: target2.characterId, ...target2.outfitId ? { outfitId: target2.outfitId } : {}, imageId: item.id });
         this.closeGallery();
       };
-      grid.append(button);
+      grid.append(button2);
     }
     this.el("[data-cast-art-gallery-panel]").hidden = false;
     this.el("[data-cast-art-gallery-prev]").disabled = page.offset === 0;
@@ -54782,8 +55565,8 @@ class CastArtPanel {
       const record3 = this.library.characters.find((r) => this.candidateMatches(r, candidate));
       names.set(characterAppearanceKey(record3?.name ?? candidate.name), record3?.name ?? candidate.name);
     }
-    for (const [key, name] of names)
-      picker.append(new Option(name, key));
+    for (const [key, name2] of names)
+      picker.append(new Option(name2, key));
     const record2 = this.record();
     if (record2 && names.has(characterAppearanceKey(record2.name)))
       picker.value = characterAppearanceKey(record2.name);
@@ -54795,7 +55578,7 @@ class CastArtPanel {
   }
   candidateMatches(record2, candidate) {
     const names = [record2.name, ...record2.setup?.aliases ?? []].map(characterAppearanceKey);
-    return [candidate.name, ...candidate.setup.aliases].some((name) => names.includes(characterAppearanceKey(name)));
+    return [candidate.name, ...candidate.setup.aliases].some((name2) => names.includes(characterAppearanceKey(name2)));
   }
   applyScanField(field) {
     if (this.pending)
@@ -54813,8 +55596,8 @@ class CastArtPanel {
     this.readDraft();
     if (!this.session)
       return;
-    const record2 = this.record(), name = this.session.name.trim();
-    if (name && characterAppearanceKey(name) !== characterAppearanceKey(candidate.name) && !(record2 && this.candidateMatches(record2, candidate))) {
+    const record2 = this.record(), name2 = this.session.name.trim();
+    if (name2 && characterAppearanceKey(name2) !== characterAppearanceKey(candidate.name) && !(record2 && this.candidateMatches(record2, candidate))) {
       this.status("Open the suggested character before using this source. Current draft was kept.");
       return;
     }
@@ -54822,7 +55605,7 @@ class CastArtPanel {
     this.session.setup = result.setup;
     this.session.aliases = result.setup.aliases.join(`
 `);
-    if (!name)
+    if (!name2)
       this.session.name = candidate.name;
     this.writeDraft();
     this.page = field === "outfits" ? "outfits" : "appearance";
@@ -54865,11 +55648,11 @@ ${candidate.setup.outfits.map((o) => `${o.name}: ${o.description}`).join(`
     this.el("[data-cast-scan-replace]").disabled = !candidate?.setup.appearance.trim();
     for (const selector of ["[data-cast-scan-fill]", "[data-cast-scan-import]"])
       this.el(selector).disabled = !candidate;
-    const name = this.session?.name.trim(), record2 = this.record();
-    const same = !!candidate && (!name || characterAppearanceKey(name) === characterAppearanceKey(candidate.name) || !!(record2 && this.candidateMatches(record2, candidate)));
-    for (const button of this.host.querySelectorAll("[data-cast-suggestion-field]")) {
-      const field = button.dataset.castSuggestionField;
-      button.disabled = !same || !candidate || (field === "appearance" ? !candidate.setup.appearance.trim() : field === "aliases" ? !candidate.setup.aliases.length : !candidate.setup.outfits.length);
+    const name2 = this.session?.name.trim(), record2 = this.record();
+    const same = !!candidate && (!name2 || characterAppearanceKey(name2) === characterAppearanceKey(candidate.name) || !!(record2 && this.candidateMatches(record2, candidate)));
+    for (const button2 of this.host.querySelectorAll("[data-cast-suggestion-field]")) {
+      const field = button2.dataset.castSuggestionField;
+      button2.disabled = !same || !candidate || (field === "appearance" ? !candidate.setup.appearance.trim() : field === "aliases" ? !candidate.setup.aliases.length : !candidate.setup.outfits.length);
     }
   }
   openScannedCharacter() {
@@ -54901,8 +55684,8 @@ ${candidate.setup.outfits.map((o) => `${o.name}: ${o.description}`).join(`
     this.readDraft();
     if (!this.session)
       return;
-    const record2 = this.record(), name = this.session.name.trim();
-    if (name && characterAppearanceKey(name) !== characterAppearanceKey(candidate.name) && !(record2 && this.candidateMatches(record2, candidate))) {
+    const record2 = this.record(), name2 = this.session.name.trim();
+    if (name2 && characterAppearanceKey(name2) !== characterAppearanceKey(candidate.name) && !(record2 && this.candidateMatches(record2, candidate))) {
       this.status("Open the suggested character before using this source. Current draft was kept.");
       return;
     }
@@ -54923,7 +55706,7 @@ ${candidate.setup.outfits.map((o) => `${o.name}: ${o.description}`).join(`
       draft.outfits = structuredClone(candidate.setup.outfits);
       draft.defaultOutfitId = candidate.setup.defaultOutfitId;
     }
-    if (!name)
+    if (!name2)
       this.session.name = candidate.name;
     this.writeDraft();
     this.page = "appearance";
@@ -54933,35 +55716,35 @@ ${candidate.setup.outfits.map((o) => `${o.name}: ${o.description}`).join(`
 }
 
 // src/shared/stage-assets.ts
-var id6 = exports_external.string().trim().min(1).max(256);
+var id8 = exports_external.string().trim().min(1).max(256);
 var StageAssetRoleSchema = exports_external.enum(["scene", "background", "portrait"]);
 var LocationArtVariantSchema = exports_external.object({
-  id: id6,
-  imageId: id6,
-  requestFingerprint: id6,
-  environmentFingerprint: id6,
+  id: id8,
+  imageId: id8,
+  requestFingerprint: id8,
+  environmentFingerprint: id8,
   approved: exports_external.literal(true),
   createdAt: exports_external.string().max(64),
   lastUsedAt: exports_external.number().nonnegative().optional(),
   pinned: exports_external.boolean().optional()
 }).strict();
 var LocationArtRecordSchema = exports_external.object({
-  entityId: id6,
-  name: id6,
+  entityId: id8,
+  name: id8,
   artRevision: exports_external.number().int().nonnegative(),
   description: exports_external.string().max(4000),
-  preferredVariantId: id6.nullable().default(null),
+  preferredVariantId: id8.nullable().default(null),
   variants: exports_external.array(LocationArtVariantSchema).max(8)
 }).strict();
 var LocationArtLibrarySchema = exports_external.object({ version: exports_external.literal(1), locations: exports_external.array(LocationArtRecordSchema).max(128) }).strict();
 var LocationArtRequestSchema = exports_external.object({
   type: exports_external.literal("vn_location_art"),
   version: exports_external.literal(1),
-  chatId: id6,
-  requestId: id6,
+  chatId: id8,
+  requestId: id8,
   action: exports_external.enum(["list", "select", "forget", "reset"]),
-  locationId: id6.optional(),
-  variantId: id6.optional()
+  locationId: id8.optional(),
+  variantId: id8.optional()
 }).strict().superRefine((value, ctx) => {
   if ((value.action === "select" || value.action === "forget") && !value.locationId)
     ctx.addIssue({ code: "custom", path: ["locationId"], message: "Choose a location." });
@@ -55084,16 +55867,16 @@ class LocationArtPanel {
     const search = this.el("[data-place-search]").value.trim().toLocaleLowerCase(), list = this.el("[data-place-list]");
     list.replaceChildren();
     for (const record2 of this.library.locations.filter((r) => r.name.toLocaleLowerCase().includes(search))) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.placeRow = "";
-      button.setAttribute("aria-label", `Open ${record2.name}`);
-      const name = document.createElement("strong");
-      name.textContent = record2.name;
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.dataset.placeRow = "";
+      button2.setAttribute("aria-label", `Open ${record2.name}`);
+      const name2 = document.createElement("strong");
+      name2.textContent = record2.name;
       const summary = document.createElement("small");
       summary.textContent = `${record2.variants.length} saved variants${record2.preferredVariantId ? " · Preference saved" : ""} ›`;
-      button.append(name, summary);
-      button.onclick = () => {
+      button2.append(name2, summary);
+      button2.onclick = () => {
         this.selected = record2.entityId;
         this.detail = true;
         this.cancelConfirm();
@@ -55101,7 +55884,7 @@ class LocationArtPanel {
         this.renderVariants();
         this.renderList();
       };
-      list.append(button);
+      list.append(button2);
     }
     list.hidden = this.detail;
     this.el("[data-place-search]").closest("label").hidden = this.detail;
@@ -55749,11 +56532,11 @@ class ImageTemplateEditor {
       const open2 = document.createElement("button");
       open2.type = "button";
       open2.dataset.openTemplate = template.id;
-      const name = document.createElement("strong");
-      name.textContent = template.name || "Unnamed template";
+      const name2 = document.createElement("strong");
+      name2.textContent = template.name || "Unnamed template";
       const purpose = document.createElement("small");
       purpose.textContent = template.useWhen || "Custom template wording.";
-      open2.append(name, purpose);
+      open2.append(name2, purpose);
       if (template.id === this.config.defaultImageTemplateId) {
         const badge = document.createElement("span");
         badge.dataset.templateDefault = "";
@@ -55995,8 +56778,8 @@ var PREVIEW_FALLBACK = {
   dialogueBorder: "var(--lumiverse-border, rgba(255, 255, 255, 0.3))",
   fontFamily: 'var(--lumiverse-font-family, ui-rounded, "Segoe UI", system-ui, sans-serif)'
 };
-function cssVariable(css, name) {
-  const match = new RegExp(`${name.replace(/[-]/g, "\\-")}\\s*:\\s*([^;]+);`).exec(css);
+function cssVariable(css, name2) {
+  const match = new RegExp(`${name2.replace(/[-]/g, "\\-")}\\s*:\\s*([^;]+);`).exec(css);
   return match?.[1]?.trim() ?? null;
 }
 function themePreviewTokens(preset) {
@@ -56654,21 +57437,21 @@ input, select, textarea, button { scroll-margin: 4.5rem 0 8.5rem; }
 
 [data-generated-only] { display: grid; gap: .9rem; }
 `;
-function segments(name, steps, withCustom) {
-  const items = steps.map((step) => `<label><input type="radio" name="${name}" value="${step.value}" />${escapeHtml2(step.label)}</label>`);
+function segments(name2, steps, withCustom) {
+  const items = steps.map((step) => `<label><input type="radio" name="${name2}" value="${step.value}" />${escapeHtml2(step.label)}</label>`);
   if (withCustom)
-    items.push(`<label><input type="radio" name="${name}" value="custom" />Custom</label>`);
+    items.push(`<label><input type="radio" name="${name2}" value="custom" />Custom</label>`);
   return `<div data-segments>${items.join("")}</div>`;
 }
-function imageSourceOptions(name) {
-  return `<div data-options data-source-options>${IMAGE_SOURCE_OPTIONS.map((option) => `<label><input type="radio" name="${name}" value="${option.value}" /><span><b>${escapeHtml2(option.label)}</b><small>${escapeHtml2(option.help)}</small></span></label>`).join("")}</div>`;
+function imageSourceOptions(name2) {
+  return `<div data-options data-source-options>${IMAGE_SOURCE_OPTIONS.map((option) => `<label><input type="radio" name="${name2}" value="${option.value}" /><span><b>${escapeHtml2(option.label)}</b><small>${escapeHtml2(option.help)}</small></span></label>`).join("")}</div>`;
 }
-function themeTiles(name = "themePreset") {
+function themeTiles(name2 = "themePreset") {
   return `<div data-tiles role="radiogroup" aria-label="Theme">${THEME_PRESET_OPTIONS.map(({ value, label }) => {
     const tokens = themePreviewTokens(value);
     const palette = THEME_PALETTE_SPECS[value];
     const style = `--swatch-surface:${palette.surfaceGradient};--swatch-radius:${palette.radius};--swatch-accent:${tokens.accent};--swatch-text:${tokens.text};--swatch-bg:${tokens.dialogueBg};--swatch-border:${tokens.dialogueBorder};--swatch-font:${tokens.fontFamily}`;
-    return `<label><input type="radio" name="${name}" value="${value}" /><span data-swatch style="${escapeHtml2(style)}"><i>The wind picks up…</i></span><span>${escapeHtml2(label.replace(/ \(.*\)$/, ""))}</span></label>`;
+    return `<label><input type="radio" name="${name2}" value="${value}" /><span data-swatch style="${escapeHtml2(style)}"><i>The wind picks up…</i></span><span>${escapeHtml2(label.replace(/ \(.*\)$/, ""))}</span></label>`;
   }).join("")}</div>`;
 }
 var ICONS = {
@@ -56695,18 +57478,18 @@ function group(title, body2, options = {}) {
   const help = options.help ? `<small>${options.help}</small>` : "";
   return `<section data-group${options.id ? ` data-group-id="${options.id}"` : ""}${options.apply ? " data-apply-group" : ""} ${options.find ?? find(title)}><header data-group-head><h3>${escapeHtml2(title)}</h3>${chip}${help}</header>${body2}</section>`;
 }
-function optionList(name, options) {
-  return `<div data-options>${options.map((option) => `<label><input type="radio" name="${name}" value="${option.value}" /><span><b>${escapeHtml2(option.label)}</b><small>${escapeHtml2(option.help)}</small></span></label>`).join("")}</div>`;
+function optionList(name2, options) {
+  return `<div data-options>${options.map((option) => `<label><input type="radio" name="${name2}" value="${option.value}" /><span><b>${escapeHtml2(option.label)}</b><small>${escapeHtml2(option.help)}</small></span></label>`).join("")}</div>`;
 }
 function readinessRow(kind) {
   return `<div data-readiness="${kind}" data-level="loading"><div><b data-readiness-title></b><small data-readiness-action></small><div data-actions hidden><button type="button" data-refresh-connections>Refresh</button></div></div></div>`;
 }
-function paneHead(id7) {
-  const section = SETTINGS_SECTIONS.find((candidate) => candidate.id === id7) ?? { label: "Speech", blurb: "Read paragraphs aloud with your Lumiverse TTS profiles." };
-  return `<header data-pane-head><h2 tabindex="-1" id="pane-${id7}-title">${escapeHtml2(section.label)}</h2><p>${escapeHtml2(section.blurb)}</p></header>`;
+function paneHead(id9) {
+  const section = SETTINGS_SECTIONS.find((candidate) => candidate.id === id9) ?? { label: "Speech", blurb: "Read paragraphs aloud with your Lumiverse TTS profiles." };
+  return `<header data-pane-head><h2 tabindex="-1" id="pane-${id9}-title">${escapeHtml2(section.label)}</h2><p>${escapeHtml2(section.blurb)}</p></header>`;
 }
-function pane(id7, body2, extra = "") {
-  return `<section role="tabpanel" id="pane-${id7}" data-pane="${id7}" aria-labelledby="pane-${id7}-title" tabindex="-1" hidden${extra}>${paneHead(id7)}${body2}</section>`;
+function pane(id9, body2, extra = "") {
+  return `<section role="tabpanel" id="pane-${id9}" data-pane="${id9}" aria-labelledby="pane-${id9}-title" tabindex="-1" hidden${extra}>${paneHead(id9)}${body2}</section>`;
 }
 var VOICE_SEARCH_ENTRIES = [
   { label: "Read paragraphs aloud", keywords: "speech tts voice enable speak" },
@@ -56806,24 +57589,24 @@ class VisualNovelSettingsPanel {
   }
   composePanels() {
     const mount = (selector) => this.root.querySelector(selector);
-    this.castArtPanel = new CastArtPanel(() => this.options.getChatId?.() ?? "", (chat, id7, action) => this.options.onCastArt?.(chat, id7, action), (chat, id7, offset) => this.options.onCastGallery?.(chat, id7, offset), (name) => {
+    this.castArtPanel = new CastArtPanel(() => this.options.getChatId?.() ?? "", (chat, id9, action) => this.options.onCastArt?.(chat, id9, action), (chat, id9, offset) => this.options.onCastGallery?.(chat, id9, offset), (name2) => {
       this.voiceReturn = true;
       this.openPage("speech", { focus: true });
-      this.options.onCastVoice?.(name);
+      this.options.onCastVoice?.(name2);
     });
     mount("[data-cast-mount]").append(this.castArtPanel.host);
-    this.locationArtPanel = new LocationArtPanel(() => this.options.getChatId?.() ?? "", (chat, id7, action) => this.options.onLocationArt?.(chat, id7, action));
+    this.locationArtPanel = new LocationArtPanel(() => this.options.getChatId?.() ?? "", (chat, id9, action) => this.options.onLocationArt?.(chat, id9, action));
     mount("[data-places-mount]").append(this.locationArtPanel.host);
     this.templateEditor = new ImageTemplateEditor(mount("[data-templates-mount]"), (patch) => this.save(patch), () => {});
     this.presentationRules = new PresentationRulesPanel(() => this.options.getChatId?.() ?? "", (request) => this.options.onPresentationRules?.(request), (patch) => this.save(patch));
     mount("[data-rules-mount]").append(this.presentationRules.host);
     this.trackerMappingsPanel = new TrackerMappingsPanel((value) => this.save({ simTrackerMappings: value }));
     mount("[data-tracker-mount]").append(this.trackerMappingsPanel.host);
-    this.contextSourcesPanel = new ContextSourcesPanel((value) => this.save({ contextSources: value }), (chat, id7) => this.options.onRefreshContextSources?.(chat, id7), () => this.options.getChatId?.() ?? "");
+    this.contextSourcesPanel = new ContextSourcesPanel((value) => this.save({ contextSources: value }), (chat, id9) => this.options.onRefreshContextSources?.(chat, id9), () => this.options.getChatId?.() ?? "");
     mount("[data-sources-mount]").append(this.contextSourcesPanel.host);
   }
-  pageLink(id7, title) {
-    const page = settingsPage(id7);
+  pageLink(id9, title) {
+    const page = settingsPage(id9);
     return `<button type="button" data-page-link="${page.id}"><span><b>${escapeHtml2(title ?? page.title)}</b><small>${escapeHtml2(page.description)}</small></span><span aria-hidden="true">›</span></button>`;
   }
   template() {
@@ -56911,9 +57694,9 @@ class VisualNovelSettingsPanel {
                 </div>
               </details>
             `, { id: "system-prompts", apply: true });
-    const tabs = SETTINGS_SECTIONS.map(({ id: id7, label }) => `
-          <button type="button" role="tab" id="tab-${id7}" data-tab="${id7}" aria-controls="pane-${id7}" aria-selected="false" tabindex="-1" aria-labelledby="tab-${id7}-label" aria-describedby="tab-${id7}-summary">
-            ${icon(ICONS[id7])}<span data-tab-text><span id="tab-${id7}-label" data-tab-label>${escapeHtml2(label)}</span><span id="tab-${id7}-summary" data-tab-summary></span></span>${id7 === "connections" ? '<span data-tab-dot data-level="loading" aria-hidden="true"></span>' : ""}<span data-tab-badge hidden></span>
+    const tabs = SETTINGS_SECTIONS.map(({ id: id9, label }) => `
+          <button type="button" role="tab" id="tab-${id9}" data-tab="${id9}" aria-controls="pane-${id9}" aria-selected="false" tabindex="-1" aria-labelledby="tab-${id9}-label" aria-describedby="tab-${id9}-summary">
+            ${icon(ICONS[id9])}<span data-tab-text><span id="tab-${id9}-label" data-tab-label>${escapeHtml2(label)}</span><span id="tab-${id9}-summary" data-tab-summary></span></span>${id9 === "connections" ? '<span data-tab-dot data-level="loading" aria-hidden="true"></span>' : ""}<span data-tab-badge hidden></span>
           </button>`).join("");
     return `
     <div data-shell>
@@ -56988,9 +57771,9 @@ class VisualNovelSettingsPanel {
               <button type="button" data-goto="reading" data-goto-target="rpgMode" style="font-size:0.82rem;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">Configure &rarr;</button>
             </div>
             <div class="section-head" style="margin: 20px 0 11px; font-weight:650; font-size:12px;">Adjust your experience <span class="micro" style="opacity:0.7;">4 GROUPS</span></div>
-            <div data-home-categories>${SETTINGS_HOME_GROUPS.map((group2) => `<section data-settings-home-group><h2 style="font-size:1rem;margin:1.2rem 0 .5rem">${escapeHtml2(group2.title)}</h2><div class="settings-menu">${group2.sections.map((id7) => {
-      const section = SETTINGS_SECTIONS.find((s) => s.id === id7);
-      return `<button type="button" data-page-link="${id7 === "sound" ? "audio" : id7}">${icon(ICONS[id7])}<span><b>${escapeHtml2(section.label)}</b><small>${escapeHtml2(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`;
+            <div data-home-categories>${SETTINGS_HOME_GROUPS.map((group2) => `<section data-settings-home-group><h2 style="font-size:1rem;margin:1.2rem 0 .5rem">${escapeHtml2(group2.title)}</h2><div class="settings-menu">${group2.sections.map((id9) => {
+      const section = SETTINGS_SECTIONS.find((s) => s.id === id9);
+      return `<button type="button" data-page-link="${id9 === "sound" ? "audio" : id9}">${icon(ICONS[id9])}<span><b>${escapeHtml2(section.label)}</b><small>${escapeHtml2(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`;
     }).join("")}</div></section>`).join("")}</div>
             <div style="margin-top:16px"><button type="button" data-open-preview>Open reader</button><small style="display:block;margin-top:6px;opacity:0.75">Opening the reader can prepare the current reply using your existing settings.</small></div>
           </section>
@@ -57371,7 +58154,7 @@ class VisualNovelSettingsPanel {
             `, { apply: true, help: "Optional. Mode, URL and model wait for Apply; the key saves on its own.", find: find("System One", "jev") })}</section>
           `)}
 
-          ${pane("advanced", renderAdvancedRoutes({ group, find, more, pageLink: (id7) => this.pageLink(id7) }), " data-advanced-settings")}
+          ${pane("advanced", renderAdvancedRoutes({ group, find, more, pageLink: (id9) => this.pageLink(id9) }), " data-advanced-settings")}
 
           <div data-draft-bar hidden>
             <div><span data-draft-count></span><small>Changes on this page only.</small></div>
@@ -57395,8 +58178,8 @@ class VisualNovelSettingsPanel {
   getSection() {
     return this.section;
   }
-  openSection(id7, options = {}) {
-    this.openPage(id7, options);
+  openSection(id9, options = {}) {
+    this.openPage(id9, options);
   }
   getElement() {
     return this.host;
@@ -57418,9 +58201,9 @@ class VisualNovelSettingsPanel {
   getPage() {
     return this.page;
   }
-  openPage(id7, options = {}) {
+  openPage(id9, options = {}) {
     this.afterSaveNavigation = null;
-    const next = settingsPage(id7);
+    const next = settingsPage(id9);
     if (this.page === "speech" && next.id !== "speech")
       this.voiceReturn = false;
     const proceed = () => this.applyPage(next.id, options);
@@ -57456,9 +58239,9 @@ class VisualNovelSettingsPanel {
     }
     return document.scrollingElement;
   }
-  applyPage(id7, options = {}) {
+  applyPage(id9, options = {}) {
     const navigation = ++this.navigationSequence;
-    const next = settingsPage(id7), owner = this.scrollOwner();
+    const next = settingsPage(id9), owner = this.scrollOwner();
     this.pageScroll.set(this.page, owner.scrollTop);
     this.page = next.id;
     this.section = next.section;
@@ -57511,9 +58294,9 @@ class VisualNovelSettingsPanel {
     }
     this.refreshStatus();
     requestAnimationFrame(() => {
-      if (this.page !== id7 || navigation !== this.navigationSequence)
+      if (this.page !== id9 || navigation !== this.navigationSequence)
         return;
-      owner.scrollTop = this.pageScroll.get(id7) ?? Math.max(0, this.host.offsetTop - 12);
+      owner.scrollTop = this.pageScroll.get(id9) ?? Math.max(0, this.host.offsetTop - 12);
       options.after?.();
       if (options.focus)
         this.root.querySelector(next.id === "home" ? "[data-home] h1" : `[data-pane="${next.section}"] [data-pane-head] h2`)?.focus({ preventScroll: true });
@@ -57613,14 +58396,14 @@ class VisualNovelSettingsPanel {
     const previewDetails = this.root.querySelector("[data-appearance-preview]");
     if (previewDetails)
       previewDetails.ontoggle = () => this.restartSample();
-    for (const button of this.root.querySelectorAll("[data-entity-tab]"))
-      button.onclick = () => {
+    for (const button2 of this.root.querySelectorAll("[data-entity-tab]"))
+      button2.onclick = () => {
         const apply = () => {
-          const places = button.dataset.entityTab === "places";
+          const places = button2.dataset.entityTab === "places";
           this.root.querySelector("[data-cast-mount]").hidden = places;
           this.root.querySelector("[data-places-mount]").hidden = !places;
           for (const tab of this.root.querySelectorAll("[data-entity-tab]"))
-            tab.setAttribute("aria-pressed", String(tab === button));
+            tab.setAttribute("aria-pressed", String(tab === button2));
           if (places)
             this.locationArtPanel.ensureLoaded();
           else
@@ -57636,8 +58419,8 @@ class VisualNovelSettingsPanel {
   }
   reveal(element, options = {}) {
     const pane2 = element.closest("[data-pane]");
-    const name = element.matches("[name]") ? element.getAttribute("name") : element.querySelector("[name]")?.getAttribute("name");
-    const destination = element.closest("[data-workspace-page]")?.dataset.workspacePage ?? (name && SETTINGS_FIELD_PAGES[name]) ?? pane2?.dataset.pane ?? "home";
+    const name2 = element.matches("[name]") ? element.getAttribute("name") : element.querySelector("[name]")?.getAttribute("name");
+    const destination = element.closest("[data-workspace-page]")?.dataset.workspacePage ?? (name2 && SETTINGS_FIELD_PAGES[name2]) ?? pane2?.dataset.pane ?? "home";
     const show = () => {
       for (let parent = element.parentElement;parent; parent = parent.parentElement) {
         if (parent instanceof HTMLDetailsElement)
@@ -57671,12 +58454,12 @@ class VisualNovelSettingsPanel {
     let index = 0;
     for (const element of this.root.querySelectorAll("[data-pane] [data-find-label]")) {
       const section = element.closest("[data-pane]").dataset.pane;
-      const id7 = `s${index++}`;
-      this.searchTargets.set(id7, element);
-      const name = element.matches("[name]") ? element.getAttribute("name") : element.querySelector("[name]")?.getAttribute("name");
-      const page = settingsPage(element.closest("[data-workspace-page]")?.dataset.workspacePage ?? (name && SETTINGS_FIELD_PAGES[name]) ?? section);
+      const id9 = `s${index++}`;
+      this.searchTargets.set(id9, element);
+      const name2 = element.matches("[name]") ? element.getAttribute("name") : element.querySelector("[name]")?.getAttribute("name");
+      const page = settingsPage(element.closest("[data-workspace-page]")?.dataset.workspacePage ?? (name2 && SETTINGS_FIELD_PAGES[name2]) ?? section);
       const description = Array.from(element.querySelectorAll("small, [data-help]")).filter((node2) => node2.closest("[data-find-label]") === element).map((node2) => node2.textContent ?? "").join(" ").slice(0, 2000);
-      entries.push({ id: id7, label: element.dataset.findLabel, section, description: `${description} ${page.title} ${page.description}`, keywords: element.dataset.find ?? "" });
+      entries.push({ id: id9, label: element.dataset.findLabel, section, description: `${description} ${page.title} ${page.description}`, keywords: element.dataset.find ?? "" });
     }
     for (const control of this.root.querySelectorAll("input[name], select[name], textarea[name]")) {
       const pageId = SETTINGS_FIELD_PAGES[control.name];
@@ -57691,16 +58474,16 @@ class VisualNovelSettingsPanel {
       const humanLabel = control.getAttribute("aria-label") ?? labelCopy?.textContent;
       if (!humanLabel?.trim())
         continue;
-      const page = settingsPage(pageId), id7 = `s${index++}`;
-      this.searchTargets.set(id7, control);
-      entries.push({ id: id7, label: humanLabel.trim().slice(0, 160), section: page.section, description: `${label?.querySelector("small")?.textContent ?? ""} ${page.title} ${page.description}` });
+      const page = settingsPage(pageId), id9 = `s${index++}`;
+      this.searchTargets.set(id9, control);
+      entries.push({ id: id9, label: humanLabel.trim().slice(0, 160), section: page.section, description: `${label?.querySelector("small")?.textContent ?? ""} ${page.title} ${page.description}` });
     }
     const voice = this.root.querySelector('[data-pane="voice"]');
     if (this.voiceMounted) {
       for (const entry of VOICE_SEARCH_ENTRIES) {
-        const id7 = `s${index++}`;
-        this.searchTargets.set(id7, voice);
-        entries.push({ id: id7, label: entry.label, section: "voice", keywords: entry.keywords });
+        const id9 = `s${index++}`;
+        this.searchTargets.set(id9, voice);
+        entries.push({ id: id9, label: entry.label, section: "voice", keywords: entry.keywords });
       }
     }
     return entries;
@@ -57713,8 +58496,8 @@ class VisualNovelSettingsPanel {
       results.hidden = true;
       announcement.textContent = "";
     };
-    const jump = (id7) => {
-      const target2 = id7 ? this.searchTargets.get(id7) : undefined;
+    const jump = (id9) => {
+      const target2 = id9 ? this.searchTargets.get(id9) : undefined;
       if (!target2)
         return;
       close();
@@ -57742,25 +58525,25 @@ class VisualNovelSettingsPanel {
         results.replaceChildren(empty);
       } else {
         results.replaceChildren(...matches.map((match) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.dataset.searchResult = match.id;
-          button.dataset.section = match.section;
+          const button2 = document.createElement("button");
+          button2.type = "button";
+          button2.dataset.searchResult = match.id;
+          button2.dataset.section = match.section;
           const label = document.createElement("span");
           label.textContent = match.label;
           const where = document.createElement("span");
           where.textContent = SETTINGS_SECTIONS.find((section) => section.id === match.section)?.label ?? "Audio";
-          button.append(label, where);
+          button2.append(label, where);
           const target2 = this.searchTargets.get(match.id);
           const pane2 = target2?.closest("[data-pane]");
           const hiddenAncestor = target2?.parentElement?.closest("[hidden]");
           if (hiddenAncestor && hiddenAncestor !== pane2) {
             const note = document.createElement("small");
             note.textContent = "Not shown with your current choices";
-            button.append(note);
+            button2.append(note);
           }
-          button.addEventListener("click", () => jump(match.id));
-          return button;
+          button2.addEventListener("click", () => jump(match.id));
+          return button2;
         }));
       }
       results.hidden = false;
@@ -57854,20 +58637,20 @@ class VisualNovelSettingsPanel {
       return item;
     }));
   }
-  async copyText(text, button) {
+  async copyText(text, button2) {
     const fallback = this.root.querySelector("[data-copy-fallback]");
-    const original = button.dataset.label ?? button.textContent ?? "";
-    button.dataset.label = original;
+    const original = button2.dataset.label ?? button2.textContent ?? "";
+    button2.dataset.label = original;
     try {
       if (!navigator.clipboard?.writeText)
         throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(text);
       fallback.hidden = true;
-      button.textContent = "Copied";
+      button2.textContent = "Copied";
       if (this.copyTimer)
         clearTimeout(this.copyTimer);
       this.copyTimer = setTimeout(() => {
-        button.textContent = original;
+        button2.textContent = original;
       }, 1500);
     } catch {
       const area = fallback.querySelector("textarea");
@@ -57888,23 +58671,23 @@ class VisualNovelSettingsPanel {
     list.style.setProperty("--vn-dialogue-border", tokens.dialogueBorder);
     list.style.setProperty("--vn-font-family", tokens.fontFamily);
   }
-  control(name) {
-    const element = this.root.querySelector(`[name="${name}"]`);
+  control(name2) {
+    const element = this.root.querySelector(`[name="${name2}"]`);
     if (!element)
-      throw new Error(`Missing settings control: ${name}`);
+      throw new Error(`Missing settings control: ${name2}`);
     return element;
   }
-  radioValue(name) {
-    const checked = this.root.querySelector(`input[name="${name}"]:checked`);
+  radioValue(name2) {
+    const checked = this.root.querySelector(`input[name="${name2}"]:checked`);
     return checked?.value ?? "";
   }
-  setRadio(name, value) {
-    for (const radio of this.root.querySelectorAll(`input[name="${name}"]`)) {
+  setRadio(name2, value) {
+    for (const radio of this.root.querySelectorAll(`input[name="${name2}"]`)) {
       radio.checked = radio.value === value;
     }
   }
-  isAdvanced(name) {
-    return ADVANCED_KEYS.includes(name);
+  isAdvanced(name2) {
+    return ADVANCED_KEYS.includes(name2);
   }
   wire() {
     this.form.addEventListener("change", (event) => {
@@ -58021,11 +58804,11 @@ class VisualNovelSettingsPanel {
         this.applyAdvanced();
       }
     });
-    for (const button of this.root.querySelectorAll("[data-open-preview]")) {
-      button.addEventListener("click", () => this.options.onOpenPreview());
+    for (const button2 of this.root.querySelectorAll("[data-open-preview]")) {
+      button2.addEventListener("click", () => this.options.onOpenPreview());
     }
-    for (const button of this.root.querySelectorAll("[data-refresh-connections]")) {
-      button.addEventListener("click", () => {
+    for (const button2 of this.root.querySelectorAll("[data-refresh-connections]")) {
+      button2.addEventListener("click", () => {
         for (const kind of ["planner", "image"]) {
           this.setConnectionCatalog(kind, { status: "loading", options: this.connectionStates[kind].options });
         }
@@ -58038,8 +58821,8 @@ class VisualNovelSettingsPanel {
       this.root.querySelector("[data-setup]")?.scrollIntoView({ block: "start" });
     });
     this.root.querySelector("[data-sample-replay]")?.addEventListener("click", () => this.restartSample());
-    for (const button of this.root.querySelectorAll("[data-scan-audio]")) {
-      button.addEventListener("click", async () => {
+    for (const button2 of this.root.querySelectorAll("[data-scan-audio]")) {
+      button2.addEventListener("click", async () => {
         const dir = this.control("audioDirectory").value.trim();
         this.setAudioStatus("Checking the music folder…");
         try {
@@ -58051,10 +58834,10 @@ class VisualNovelSettingsPanel {
         }
       });
     }
-    for (const button of this.root.querySelectorAll("[data-import-audio]")) {
+    for (const button2 of this.root.querySelectorAll("[data-import-audio]")) {
       if (!this.options.onImportAudio)
-        button.disabled = true;
-      button.addEventListener("click", () => {
+        button2.disabled = true;
+      button2.addEventListener("click", () => {
         if (!this.options.onImportAudio)
           return;
         const picker = document.createElement("input");
@@ -58124,8 +58907,8 @@ class VisualNovelSettingsPanel {
       this.markDraft("promptEngineerOverride");
     });
     this.root.querySelector("[data-system-prompt-profile-save]")?.addEventListener("click", () => {
-      const name = profileName.value.trim();
-      if (!name) {
+      const name2 = profileName.value.trim();
+      if (!name2) {
         this.setStatus("Give the profile a name first.", "error");
         return;
       }
@@ -58133,27 +58916,27 @@ class VisualNovelSettingsPanel {
       const referencePromptOverride = this.control("referencePromptOverride").value;
       const characterDnaPromptOverride = this.control("characterDnaPromptOverride").value;
       const promptEngineerOverride = this.control("promptEngineerOverride").value;
-      const existingKey = Object.keys(this.systemPromptProfiles).find((k) => this.systemPromptProfiles[k]?.name.toLowerCase() === name.toLowerCase());
-      const id7 = existingKey ?? `profile-${createUiId()}`;
-      this.systemPromptProfiles[id7] = {
-        id: id7,
-        name,
+      const existingKey = Object.keys(this.systemPromptProfiles).find((k) => this.systemPromptProfiles[k]?.name.toLowerCase() === name2.toLowerCase());
+      const id9 = existingKey ?? `profile-${createUiId()}`;
+      this.systemPromptProfiles[id9] = {
+        id: id9,
+        name: name2,
         plannerPrompt: customPlannerInstructions,
         referencePrompt: referencePromptOverride,
         characterDnaPrompt: characterDnaPromptOverride,
         promptEngineerPrompt: promptEngineerOverride
       };
-      profileSelect.value = id7;
+      profileSelect.value = id9;
       this.markDraft("activeSystemPromptProfileId");
-      this.renderSystemPromptProfileOptions(id7);
+      this.renderSystemPromptProfileOptions(id9);
       this.save({
         systemPromptProfiles: { ...this.systemPromptProfiles },
-        activeSystemPromptProfileId: id7,
+        activeSystemPromptProfileId: id9,
         customPlannerInstructions,
         referencePromptOverride,
         characterDnaPromptOverride,
         promptEngineerOverride
-      }, `Brain profile “${name}” ${existingKey ? "updated" : "saved"}.`);
+      }, `Brain profile “${name2}” ${existingKey ? "updated" : "saved"}.`);
     });
     this.root.querySelector("[data-system-prompt-profile-delete]")?.addEventListener("click", () => {
       const selectedId = profileSelect.value;
@@ -58199,30 +58982,30 @@ class VisualNovelSettingsPanel {
       this.markDraft("negativePrompt");
     });
     this.root.querySelector("[data-preset-save]")?.addEventListener("click", () => {
-      const name = presetName.value.trim();
-      if (!name) {
+      const name2 = presetName.value.trim();
+      if (!name2) {
         this.setStatus("Give the preset a name first.", "error");
         return;
       }
       const positive = this.control("promptPrefix").value;
       const negative = this.control("negativePrompt").value;
       const suffix = this.control("promptSuffix").value;
-      const existing = this.promptPresets.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase());
-      let id7;
+      const existing = this.promptPresets.find((candidate) => candidate.name.toLowerCase() === name2.toLowerCase());
+      let id9;
       if (existing) {
-        existing.name = name;
+        existing.name = name2;
         existing.positive = positive;
         existing.suffix = suffix;
         existing.negative = negative;
-        id7 = existing.id;
+        id9 = existing.id;
       } else {
-        id7 = `preset-${createUiId()}`;
-        this.promptPresets.push({ id: id7, name, positive, suffix, negative });
+        id9 = `preset-${createUiId()}`;
+        this.promptPresets.push({ id: id9, name: name2, positive, suffix, negative });
       }
-      this.control("selectedSharedStyleId").value = id7;
+      this.control("selectedSharedStyleId").value = id9;
       this.markDraft("selectedSharedStyleId");
-      this.renderPromptPresetOptions(id7);
-      this.save({ promptPresets: this.promptPresets.map((preset) => ({ ...preset })) }, `Preset “${name}” ${existing ? "updated" : "saved"}.`);
+      this.renderPromptPresetOptions(id9);
+      this.save({ promptPresets: this.promptPresets.map((preset) => ({ ...preset })) }, `Preset “${name2}” ${existing ? "updated" : "saved"}.`);
     });
     this.root.querySelector("[data-preset-delete]")?.addEventListener("click", () => {
       const selected = this.promptPresets.find((candidate) => candidate.id === presetSelect.value);
@@ -58268,9 +59051,9 @@ class VisualNovelSettingsPanel {
     this.save(patch);
   }
   livePatchFor(target2) {
-    const name = target2.name;
+    const name2 = target2.name;
     const checked = target2 instanceof HTMLInputElement && target2.checked;
-    switch (name) {
+    switch (name2) {
       case "enabled":
         return { enabled: checked };
       case "mode":
@@ -58665,13 +59448,13 @@ class VisualNovelSettingsPanel {
     this.control("novelAiWidth").value = String(params.width);
     this.control("novelAiHeight").value = String(params.height);
   }
-  showCustom(name, visible) {
-    const field = this.root.querySelector(`[data-custom="${name}"]`);
+  showCustom(name2, visible) {
+    const field = this.root.querySelector(`[data-custom="${name2}"]`);
     if (!field)
       return;
     field.hidden = !visible;
     if (visible)
-      this.control(name).focus();
+      this.control(name2).focus();
   }
   save(patch, savedMessage = "Saved") {
     this.pendingSavedMessage = savedMessage;
@@ -58743,16 +59526,16 @@ class VisualNovelSettingsPanel {
       this.setStatus(`Could not save: ${status.error}${retained ? ". Your advanced draft is kept." : ""}`, "error");
     }
   }
-  markDraft(name) {
+  markDraft(name2) {
     this.afterSaveNavigation = null;
-    if (this.pendingAdvanced.has(name))
-      this.drafts.add(name);
-    else if (this.advancedValue(name) === this.synced.get(name))
-      this.drafts.delete(name);
+    if (this.pendingAdvanced.has(name2))
+      this.drafts.add(name2);
+    else if (this.advancedValue(name2) === this.synced.get(name2))
+      this.drafts.delete(name2);
     else
-      this.drafts.add(name);
+      this.drafts.add(name2);
     this.refreshStatus();
-    if (name === "displayRegexRules")
+    if (name2 === "displayRegexRules")
       this.refreshDisplayRules();
   }
   refreshDisplayRules() {
@@ -58780,8 +59563,8 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     return [...this.drafts].filter((key) => SETTINGS_FIELD_PAGES[key] === this.page);
   }
   synced = new Map;
-  advancedValue(name) {
-    const element = this.control(name);
+  advancedValue(name2) {
+    const element = this.control(name2);
     return element instanceof HTMLInputElement && element.type === "checkbox" ? String(element.checked) : element.value;
   }
   refreshStatus() {
@@ -58794,10 +59577,10 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.root.querySelector("[data-discard]").disabled = saving;
     this.root.querySelector("[data-draft-count]").textContent = `${keys.length} change${keys.length === 1 ? "" : "s"} not applied yet`;
     const perSection = new Map;
-    for (const name of ADVANCED_KEYS) {
-      const element = this.root.querySelector(`[name="${name}"]`);
+    for (const name2 of ADVANCED_KEYS) {
+      const element = this.root.querySelector(`[name="${name2}"]`);
       const field = element?.closest("[data-field], label[data-check], fieldset") ?? null;
-      const changed = this.drafts.has(name);
+      const changed = this.drafts.has(name2);
       field?.toggleAttribute("data-dirty", changed);
       if (changed && element) {
         const section = element.closest("[data-pane]")?.dataset.pane ?? "advanced";
@@ -58831,7 +59614,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     let patch;
     try {
       const values = this.readAdvanced(keys);
-      patch = Object.fromEntries(keys.map((name) => [name, values[name]]));
+      patch = Object.fromEntries(keys.map((name2) => [name2, values[name2]]));
       if (Object.prototype.hasOwnProperty.call(patch, "imageModel")) {
         const activeModel = this.effectiveImageModel(this.config.imageConnectionId, String(patch.imageModel ?? ""));
         if (isFluxKleinModel(activeModel) && this.config.imageResolutionPreference !== "standard") {
@@ -58839,12 +59622,12 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
         }
       }
     } catch (error61) {
-      for (const [name, label] of [["parserParameters", "Story reader parameters"], ["imageParameters", "Image parameters"]]) {
+      for (const [name2, label] of [["parserParameters", "Story reader parameters"], ["imageParameters", "Image parameters"]]) {
         try {
-          if (keys.includes(name))
-            jsonObject(this.control(name).value, label);
+          if (keys.includes(name2))
+            jsonObject(this.control(name2).value, label);
         } catch {
-          this.reveal(this.control(name));
+          this.reveal(this.control(name2));
           break;
         }
       }
@@ -58853,7 +59636,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     }
     this.pendingEverydayFields = {};
     this.advancedSaveRequestId = undefined;
-    this.pendingAdvanced = new Map(keys.map((name) => [name, { value: patch[name], text: this.advancedValue(name) }]));
+    this.pendingAdvanced = new Map(keys.map((name2) => [name2, { value: patch[name2], text: this.advancedValue(name2) }]));
     this.advancedSaveUnconfirmed = false;
     this.refreshStatus();
     this.save(patch, "Advanced settings applied.");
@@ -58919,23 +59702,23 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     };
   }
   setConfig(config2, requestId) {
-    for (const [name, submitted] of this.pendingAdvanced) {
+    for (const [name2, submitted] of this.pendingAdvanced) {
       if (requestId !== undefined && requestId !== this.advancedSaveRequestId)
         continue;
-      if (JSON.stringify(config2[name]) !== JSON.stringify(submitted.value))
+      if (JSON.stringify(config2[name2]) !== JSON.stringify(submitted.value))
         continue;
-      this.synced.set(name, submitted.text);
-      let matches = this.advancedValue(name) === submitted.text;
-      if (!matches && name === "imageParameters") {
+      this.synced.set(name2, submitted.text);
+      let matches = this.advancedValue(name2) === submitted.text;
+      if (!matches && name2 === "imageParameters") {
         try {
-          matches = JSON.stringify(jsonObject(this.advancedValue(name), "Image parameters")) === JSON.stringify({ ...submitted.value, ...this.pendingEverydayFields });
+          matches = JSON.stringify(jsonObject(this.advancedValue(name2), "Image parameters")) === JSON.stringify({ ...submitted.value, ...this.pendingEverydayFields });
         } catch {}
       }
       if (matches)
-        this.drafts.delete(name);
+        this.drafts.delete(name2);
       else
-        this.drafts.add(name);
-      this.pendingAdvanced.delete(name);
+        this.drafts.add(name2);
+      this.pendingAdvanced.delete(name2);
     }
     if (!this.pendingAdvanced.size) {
       this.advancedSaveUnconfirmed = false;
@@ -58983,11 +59766,11 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.trackerMappingsPanel.setConfig(config2.simTrackerMappings);
     this.tooltipSettingsPanel.setConfig(config2.tooltips);
     this.syncEveryday(config2);
-    const set2 = (name, apply) => {
-      if (this.drafts.has(name))
+    const set2 = (name2, apply) => {
+      if (this.drafts.has(name2))
         return;
       apply();
-      this.synced.set(name, this.advancedValue(name));
+      this.synced.set(name2, this.advancedValue(name2));
     };
     set2("imageModel", () => {
       this.control("imageModel").value = config2.imageModel;
@@ -59141,9 +59924,9 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
       grainInput.checked = config2.filmGrain !== false;
     const disabledSet = new Set(config2.disabledSceneEffects ?? []);
     for (const input2 of this.root.querySelectorAll("input[data-scene-effect-id]")) {
-      const id7 = input2.dataset.sceneEffectId;
-      if (id7)
-        input2.checked = !disabledSet.has(id7);
+      const id9 = input2.dataset.sceneEffectId;
+      if (id9)
+        input2.checked = !disabledSet.has(id9);
     }
     this.setRadio("textEffects", config2.textEffects);
     this.syncTextEffectMode(config2);
@@ -59218,8 +60001,8 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.updateSummaries(config2);
     this.updateSample(config2);
   }
-  showCustomQuiet(name, visible) {
-    const field = this.root.querySelector(`[data-custom="${name}"]`);
+  showCustomQuiet(name2, visible) {
+    const field = this.root.querySelector(`[data-custom="${name2}"]`);
     if (field)
       field.hidden = !visible;
   }
@@ -59524,9 +60307,9 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     }));
     select.value = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].some((preset) => preset.id === selectedId) ? selectedId : "";
     const chosen = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].find((p) => p.id === select.value);
-    const name = this.control("promptPresetName");
-    if (previousSelection !== select.value || !name.value)
-      name.value = chosen?.name ?? "";
+    const name2 = this.control("promptPresetName");
+    if (previousSelection !== select.value || !name2.value)
+      name2.value = chosen?.name ?? "";
     const description = this.root.querySelector("[data-style-description]");
     if (description)
       description.textContent = BUILTIN_SHARED_STYLES.find((p) => p.id === select.value)?.description ?? (chosen ? "Your saved style. Edit the fields, then Apply." : "Custom wording. Edit the fields, then Apply.");
@@ -59546,11 +60329,11 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
   castArtNotice(error61) {
     this.castArtPanel.notice(error61);
   }
-  setPresentationRules(chat, id7, catalog) {
-    return this.presentationRules.receive(chat, id7, catalog);
+  setPresentationRules(chat, id9, catalog) {
+    return this.presentationRules.receive(chat, id9, catalog);
   }
-  presentationRulesError(error61, id7) {
-    this.presentationRules.error(error61, id7);
+  presentationRulesError(error61, id9) {
+    this.presentationRules.error(error61, id9);
   }
   clearPresentationRules() {
     this.presentationRules.clear();
@@ -59984,12 +60767,12 @@ function resolveRouteDialect(provider, modelId, parameters, settings) {
 function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits, liveOutputs, parameters) {
   const p = provider?.trim().toLowerCase() ?? "";
   const rawModel = model?.trim() ?? "unknown";
-  const id7 = rawModel;
-  const resolution = resolveRouteDialect(p, id7, parameters, settings);
+  const id9 = rawModel;
+  const resolution = resolveRouteDialect(p, id9, parameters, settings);
   const dialect = resolution.dialect;
   const family2 = resolution.family;
-  const liveLimit = p === "nanogpt" ? liveLimits?.get(id7) : undefined;
-  const catalogueLimit = p === "nanogpt" && Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id7) ? NANOGPT_PROMPT_CAPABILITIES[id7] : undefined;
+  const liveLimit = p === "nanogpt" ? liveLimits?.get(id9) : undefined;
+  const catalogueLimit = p === "nanogpt" && Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id9) ? NANOGPT_PROMPT_CAPABILITIES[id9] : undefined;
   const providerLimit = liveLimit ?? catalogueLimit;
   let capabilitySource = "fallback";
   if (liveLimit !== undefined) {
@@ -60017,8 +60800,8 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
     const manualBudget = Math.min(65000, Math.max(256, Math.trunc(settings.imagePromptBudget)));
     hardMaxCharacters = providerLimit !== undefined ? Math.min(manualBudget, providerLimit) : manualBudget;
   }
-  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id7) : undefined;
-  const catalogueOutput = p === "nanogpt" && Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id7) ? NANOGPT_OUTPUT_CAPABILITIES[id7] : undefined;
+  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id9) : undefined;
+  const catalogueOutput = p === "nanogpt" && Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id9) ? NANOGPT_OUTPUT_CAPABILITIES[id9] : undefined;
   const outputCapabilities = liveOutput ?? catalogueOutput;
   let softBudgets = DIALECT_BUDGETS[dialect];
   if (dialect === "qwen-image-3" && resolution.promptExpansion?.enabled === false) {
@@ -60544,7 +61327,7 @@ function parseSubjectsFromBrief(brief, cue) {
     if (lines.length > 0) {
       return lines.map((line) => {
         const colon = line.indexOf(":");
-        const name2 = line.slice(0, colon).trim();
+        const name3 = line.slice(0, colon).trim();
         const rawRest = line.slice(colon + 1).trim();
         const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
         const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
@@ -60560,7 +61343,7 @@ function parseSubjectsFromBrief(brief, cue) {
           }
         }
         return {
-          name: name2,
+          name: name3,
           appearance,
           attire: attire2
         };
@@ -60569,15 +61352,15 @@ function parseSubjectsFromBrief(brief, cue) {
     if (brief.subjects.trim()) {
       const names = brief.subjects.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
       if (names.length > 0) {
-        return names.map((name2) => ({
-          name: name2,
+        return names.map((name3) => ({
+          name: name3,
           appearance: "distinct physical features",
           attire: isNarrativeUndressed ? undefined : "scene-appropriate casual clothing"
         }));
       }
     }
   }
-  const name = brief.subjectPreparation?.name || cue?.character || "Subject";
+  const name2 = brief.subjectPreparation?.name || cue?.character || "Subject";
   const rawAppearance = brief.subjectPreparation?.identity || cue?.resolvedIdentity || brief.subjects;
   const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
   let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
@@ -60589,7 +61372,7 @@ function parseSubjectsFromBrief(brief, cue) {
   }
   const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
   return [{
-    name,
+    name: name2,
     appearance: sanitizedAppearance,
     attire,
     action: action ? sanitizeQuoteAndUnitNotation(action) : undefined
@@ -62355,8 +63138,8 @@ function extractIdeogramPalette(brief, styleDNA) {
           hexes.push(trimmed);
       } else {
         const lower = c.toLowerCase();
-        for (const [name, hex3] of Object.entries(COLOR_NAME_TO_HEX)) {
-          if (new RegExp(`\\b${name}\\b`).test(lower) && !hexes.includes(hex3)) {
+        for (const [name2, hex3] of Object.entries(COLOR_NAME_TO_HEX)) {
+          if (new RegExp(`\\b${name2}\\b`).test(lower) && !hexes.includes(hex3)) {
             hexes.push(hex3);
           }
         }
@@ -62910,9 +63693,9 @@ function lintCompiledPrompt(options) {
     const lines = brief.subjects.split(`
 `).filter((line) => line.includes(":"));
     for (const line of lines) {
-      const name = line.slice(0, line.indexOf(":")).trim();
-      if (name && !prompt.toLowerCase().includes(name.toLowerCase())) {
-        warnings.push(`Ensemble character "${name}" was not found in the compiled prompt.`);
+      const name2 = line.slice(0, line.indexOf(":")).trim();
+      if (name2 && !prompt.toLowerCase().includes(name2.toLowerCase())) {
+        warnings.push(`Ensemble character "${name2}" was not found in the compiled prompt.`);
       }
     }
   }
@@ -63018,14 +63801,14 @@ function applyDeltaOnlySubjectBrief(brief, referencePlan) {
       const colonIdx = line.indexOf(":");
       if (colonIdx <= 0)
         return line;
-      const name = line.slice(0, colonIdx).trim();
-      const matched = wiredIdentityRefs.find((r) => r.subject && r.subject.trim().toLowerCase() === name.toLowerCase());
+      const name2 = line.slice(0, colonIdx).trim();
+      const matched = wiredIdentityRefs.find((r) => r.subject && r.subject.trim().toLowerCase() === name2.toLowerCase());
       if (!matched)
         return line;
       const body2 = line.slice(colonIdx + 1);
       const attireMatch = body2.match(/;\s*(?:wearing|attired in)\s+([^;\n]+)/i);
       const attireClause = attireMatch?.[1] ? `; wearing ${attireMatch[1].trim()}` : "";
-      return `${name}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
+      return `${name2}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
     });
     return { ...brief, subjects: lines.join(`
 `) };
@@ -63301,12 +64084,12 @@ class ImageActivityPanel {
       item.title = `${event.at}${event.requestId ? ` · Request ${event.requestId}` : ""}${event.attemptId ? ` · Attempt ${event.attemptId}` : ""}`;
       this.element.querySelector("[data-image-event-list]").append(item);
     }
-    const key = this.turn ? turnHistoryKey(this.turn) : null, request = this.request, button = this.element.querySelector("[data-dispatch-held]");
-    button.hidden = !this.waiting;
-    button.onclick = () => {
+    const key = this.turn ? turnHistoryKey(this.turn) : null, request = this.request, button2 = this.element.querySelector("[data-dispatch-held]");
+    button2.hidden = !this.waiting;
+    button2.onclick = () => {
       const current = this.turn ? turnHistoryKey(this.turn) : null;
       if (request && key && current && this.request?.requestId === request.requestId && this.turn && samePresentationTurn(current, key) && this.waiting) {
-        button.disabled = true;
+        button2.disabled = true;
         this.approve(request);
       }
     };
@@ -63315,11 +64098,11 @@ class ImageActivityPanel {
 }
 
 // src/shared/image-version-history.ts
-var id7 = exports_external.string().min(1).max(256);
-var ImageVersionProvenanceSchema = exports_external.object({ version: exports_external.literal(1), job: AssetJobSchema, cue: VisualCueSchema, requestId: id7 }).strict().refine((value) => JSON.stringify(value).length <= 200000);
+var id9 = exports_external.string().min(1).max(256);
+var ImageVersionProvenanceSchema = exports_external.object({ version: exports_external.literal(1), job: AssetJobSchema, cue: VisualCueSchema, requestId: id9 }).strict().refine((value) => JSON.stringify(value).length <= 200000);
 var ImageVersionSchema = exports_external.object({
-  versionId: id7,
-  imageId: id7,
+  versionId: id9,
+  imageId: id9,
   imageUrl: exports_external.string().min(1).max(8192).refine((value) => /^(?:\/(?!\/)|https?:\/\/|blob:)/.test(value) && !/[\s"'<>\u0000-\u001f]/.test(value)),
   timestamp: exports_external.string().max(64).refine((value) => Number.isFinite(Date.parse(value))),
   prompt: exports_external.string().max(65000).optional(),
@@ -63413,9 +64196,9 @@ class VersionComparison {
   get select() {
     return this.element.querySelector("[data-compare-version]");
   }
-  setContext(scope, asset) {
-    if (scope !== this.scope) {
-      this.scope = scope;
+  setContext(scope2, asset) {
+    if (scope2 !== this.scope) {
+      this.scope = scope2;
       this.signature = "";
       this.load?.abort();
       this.element.open = false;
@@ -63820,12 +64603,12 @@ class PreparedBriefView {
     links.className = "row";
     links.dataset.briefLinks = "";
     for (const [destination, label] of [["prompt", "Edit wording"], ["subject", "Correct subject"], ["template", "Template"], ["output", "Output settings"]]) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = label;
-      button.dataset.briefLink = destination;
-      button.onclick = () => this.navigate(destination);
-      links.append(button);
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.textContent = label;
+      button2.dataset.briefLink = destination;
+      button2.onclick = () => this.navigate(destination);
+      links.append(button2);
     }
     this.engineDetails.dataset.engineDetails = "";
     const engineTitle = document.createElement("summary");
@@ -63998,13 +64781,13 @@ class PreparedBriefView {
         this.engineContent.replaceChildren(container);
       }
     }
-    for (const button of this.element.querySelectorAll("[data-brief-link]"))
-      button.disabled = !available[button.dataset.briefLink];
+    for (const button2 of this.element.querySelectorAll("[data-brief-link]"))
+      button2.disabled = !available[button2.dataset.briefLink];
   }
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.16-beta.185";
+var LUMIGLYPHICS_VERSION = "0.2.17-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -64282,10 +65065,10 @@ class ImageStudio {
       prevVersMount.parentElement.insertBefore(activityDetails, prevVersMount);
     else
       this.el("[data-context]").after(activityDetails);
-    const scope = document.createElement("small");
-    scope.dataset.correctionScope = "";
-    scope.setAttribute("role", "status");
-    this.el("[data-save-appearance]").closest("label").after(scope);
+    const scope2 = document.createElement("small");
+    scope2.dataset.correctionScope = "";
+    scope2.setAttribute("role", "status");
+    this.el("[data-save-appearance]").closest("label").after(scope2);
     this.el("[data-save-appearance]").onchange = () => this.updateCorrectionScope();
     const quick = document.createElement("button");
     quick.type = "button";
@@ -64309,7 +65092,7 @@ class ImageStudio {
     queue.dataset.retryQueue = "";
     queue.innerHTML = '<div class="row"><button type="button" data-queue-unfinished>Retry unfinished</button><button type="button" data-clear-retries>Clear queued retries</button></div><small data-queue-status role="status" aria-live="polite"></small>';
     this.el("[data-state-detail]").after(queue);
-    this.el("[data-queue-unfinished]").onclick = () => this.queuePictures((this.turn?.assets ?? []).filter((a) => a.source !== "cache" && !["generated", "browser_ready"].includes(a.status)).map((a) => a.jobId).filter((id8) => !this.retryQueueJobs.has(id8) && id8 !== this.retryActive));
+    this.el("[data-queue-unfinished]").onclick = () => this.queuePictures((this.turn?.assets ?? []).filter((a) => a.source !== "cache" && !["generated", "browser_ready"].includes(a.status)).map((a) => a.jobId).filter((id10) => !this.retryQueueJobs.has(id10) && id10 !== this.retryActive));
     this.el("[data-clear-retries]").onclick = () => {
       if (this.turn)
         this.send({ type: "vn_queue_image_retries", version: 1, ...this.recoveryScope(), revision: this.turn.revision, action: "clear" });
@@ -64773,8 +65556,8 @@ class ImageStudio {
       this.renderRecoveryMode();
     };
     this.el("[data-subject-name]").onchange = () => {
-      const name = this.el("[data-subject-name]").value;
-      this.el("[data-subject-appearance]").value = this.turn?.subjectCandidates?.find((c) => c.name === name)?.appearance ?? "";
+      const name2 = this.el("[data-subject-name]").value;
+      this.el("[data-subject-appearance]").value = this.turn?.subjectCandidates?.find((c) => c.name === name2)?.appearance ?? "";
     };
     this.el("[data-save-role]").onclick = () => {
       if (!this.turn)
@@ -64785,8 +65568,8 @@ class ImageStudio {
       if (!this.turn || this.preparing.has(this.selectedJob))
         return;
       const environment = this.el("[data-subject-mode]").value === "environment";
-      const name = this.el("[data-subject-name]").value.trim();
-      if (!environment && !name) {
+      const name2 = this.el("[data-subject-name]").value.trim();
+      if (!environment && !name2) {
         this.setNotice("Enter the character name first.");
         return;
       }
@@ -64797,7 +65580,7 @@ class ImageStudio {
         ...this.recoveryScope(),
         jobId: this.selectedJob,
         templateId,
-        subject: environment ? { kind: "environment", templateId } : { kind: "character", name, appearance: this.el("[data-subject-appearance]").value, saveAppearance: this.el("[data-save-appearance]").checked }
+        subject: environment ? { kind: "environment", templateId } : { kind: "character", name: name2, appearance: this.el("[data-subject-appearance]").value, saveAppearance: this.el("[data-save-appearance]").checked }
       });
       this.beginPreparation(this.selectedJob);
       this.render();
@@ -64850,8 +65633,8 @@ class ImageStudio {
   queuePictures(ids) {
     if (!this.turn || !ids.length)
       return;
-    for (const id8 of ids)
-      this.retryQueueJobs.add(id8);
+    for (const id10 of ids)
+      this.retryQueueJobs.add(id10);
     const request = { type: "vn_queue_image_retries", version: 1, ...this.recoveryScope(), revision: this.turn.revision, action: "enqueue", jobIds: ids };
     this.render();
     try {
@@ -65395,13 +66178,13 @@ class ImageStudio {
     const correctionButtons = document.createElement("div");
     correctionButtons.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0";
     for (const [goal, label] of [["subject", "Person or outfit"], ["camera", "Camera or framing"], ["prompt", "Edit wording"], ["replacement", "Another image"]]) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.correctionGoal = goal;
-      button.textContent = label;
-      button.style.cssText = "min-height:44px;white-space:normal;overflow-wrap:anywhere";
-      button.onclick = () => this.openCorrection(goal);
-      correctionButtons.append(button);
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.dataset.correctionGoal = goal;
+      button2.textContent = label;
+      button2.style.cssText = "min-height:44px;white-space:normal;overflow-wrap:anywhere";
+      button2.onclick = () => this.openCorrection(goal);
+      correctionButtons.append(button2);
     }
     const correctionHelp = document.createElement("small");
     correctionHelp.dataset.correctionHelp = "";
@@ -65800,11 +66583,11 @@ class ImageStudio {
       } else {
         const names = record2?.imagePromptMetadata?.brief?.subjectPreparation?.name ? [record2.imagePromptMetadata.brief.subjectPreparation.name] : record2?.imagePromptMetadata?.brief?.subjects ? record2.imagePromptMetadata.brief.subjects.split(`
 `).map((l) => l.split(":")[0]?.trim() || "").filter(Boolean) : [];
-        for (const name of (names.length ? names : ["Scene Focus"]).slice(0, 4)) {
+        for (const name2 of (names.length ? names : ["Scene Focus"]).slice(0, 4)) {
           const chip = document.createElement("button");
           chip.type = "button";
           chip.className = "studio-vf-subject-chip";
-          chip.textContent = name;
+          chip.textContent = name2;
           chip.title = "Click to cycle composition framing";
           chip.onclick = cyclePlacement;
           subjectsBox.append(chip);
@@ -65969,15 +66752,15 @@ class ImageStudio {
     this.navigateBrief("prompt");
   }
   replacementAction() {
-    return Array.from(this.el("[data-studio-footer]").querySelectorAll("button")).find((button) => button.matches("[data-primary-repair],[data-generate],[data-prepare],[data-retry-image]") && !button.hidden && !button.disabled);
+    return Array.from(this.el("[data-studio-footer]").querySelectorAll("button")).find((button2) => button2.matches("[data-primary-repair],[data-generate],[data-prepare],[data-retry-image]") && !button2.hidden && !button2.disabled);
   }
   updateCorrectionNavigation() {
     const selected = Boolean(this.turn?.assets.some((asset) => asset.jobId === this.selectedJob));
     this.el("[data-picture-corrections]").hidden = !selected || Boolean(this.planningChat) || this.turn?.status === "planning";
-    for (const button of this.root.querySelectorAll("[data-correction-goal]")) {
-      const goal = button.dataset.correctionGoal;
+    for (const button2 of this.root.querySelectorAll("[data-correction-goal]")) {
+      const goal = button2.dataset.correctionGoal;
       const needsWording = goal === "prompt" || goal === "subject" && this.el("[data-recovery]").hidden;
-      button.disabled = !selected || (goal === "replacement" ? !this.replacementAction() : goal === "camera" ? this.el("[data-template]").disabled : needsWording ? this.el("[data-positive]").readOnly : false);
+      button2.disabled = !selected || (goal === "replacement" ? !this.replacementAction() : goal === "camera" ? this.el("[data-template]").disabled : needsWording ? this.el("[data-positive]").readOnly : false);
     }
   }
   diagnosticText() {
@@ -66154,7 +66937,7 @@ Negative prompt
       const result = promptRevisionSummary(previous, { prompt: this.el("[data-positive]").value, negative: this.el("[data-negative]").value });
       const change = result.delta === 0 ? "same length" : `${Math.abs(result.delta).toLocaleString()} ${result.delta < 0 ? "fewer" : "more"}`;
       this.el("[data-revision-count]").textContent = `Combined: ${result.before.toLocaleString()} → ${result.after.toLocaleString()} characters · ${change}`;
-      this.el("[data-revision-fields]").textContent = [["Positive", result.positive], ["Negative", result.negative]].map(([name, field]) => `${name}: ${field.before.toLocaleString()} → ${field.after.toLocaleString()}${field.changed ? "" : " (unchanged)"}`).join(" · ");
+      this.el("[data-revision-fields]").textContent = [["Positive", result.positive], ["Negative", result.negative]].map(([name2, field]) => `${name2}: ${field.before.toLocaleString()} → ${field.after.toLocaleString()}${field.changed ? "" : " (unchanged)"}`).join(" · ");
       this.el("[data-previous-positive]").value = previous.prompt;
       this.el("[data-previous-negative]").value = previous.negative;
       const changed = changedSceneEvidence(previous.sceneEvidence, this.el("[data-positive]").value);
@@ -66171,10 +66954,10 @@ Negative prompt
       }
     }
     let total = 0;
-    for (const name of ["positive", "negative"]) {
-      const length = this.el(`[data-${name}]`).value.length;
+    for (const name2 of ["positive", "negative"]) {
+      const length = this.el(`[data-${name2}]`).value.length;
       total += length;
-      this.el(`[data-${name}-count]`).textContent = `${length.toLocaleString()} characters`;
+      this.el(`[data-${name2}-count]`).textContent = `${length.toLocaleString()} characters`;
     }
     const record2 = this.record(), profile = record2?.promptProfile, profileV2 = record2?.promptProfileV2, isIdeogram = Boolean(record2?.model && /ideogram/i.test(record2.model)), maximum = profileV2?.hardMaxCharacters ?? profile?.maxCharacters ?? (isIdeogram ? 1e4 : IMAGE_PROMPT_MAX_CHARS);
     let error61 = "";
@@ -66277,9 +67060,9 @@ Negative prompt
     for (const selector of ["[data-positive]", "[data-negative]"])
       this.el(selector).setAttribute("aria-invalid", String(Boolean(error61)));
     for (const selector of ["[data-generate]", "[data-prepare]"]) {
-      const button = this.el(selector);
-      if (button.dataset.available !== undefined)
-        button.disabled = button.dataset.available !== "true" || Boolean(error61);
+      const button2 = this.el(selector);
+      if (button2.dataset.available !== undefined)
+        button2.disabled = button2.dataset.available !== "true" || Boolean(error61);
     }
     const retry = this.el("[data-retry-image]");
     if (retry.dataset.available !== undefined)
@@ -66401,11 +67184,11 @@ Negative prompt
     this.recovering = null;
     this.turn = turn;
     for (const pending of [this.rerolling, this.rebuilding])
-      for (const id8 of pending) {
-        const record2 = turn?.imageRequests?.find((record3) => record3.requestId === id8);
+      for (const id10 of pending) {
+        const record2 = turn?.imageRequests?.find((record3) => record3.requestId === id10);
         const latest = turn?.imageRequests?.filter((candidate) => candidate.jobId === record2?.jobId).at(-1);
-        if (!record2 || latest?.requestId !== id8 || record2.state !== "review")
-          pending.delete(id8);
+        if (!record2 || latest?.requestId !== id10 || record2.state !== "review")
+          pending.delete(id10);
       }
     for (const record2 of turn?.imageRequests ?? [])
       if (record2.state !== "review") {
@@ -66461,12 +67244,12 @@ Negative prompt
     this.browseLibrary = open2;
     if (this.root.querySelector("[data-workspace-library]"))
       return;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.workspaceLibrary = "";
-    button.textContent = "Browse saved artwork";
-    button.onclick = () => this.browseLibrary?.();
-    this.el("[data-studio-body]").prepend(button);
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.dataset.workspaceLibrary = "";
+    button2.textContent = "Browse saved artwork";
+    button2.onclick = () => this.browseLibrary?.();
+    this.el("[data-studio-body]").prepend(button2);
   }
   setReview(enabled) {
     this.review = enabled;
@@ -66725,15 +67508,15 @@ Negative prompt
     }
   }
   updateRewriteLabel() {
-    const record2 = this.record(), button = this.el("[data-regenerate-prompt]");
+    const record2 = this.record(), button2 = this.el("[data-regenerate-prompt]");
     const total = this.el("[data-positive]").value.length + this.el("[data-negative]").value.length;
     const isIdeo = Boolean(record2?.model && /ideogram/i.test(record2.model));
     const maxBudget = record2?.promptProfileV2?.hardMaxCharacters ?? record2?.promptProfile?.maxCharacters ?? (isIdeo ? 1e4 : 3000);
     const posOnly = record2?.promptProfile?.negativeMode === "positive-only" || record2?.promptProfileV2?.negativePolicy === "positive-only" || isIdeo;
     const needsFit = Boolean(record2) && (total > maxBudget || posOnly && Boolean(this.el("[data-negative]").value.trim()));
     const busy = this.preparing.has(this.selectedJob) || Boolean(record2 && this.rerolling.has(record2.requestId));
-    button.textContent = busy ? needsFit ? "Fitting prompt…" : "Rewriting prompt…" : needsFit ? "Fit to budget" : "Rewrite prompt";
-    button.title = needsFit ? "Compresses the current edited draft while preserving named subjects and their appearance facts. Uses story-reader text tokens; generation still requires approval." : "Uses the current edited wording to describe the same scene again. Uses story-reader text tokens; generation still requires approval.";
+    button2.textContent = busy ? needsFit ? "Fitting prompt…" : "Rewriting prompt…" : needsFit ? "Fit to budget" : "Rewrite prompt";
+    button2.title = needsFit ? "Compresses the current edited draft while preserving named subjects and their appearance facts. Uses story-reader text tokens; generation still requires approval." : "Uses the current edited wording to describe the same scene again. Uses story-reader text tokens; generation still requires approval.";
   }
   setImageActivity(chatId, activity) {
     const wasWaiting = this.activity.waiting;
@@ -67191,26 +67974,26 @@ ${metadata.presentationRuleTrace.summary}`;
     if (!strip.hidden)
       for (const [index, entry] of assets.entries()) {
         const label = pictureStateLabel(stateFor(entry.jobId));
-        const button = document.createElement("button");
-        button.type = "button";
-        button.setAttribute("aria-pressed", String(entry.jobId === this.selectedJob));
-        button.setAttribute("aria-label", `Picture ${index + 1}, paragraph ${entry.paragraphIndex + 1}`);
-        button.setAttribute("aria-description", label);
+        const button2 = document.createElement("button");
+        button2.type = "button";
+        button2.setAttribute("aria-pressed", String(entry.jobId === this.selectedJob));
+        button2.setAttribute("aria-label", `Picture ${index + 1}, paragraph ${entry.paragraphIndex + 1}`);
+        button2.setAttribute("aria-description", label);
         if (entry.imageUrl) {
           const thumb = document.createElement("img");
           thumb.src = entry.imageUrl;
           thumb.alt = "";
-          button.append(thumb);
+          button2.append(thumb);
         }
         const caption = document.createElement("span");
         caption.textContent = `Picture ${index + 1} · ${label}`;
-        button.append(caption);
-        button.onclick = () => {
+        button2.append(caption);
+        button2.onclick = () => {
           this.selectedJob = entry.jobId;
           this.selectedRequest = "";
           this.render();
         };
-        strip.append(button);
+        strip.append(button2);
       }
     this.el("[data-picture]").closest("label").hidden = assets.length >= 2;
     this.syncDirectorViewfinder();
@@ -67226,9 +68009,9 @@ ${metadata.presentationRuleTrace.summary}`;
     this.el("[data-rewrite-changed]").hidden = record2?.state !== "review" || !previous || previous.requestId === record2.requestId || pending;
     const selected = { generate: "[data-generate]", retry: "[data-retry-image]", prepare: "[data-prepare]" };
     for (const [action, selector] of Object.entries(selected)) {
-      const button = this.el(selector);
-      button.hidden = state.action !== action;
-      button.dataset.available = String(!button.disabled);
+      const button2 = this.el(selector);
+      button2.hidden = state.action !== action;
+      button2.dataset.available = String(!button2.disabled);
     }
     this.el("[data-generate]").textContent = "Generate picture";
     this.el("[data-retry-image]").textContent = "Edit before retry";
@@ -67380,11 +68163,11 @@ ${metadata.presentationRuleTrace.summary}`;
     }
     this.render();
   }
-  setPresentationRules(chat, id8, catalog) {
-    return this.preferences.receive(chat, id8, catalog);
+  setPresentationRules(chat, id10, catalog) {
+    return this.preferences.receive(chat, id10, catalog);
   }
-  presentationRulesError(error61, id8) {
-    this.preferences.error(error61, id8);
+  presentationRulesError(error61, id10) {
+    this.preferences.error(error61, id10);
   }
   destroy() {
     this.tabObserver?.disconnect();
@@ -67626,6 +68409,7 @@ class ImageLibrary {
   pageLimit;
   appendPending = false;
   onReadingHistoryRefresh;
+  onReadingHistoryHidden;
   readingHistorySlot = document.createElement("div");
   currentSceneEntries = [];
   onJumpToParagraph = null;
@@ -67729,17 +68513,17 @@ class ImageLibrary {
     tabs.dataset.historyViews = "";
     tabs.setAttribute("aria-label", "History views");
     for (const mode of ["story", "images"]) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.historyView = mode;
-      button.textContent = mode === "story" ? "Story" : "Images";
-      button.onclick = () => {
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.dataset.historyView = mode;
+      button2.textContent = mode === "story" ? "Story" : "Images";
+      button2.onclick = () => {
         this.mode = mode;
         this.pages = ["0:0"];
         this.pageIndex = 0;
         this.load();
       };
-      tabs.append(button);
+      tabs.append(button2);
     }
     this.el("[data-browse]").prepend(tabs);
     this.readingHistorySlot.dataset.readingHistory = "";
@@ -68025,6 +68809,7 @@ Negative prompt:
     this.opener?.setAttribute("aria-expanded", "false");
     delete this.host.dataset.open;
     this.cancel();
+    this.onReadingHistoryHidden?.();
     this.selected = null;
     this.el("[data-full-image]").removeAttribute("src");
     this.el("section").hidden = true;
@@ -68048,6 +68833,8 @@ Negative prompt:
     this.readingHistorySlot.hidden = this.mode !== "story" || this.pageIndex !== 0;
     if (!this.readingHistorySlot.hidden)
       this.onReadingHistoryRefresh?.();
+    else
+      this.onReadingHistoryHidden?.();
     if (!this.context || !this.opened)
       return;
     this.cancel();
@@ -68359,11 +69146,11 @@ Negative prompt:
             this.expanded.delete(replyKey);
         };
         for (const paragraph of reply.paragraphs) {
-          const name = document.createElement("strong");
-          name.textContent = paragraph.speaker;
+          const name2 = document.createElement("strong");
+          name2.textContent = paragraph.speaker;
           const text = document.createElement("p");
           text.textContent = stripUnknownPresetTags(paragraph.text);
-          details.append(name, text);
+          details.append(name2, text);
         }
         if (reply.truncated) {
           const note = document.createElement("p");
@@ -68752,14 +69539,14 @@ function openReferenceCropperModal(options) {
     rect = fitAspectCropRect(imgW, imgH, aspect, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, scale);
     sync();
   };
-  for (const [id8, label] of [["1:1", "1:1 Face"], ["3:4", "3:4 Portrait"], ["2:3", "2:3 Full Body"], ["free", "Free"]]) {
+  for (const [id10, label] of [["1:1", "1:1 Face"], ["3:4", "3:4 Portrait"], ["2:3", "2:3 Full Body"], ["free", "Free"]]) {
     const b = document.createElement("button");
     b.type = "button";
-    b.dataset.cropAspect = id8;
+    b.dataset.cropAspect = id10;
     b.textContent = label;
     b.style.cssText = BTN;
     b.onclick = () => {
-      aspect = id8;
+      aspect = id10;
       refit(Number(zoom.value) / 100 || 0.78);
     };
     aspectRow.append(b);
@@ -69837,9 +70624,9 @@ class CharacterFolio {
     const cursorKey = JSON.stringify([turn?.chatId, turn?.messageId, turn?.swipeId, turn?.sourceFingerprint, turn?.revision, paragraphIndex]);
     const currentSwipeKey = turn?.messageId ? `${turn.messageId}::${turn.swipeId ?? 0}` : null;
     if (this.lastRenderedSwipeKey && currentSwipeKey && this.lastRenderedSwipeKey !== currentSwipeKey) {
-      for (const [id8, dna] of Object.entries(this.library)) {
-        const isTemporary = Boolean(dna.autoDiscovered || this.discoveredIds.has(id8));
-        if (!isTemporary || dna.locked || this.dirty.has(id8) || this.saving.has(id8))
+      for (const [id10, dna] of Object.entries(this.library)) {
+        const isTemporary = Boolean(dna.autoDiscovered || this.discoveredIds.has(id10));
+        if (!isTemporary || dna.locked || this.dirty.has(id10) || this.saving.has(id10))
           continue;
         const swipes = dna.seenInSwipes && dna.seenInSwipes.length > 0 ? dna.seenInSwipes : [this.lastRenderedSwipeKey];
         for (const sKey of swipes) {
@@ -69848,20 +70635,20 @@ class CharacterFolio {
             bucket = new Map;
             this.swipeCharacterCache.set(sKey, bucket);
           }
-          bucket.set(id8, structuredClone(dna));
+          bucket.set(id10, structuredClone(dna));
         }
         if (!swipes.includes(currentSwipeKey)) {
-          delete this.library[id8];
-          delete this.savedLibrary[id8];
-          this.discoveredIds.delete(id8);
+          delete this.library[id10];
+          delete this.savedLibrary[id10];
+          this.discoveredIds.delete(id10);
         }
       }
       const cachedBucket = this.swipeCharacterCache.get(currentSwipeKey);
       if (cachedBucket) {
-        for (const [id8, cachedDna] of cachedBucket.entries()) {
-          if (!this.library[id8] && !this.deleted[id8] && !findCharacterDNA(this.deleted, cachedDna.name)) {
-            this.library[id8] = structuredClone(cachedDna);
-            this.discoveredIds.add(id8);
+        for (const [id10, cachedDna] of cachedBucket.entries()) {
+          if (!this.library[id10] && !this.deleted[id10] && !findCharacterDNA(this.deleted, cachedDna.name)) {
+            this.library[id10] = structuredClone(cachedDna);
+            this.discoveredIds.add(id10);
           }
         }
       }
@@ -69883,8 +70670,8 @@ class CharacterFolio {
     const visibleText = (turn?.paragraphs ?? []).slice(0, Math.max(0, cursor + 1)).join(`
 
 `);
-    const mentioned = (name) => {
-      const escaped = name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const mentioned = (name2) => {
+      const escaped = name2.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       return Boolean(escaped) && new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(visibleText);
     };
     const detectedNames = new Set;
@@ -69904,13 +70691,13 @@ class CharacterFolio {
     for (const snap of snapshot ? [snapshot] : []) {
       for (const ent of snap.entities ?? []) {
         if (ent.kind === "npc" && ent.name?.trim()) {
-          const name = ent.name.trim();
-          detectedNames.add(name);
-          const key = name.toLowerCase();
+          const name2 = ent.name.trim();
+          detectedNames.add(name2);
+          const key = name2.toLowerCase();
           const existingLore = this.loreMap[key] || {};
           const presentInSnap = snap.presentEntityIds ? snap.presentEntityIds.includes(ent.id) : false;
-          if (!mentioned(name) && !presentInSnap) {
-            detectedNames.delete(name);
+          if (!mentioned(name2) && !presentInSnap) {
+            detectedNames.delete(name2);
             continue;
           }
           existingLore.inScene = snap.presentEntityIds?.includes(ent.id) ?? true;
@@ -69974,30 +70761,30 @@ class CharacterFolio {
       }
     }
     let changed = false;
-    const names = new Set([...detectedNames].map((name) => name.toLowerCase()));
-    for (const id8 of this.discoveredIds) {
-      const dna = this.library[id8];
+    const names = new Set([...detectedNames].map((name2) => name2.toLowerCase()));
+    for (const id10 of this.discoveredIds) {
+      const dna = this.library[id10];
       if (!dna) {
-        this.discoveredIds.delete(id8);
+        this.discoveredIds.delete(id10);
         continue;
       }
-      if (!names.has(dna.name.toLowerCase()) && !this.savedLibrary[id8] && !this.dirty.has(id8) && !this.saving.has(id8)) {
-        delete this.library[id8];
-        this.discoveredIds.delete(id8);
+      if (!names.has(dna.name.toLowerCase()) && !this.savedLibrary[id10] && !this.dirty.has(id10) && !this.saving.has(id10)) {
+        delete this.library[id10];
+        this.discoveredIds.delete(id10);
         changed = true;
       }
     }
     if (this.activeCharacterId && !this.library[this.activeCharacterId])
       this.activeCharacterId = null;
-    for (const name of detectedNames) {
-      const key = name.trim().toLowerCase();
+    for (const name2 of detectedNames) {
+      const key = name2.trim().toLowerCase();
       let match = Object.values(this.library).find((c) => c.name.toLowerCase() === key || c.aliases.some((a) => a.toLowerCase() === key));
       if (!match) {
-        const matchId = findMatchingCharacterId(this.library, name);
+        const matchId = findMatchingCharacterId(this.library, name2);
         if (matchId && this.library[matchId]) {
           match = this.library[matchId];
           if (!match.aliases.some((a) => a.toLowerCase() === key) && match.name.toLowerCase() !== key) {
-            match.aliases.push(name.trim());
+            match.aliases.push(name2.trim());
             changed = true;
           }
         }
@@ -70013,12 +70800,12 @@ class CharacterFolio {
         }
         bucket.set(match.id, structuredClone(match));
       }
-      const isDeleted = Boolean(isScenarioTitle(name) || findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
+      const isDeleted = Boolean(isScenarioTitle(name2) || findCharacterDNA(this.deleted, name2) || findMatchingCharacterId(this.deleted, name2));
       if (!match && !isDeleted) {
-        const dna = createEmptyCharacterDNA(name);
+        const dna = createEmptyCharacterDNA(name2);
         const assetWithImage = visibleAssets.find((a) => {
           const aName = a.stageAsset?.character?.trim();
-          return aName && areNamesEquivalent(aName, name) && ["generated", "browser_ready"].includes(a.status) && sceneImageCandidatesFor(a).length > 0;
+          return aName && areNamesEquivalent(aName, name2) && ["generated", "browser_ready"].includes(a.status) && sceneImageCandidatesFor(a).length > 0;
         });
         if (assetWithImage) {
           dna.avatarUrl = sceneImageCandidatesFor(assetWithImage)[0];
@@ -70120,9 +70907,9 @@ class CharacterFolio {
         next[dna.id] = structuredClone(dna);
     }
     this.library = next;
-    for (const id8 of this.dirty)
-      if (!next[id8])
-        this.dirty.delete(id8);
+    for (const id10 of this.dirty)
+      if (!next[id10])
+        this.dirty.delete(id10);
     if (authoritative && completed) {
       this.pending = false;
       this.proposal = null;
@@ -70264,10 +71051,10 @@ class CharacterFolio {
       }
       const meta3 = document.createElement("div");
       meta3.className = "folio-roster-meta";
-      const name = document.createElement("span");
-      name.className = "folio-roster-name";
-      name.textContent = char.name;
-      meta3.append(name);
+      const name2 = document.createElement("span");
+      name2.className = "folio-roster-name";
+      name2.textContent = char.name;
+      meta3.append(name2);
       if (lore.inScene) {
         const dot = document.createElement("span");
         dot.className = "in-scene-dot";
@@ -70879,16 +71666,16 @@ class CharacterFolio {
     addPresetBtn.style.cssText = "padding:3px 9px;font-size:11px;border-radius:999px;";
     addPresetBtn.textContent = "+ Add Wardrobe Preset";
     addPresetBtn.onclick = () => {
-      const name = typeof window !== "undefined" ? window.prompt?.("Enter name for wardrobe preset (e.g. Formal, Battle Armor, Casual):") : null;
-      if (!name || !name.trim())
+      const name2 = typeof window !== "undefined" ? window.prompt?.("Enter name for wardrobe preset (e.g. Formal, Battle Armor, Casual):") : null;
+      if (!name2 || !name2.trim())
         return;
-      const desc = typeof window !== "undefined" ? window.prompt?.(`Enter visual attire description for "${name}":`, char.activeOutfit || char.signatureOutfit || "") : null;
+      const desc = typeof window !== "undefined" ? window.prompt?.(`Enter visual attire description for "${name2}":`, char.activeOutfit || char.signatureOutfit || "") : null;
       if (!desc || !desc.trim())
         return;
       if (!char.wardrobeStates)
         char.wardrobeStates = {};
-      char.wardrobeStates[name.trim()] = desc.trim();
-      char.activeWardrobeKey = name.trim();
+      char.wardrobeStates[name2.trim()] = desc.trim();
+      char.activeWardrobeKey = name2.trim();
       char.activeOutfit = desc.trim();
       char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
       this.dirty.add(char.id);
@@ -71981,11 +72768,11 @@ class CharacterFolio {
     const box = document.createElement("section");
     box.className = "folio-workflow";
     box.setAttribute("aria-live", "polite");
-    const button = (name, action) => {
+    const button2 = (name2, action) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "folio-action-btn";
-      b.textContent = name;
+      b.textContent = name2;
       b.onclick = action;
       return b;
     };
@@ -71995,17 +72782,17 @@ class CharacterFolio {
       box.append(p2);
     }
     if (this.pending)
-      box.append(button("Cancel auto-fill", () => {
+      box.append(button2("Cancel auto-fill", () => {
         this.cancelProposal();
         this.renderDetail();
       }));
     if (this.deleteConfirm) {
       const p2 = document.createElement("p");
       p2.textContent = `Delete ${char.name} from this chat’s Cast? Story, lore and gallery images remain. You can undo this.`;
-      box.append(p2, button("Delete from this chat", () => {
+      box.append(p2, button2("Delete from this chat", () => {
         this.deleteConfirm = false;
         this.handlers.onDeleteDNA?.(char, this.revision);
-      }), button("Keep character", () => {
+      }), button2("Keep character", () => {
         this.deleteConfirm = false;
         this.renderDetail();
       }));
@@ -72046,8 +72833,8 @@ class CharacterFolio {
           const details = document.createElement("details"), summary = document.createElement("summary");
           summary.textContent = "View evidence";
           details.append(summary);
-          for (const id8 of change.sourceRefs) {
-            const e = p.evidence.find((e2) => e2.id === id8);
+          for (const id10 of change.sourceRefs) {
+            const e = p.evidence.find((e2) => e2.id === id10);
             if (e) {
               const excerpt = document.createElement("p");
               excerpt.textContent = `${e.source}: ${e.text}`;
@@ -72066,7 +72853,7 @@ class CharacterFolio {
         empty.textContent = "No unambiguous changes were proposed. Your profile is unchanged.";
         box.append(empty);
       }
-      box.append(button("Apply selected fields", () => {
+      box.append(button2("Apply selected fields", () => {
         if (!selected.size) {
           this.notice = "Select at least one field to apply.";
           this.renderDetail();
@@ -72074,7 +72861,7 @@ class CharacterFolio {
         }
         this.pending = true;
         this.handlers.onApplyDNA?.(p.id, [...selected]);
-      }), button("Discard suggestions", () => {
+      }), button2("Discard suggestions", () => {
         this.cancelProposal();
         this.renderDetail();
       }));
@@ -72094,7 +72881,7 @@ class CharacterFolio {
       }
       const explanation = document.createElement("p");
       explanation.textContent = `Keep ${char.name} and its existing values. Fill only blank fields from the selected duplicate and retain its name as an alias. Conflicting values stay with ${char.name}.`;
-      details.append(explanation, select, button("Preview merge", () => {
+      details.append(explanation, select, button2("Preview merge", () => {
         this.mergeOther = select.value;
         this.renderDetail();
       }));
@@ -72106,7 +72893,7 @@ class CharacterFolio {
             const a = dnaFieldValue(char, path), b = dnaFieldValue(other, path);
             return b ? `${DNA_FIELD_LABELS[path]}: ${a ? `${JSON.stringify(a)} kept; duplicate ${JSON.stringify(b)}` : `fill ${JSON.stringify(b)}`}` : "";
           }).filter(Boolean).join(" · ");
-          details.append(preview, button("Merge into this character", () => {
+          details.append(preview, button2("Merge into this character", () => {
             if (this.savedLibrary[char.id] && this.savedLibrary[other.id]) {
               this.handlers.onMergeDNA?.(char.id, other.id, this.revision);
             } else {
@@ -72255,31 +73042,31 @@ function createVnHeaderLauncher(mount, onToggle) {
   const root = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = LAUNCHER_CSS;
-  const button = document.createElement("button");
-  button.type = "button";
-  button.setAttribute("data-vn-launcher", "");
+  const button2 = document.createElement("button");
+  button2.type = "button";
+  button2.setAttribute("data-vn-launcher", "");
   const mark = document.createElement("span");
   mark.setAttribute("data-vn-launcher-mark", "");
   mark.setAttribute("aria-hidden", "true");
   mark.textContent = "VN";
   const label = document.createElement("span");
   label.setAttribute("data-vn-launcher-label", "");
-  button.append(mark, label);
-  root.append(style, button);
+  button2.append(mark, label);
+  root.append(style, button2);
   mount.append(host);
   const setActive = (active) => {
     const copy = visualNovelLauncherCopy(active);
     label.textContent = copy.label;
-    button.title = copy.title;
-    button.setAttribute("aria-label", button.title);
-    button.setAttribute("aria-pressed", String(active));
+    button2.title = copy.title;
+    button2.setAttribute("aria-label", button2.title);
+    button2.setAttribute("aria-pressed", String(active));
   };
-  button.addEventListener("click", onToggle);
+  button2.addEventListener("click", onToggle);
   setActive(false);
   return {
     setActive,
     destroy() {
-      button.removeEventListener("click", onToggle);
+      button2.removeEventListener("click", onToggle);
       host.remove();
     }
   };
@@ -72324,13 +73111,13 @@ function parseGameState(detail) {
     if (!raw || typeof raw !== "object")
       continue;
     const c = raw;
-    const id8 = text(c.id, 200);
+    const id10 = text(c.id, 200);
     const label = text(c.label, 160);
-    if (!id8 || !label || seen.has(id8))
+    if (!id10 || !label || seen.has(id10))
       continue;
-    seen.add(id8);
+    seen.add(id10);
     const odds = typeof c.odds === "number" && Number.isFinite(c.odds) ? Math.max(0, Math.min(1, c.odds)) : null;
-    choices.push({ provider, id: id8, label, group: text(c.group, 60), detail: text(c.detail, 400), odds });
+    choices.push({ provider, id: id10, label, group: text(c.group, 60), detail: text(c.detail, 400), odds });
   }
   return { provider, chatId, choices, busy: d.busy === true, busyLabel: text(d.busyLabel, 120) };
 }
@@ -72574,9 +73361,9 @@ function connectImageBridge(target2, chatId, send, onCancelled) {
     send({ type: "vn_external_image_cancel", request: { version: 1, provider: "warp", chatId: chatId2, requestId } });
   }
   function fit(fit2) {
-    const id8 = chatId();
-    if (id8)
-      target2.dispatchEvent(new CustomEvent(CUE_IMAGE_FIT, { detail: { version: 1, chatId: id8, fit: fit2 } }));
+    const id10 = chatId();
+    if (id10)
+      target2.dispatchEvent(new CustomEvent(CUE_IMAGE_FIT, { detail: { version: 1, chatId: id10, fit: fit2 } }));
   }
   return { result, destroy, fit, cancelAll, cancelRequest, owns: (chatId2, requestId) => pending.get(requestId) === chatId2 };
 }
@@ -72600,8 +73387,8 @@ function panelDocument(html2, remote = false) {
       continue;
     }
     for (const attr of Array.from(element.attributes)) {
-      const name = attr.name.toLowerCase();
-      if (!ATTRS.has(name) || name.startsWith("on"))
+      const name2 = attr.name.toLowerCase();
+      if (!ATTRS.has(name2) || name2.startsWith("on"))
         element.removeAttribute(attr.name);
     }
     if (tag === "style" && !remote && element.textContent) {
@@ -72822,11 +73609,11 @@ class PanelDock {
     window.addEventListener("vn-panel-export-v1", this.receiveBridge);
   }
   button(text3, action) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = text3;
-    button.onclick = action;
-    return button;
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.textContent = text3;
+    button2.onclick = action;
+    return button2;
   }
   toggle(open2) {
     const next = typeof open2 === "boolean" ? open2 : Boolean(this.drawer.hidden);
@@ -73545,16 +74332,16 @@ function inferAutoDeliveryTag(text3, poseExpressionId) {
 }
 
 // src/frontend/speech/voice-resolution.ts
-function speakerNameKey(name) {
-  return name.trim().replace(/\s+/g, " ").toLowerCase();
+function speakerNameKey(name2) {
+  return name2.trim().replace(/\s+/g, " ").toLowerCase();
 }
-function characterOverrideKey(chatId, name) {
-  return `chat::${chatId}::${speakerNameKey(name)}`;
+function characterOverrideKey(chatId, name2) {
+  return `chat::${chatId}::${speakerNameKey(name2)}`;
 }
 function resolveVoiceForParagraph(settings, input2) {
   const attributed = input2.paragraphSpeaker;
-  const name = attributed === undefined || attributed === null ? input2.turnSpeaker : attributed;
-  if (name.trim() === "") {
+  const name2 = attributed === undefined || attributed === null ? input2.turnSpeaker : attributed;
+  if (name2.trim() === "") {
     if (settings.narrator)
       return { ref: settings.narrator, source: "narrator", role: "narrator", speakerName: "" };
     if (settings.characterDefault) {
@@ -73562,26 +74349,26 @@ function resolveVoiceForParagraph(settings, input2) {
     }
     return { ref: null, source: "none", role: "narrator", speakerName: "" };
   }
-  const override = settings.characters[characterOverrideKey(input2.chatId, name)];
+  const override = settings.characters[characterOverrideKey(input2.chatId, name2)];
   if (override)
-    return { ref: override, source: "character-override", role: "character", speakerName: name };
+    return { ref: override, source: "character-override", role: "character", speakerName: name2 };
   if (input2.aliases) {
-    const aliasList = Array.isArray(input2.aliases) ? input2.aliases : typeof input2.aliases === "object" ? input2.aliases[name] ?? input2.aliases[speakerNameKey(name)] ?? [] : [];
+    const aliasList = Array.isArray(input2.aliases) ? input2.aliases : typeof input2.aliases === "object" ? input2.aliases[name2] ?? input2.aliases[speakerNameKey(name2)] ?? [] : [];
     for (const alias of aliasList) {
       if (!alias || typeof alias !== "string")
         continue;
       const aliasOverride = settings.characters[characterOverrideKey(input2.chatId, alias)];
       if (aliasOverride) {
-        return { ref: aliasOverride, source: "character-override", role: "character", speakerName: name };
+        return { ref: aliasOverride, source: "character-override", role: "character", speakerName: name2 };
       }
     }
   }
   if (settings.characterDefault) {
-    return { ref: settings.characterDefault, source: "character-default", role: "character", speakerName: name };
+    return { ref: settings.characterDefault, source: "character-default", role: "character", speakerName: name2 };
   }
   if (settings.narrator)
-    return { ref: settings.narrator, source: "narrator", role: "character", speakerName: name };
-  return { ref: null, source: "none", role: "character", speakerName: name };
+    return { ref: settings.narrator, source: "narrator", role: "character", speakerName: name2 };
+  return { ref: null, source: "none", role: "character", speakerName: name2 };
 }
 var FEMALE_RE = /\b(female|woman|girl|lady|she|her|feminine|soprano|alto|princess|queen)\b/i;
 var MALE_RE = /\b(male|man|boy|gentleman|he|him|masculine|baritone|bass|tenor|prince|king)\b/i;
@@ -74056,8 +74843,8 @@ class SpeechController {
     if (!cursor)
       return {};
     const attributed = cursor.paragraphSpeaker;
-    const name = attributed === undefined || attributed === null ? cursor.turnSpeaker : attributed;
-    return name.trim() ? { speaker: name } : { speaker: "Narrator" };
+    const name2 = attributed === undefined || attributed === null ? cursor.turnSpeaker : attributed;
+    return name2.trim() ? { speaker: name2 } : { speaker: "Narrator" };
   }
   publish(status) {
     this.status = status;
@@ -74721,14 +75508,14 @@ class SpeechSettingsSection {
       this.render();
     }
   }
-  prepareCharacter(name) {
+  prepareCharacter(name2) {
     if (this.destroyed)
       return;
     const chatId = this.options.getChatId();
-    if (!chatId || !speakerNameKey(name))
+    if (!chatId || !speakerNameKey(name2))
       return;
     this.render();
-    const key = characterOverrideKey(chatId, name);
+    const key = characterOverrideKey(chatId, name2);
     if (!this.settings.characters[key])
       this.pendingOverrideNames.add(key);
     this.draftAddName = "";
@@ -74771,13 +75558,13 @@ class SpeechSettingsSection {
     }
     select.value = selected?.connectionId ?? "";
     select.addEventListener("change", () => {
-      const id8 = select.value;
-      if (!id8) {
+      const id10 = select.value;
+      if (!id10) {
         onChange(null);
         return;
       }
-      const voice = selected && selected.connectionId === id8 ? selected.voice : "";
-      onChange({ connectionId: id8, voice, ...selected?.parameters ? { parameters: selected.parameters } : {} });
+      const voice = selected && selected.connectionId === id10 ? selected.voice : "";
+      onChange({ connectionId: id10, voice, ...selected?.parameters ? { parameters: selected.parameters } : {} });
     });
     return select;
   }
@@ -74956,10 +75743,10 @@ class SpeechSettingsSection {
         const row = document.createElement("div");
         row.className = "row";
         row.setAttribute("data-speech-override-row", key.slice(prefix.length));
-        const name = document.createElement("input");
-        name.type = "text";
-        name.value = key.slice(prefix.length);
-        name.disabled = true;
+        const name2 = document.createElement("input");
+        name2.type = "text";
+        name2.value = key.slice(prefix.length);
+        name2.disabled = true;
         const select = this.profileSelect(ref, `override-profile-${key}`, (nextRef) => this.save((next) => {
           if (nextRef)
             next.characters[key] = nextRef;
@@ -74972,7 +75759,7 @@ class SpeechSettingsSection {
         remove.addEventListener("click", () => this.save((next) => {
           delete next.characters[key];
         }));
-        row.append(name, select, remove);
+        row.append(name2, select, remove);
         overrides.appendChild(row);
         overrides.appendChild(this.voiceField(ref, `override-voice-${key}`, (nextRef) => this.save((next) => {
           next.characters[key] = nextRef;
@@ -74984,10 +75771,10 @@ class SpeechSettingsSection {
         const row = document.createElement("div");
         row.className = "row";
         row.setAttribute("data-speech-draft-row", key.slice(prefix.length));
-        const name = document.createElement("input");
-        name.type = "text";
-        name.value = key.slice(prefix.length);
-        name.disabled = true;
+        const name2 = document.createElement("input");
+        name2.type = "text";
+        name2.value = key.slice(prefix.length);
+        name2.disabled = true;
         const select = this.profileSelect(null, `draft-profile-${key}`, (nextRef) => {
           if (!nextRef)
             return;
@@ -75003,7 +75790,7 @@ class SpeechSettingsSection {
           this.pendingOverrideNames.delete(key);
           this.render();
         });
-        row.append(name, select, remove);
+        row.append(name2, select, remove);
         overrides.appendChild(row);
       }
       const addRow = document.createElement("div");
@@ -75021,10 +75808,10 @@ class SpeechSettingsSection {
       addButton.setAttribute("data-speech-field", "add-character-button");
       addButton.textContent = "Add";
       const commitAdd = () => {
-        const name = (this.draftAddName || addName.value).trim();
-        if (!name || !speakerNameKey(name))
+        const name2 = (this.draftAddName || addName.value).trim();
+        if (!name2 || !speakerNameKey(name2))
           return;
-        const key = characterOverrideKey(chatId, name);
+        const key = characterOverrideKey(chatId, name2);
         if (settings.characters[key] || this.pendingOverrideNames.has(key))
           return;
         this.pendingOverrideNames.add(key);
@@ -75607,6 +76394,16 @@ function setupVisualNovelFrontend(baseContext) {
   let latestStoryDnaRequestId = null;
   const storyAutofillRequests = new Map;
   const pendingStoryDnaWrites = new Set;
+  const clockRequests = new Map;
+  function finishClockRequest(requestId, error61) {
+    const pending = clockRequests.get(requestId);
+    if (!pending)
+      return false;
+    clockRequests.delete(requestId);
+    clearTimeout(pending.timer);
+    pending.finish(error61);
+    return true;
+  }
   function saveCursor(paragraphIndex, immediate = false) {
     if (stage.isReadingUserParagraph())
       return;
@@ -75731,9 +76528,9 @@ function setupVisualNovelFrontend(baseContext) {
   }
   let gameBridge = null;
   const syncGameChoices = () => {
-    const id8 = chatId();
-    const choices = gameBridge?.choicesFor(id8) ?? [];
-    const status = gameBridge?.busyStatusFor(id8) ?? { busy: false, timedOut: false, providers: [], busyLabel: null };
+    const id10 = chatId();
+    const choices = gameBridge?.choicesFor(id10) ?? [];
+    const status = gameBridge?.busyStatusFor(id10) ?? { busy: false, timedOut: false, providers: [], busyLabel: null };
     stage.setGameChoices(choices, { busy: status.busy, timedOut: status.timedOut });
   };
   let imageLibraryOpen = false;
@@ -75887,6 +76684,7 @@ function setupVisualNovelFrontend(baseContext) {
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
   let directorDnaChat = null;
   let directorScope = null;
+  let rehearsalWrite = null;
   const directorAssets = (source, index) => source.assets.filter((asset) => asset.paragraphIndex === index);
   const directorSubject = (source, jobId) => {
     const brief = source.imageRequests?.filter((request) => request.jobId === jobId && (request.state === "approved" || request.state === "prepared")).at(-1)?.imagePromptMetadata?.brief;
@@ -75894,6 +76692,37 @@ function setupVisualNovelFrontend(baseContext) {
   };
   const directorOutfits = (source, jobId) => directorDnaChat === source.chatId ? stage.getDirectorOutfits(directorSubject(source, jobId)) : [];
   quickDirector = new QuickDirectorPopover({
+    onRehearsalPreset: (command, finish) => {
+      if (rehearsalWrite) {
+        finish(undefined, "A preset save is still in progress.");
+        return;
+      }
+      const checked = RehearsalRequestSchema.safeParse({
+        type: "vn_rehearsal_preset",
+        chatId: chatId(),
+        requestId: createUiId(),
+        command
+      });
+      if (!checked.success) {
+        finish(undefined, "Enter a valid presentation preset name.");
+        return;
+      }
+      const request = checked.data;
+      const timer = setTimeout(() => {
+        if (rehearsalWrite?.id !== request.requestId)
+          return;
+        rehearsalWrite = null;
+        finish(undefined, "Preset save timed out. Refresh the reader before trying again.");
+      }, 15000);
+      rehearsalWrite = { id: request.requestId, chatId: request.chatId, apply: command.action === "apply", timer, finish };
+      try {
+        ctx.sendToBackend(request);
+      } catch {
+        clearTimeout(timer);
+        rehearsalWrite = null;
+        finish(undefined, "The preset request could not be sent.");
+      }
+    },
     mount: stage.panelMount,
     onOpenArtwork: () => {
       const candidates = turn ? directorAssets(turn, stage.getState().currentParagraphIndex) : [];
@@ -75910,22 +76739,22 @@ function setupVisualNovelFrontend(baseContext) {
         stage.checkAutoPlay();
     },
     onDirect: (cmd) => {
-      const scope = directorScope;
+      const scope2 = directorScope;
       directorScope = null;
-      if (!turn || !scope || scope.token !== referenceTurnToken(turn) || scope.paragraphIndex !== stage.getState().currentParagraphIndex) {
+      if (!turn || !scope2 || scope2.token !== referenceTurnToken(turn) || scope2.paragraphIndex !== stage.getState().currentParagraphIndex) {
         stage.setActivity?.("This passage changed. Reopen Quick Director to continue.", "warning");
         return;
       }
-      const candidates = directorAssets(turn, scope.paragraphIndex);
-      if (candidates.length !== 1 || candidates[0]?.jobId !== scope.jobId || candidates[0].imageId !== scope.imageId || candidates[0].previousImage || candidates[0].source === "cache") {
+      const candidates = directorAssets(turn, scope2.paragraphIndex);
+      if (candidates.length !== 1 || candidates[0]?.jobId !== scope2.jobId || candidates[0].imageId !== scope2.imageId || candidates[0].previousImage || candidates[0].source === "cache") {
         stage.setActivity?.("This picture changed. Reopen Quick Director to continue.", "warning");
         return;
       }
-      if (imageStudio.hasDraftForPicture(scope.jobId)) {
-        imageStudio.openPicture(scope.jobId);
+      if (imageStudio.hasDraftForPicture(scope2.jobId)) {
+        imageStudio.openPicture(scope2.jobId);
         return;
       }
-      if (cmd.kind === "outfit" && !directorOutfits(turn, scope.jobId).some((outfit) => outfit.charId === cmd.charId && outfit.key === cmd.wardrobeKey && outfit.outfit === cmd.outfit)) {
+      if (cmd.kind === "outfit" && !directorOutfits(turn, scope2.jobId).some((outfit) => outfit.charId === cmd.charId && outfit.key === cmd.wardrobeKey && outfit.outfit === cmd.outfit)) {
         stage.setActivity?.("This saved outfit changed. Reopen Quick Director to choose it again.", "warning");
         return;
       }
@@ -75934,8 +76763,8 @@ function setupVisualNovelFrontend(baseContext) {
         chatId: turn.chatId,
         messageId: turn.messageId,
         sourceFingerprint: turn.sourceFingerprint,
-        jobId: scope.jobId,
-        directorScope: { swipeId: turn.swipeId, revision: turn.revision, paragraphIndex: scope.paragraphIndex, imageId: scope.imageId },
+        jobId: scope2.jobId,
+        directorScope: { swipeId: turn.swipeId, revision: turn.revision, paragraphIndex: scope2.paragraphIndex, imageId: scope2.imageId },
         regeneratePrompt: true,
         promptOperation: "rewrite",
         guidance: cmd.guidance,
@@ -75968,6 +76797,7 @@ function setupVisualNovelFrontend(baseContext) {
       });
       quickDirector.setOutfits([]);
     }
+    quickDirector.setRehearsalScene(stage.sceneForRehearsal(), configRef.current?.readerPreferences);
     quickDirector.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-director", onQuickDirectorEvent);
@@ -76056,6 +76886,13 @@ function setupVisualNovelFrontend(baseContext) {
       stage.checkAutoPlay();
   });
   imageLibrary.useHistoryEntry();
+  const chronicle = new BranchChronicle((request) => ctx.sendToBackend(request), () => {
+    if (stage.isReadingUserParagraph() || stage.getState().isUserTurn)
+      return null;
+    const index = stage.getState().currentParagraphIndex;
+    const position = loadedReadingCursor.position(index);
+    return position?.key.chatId === chatId() && index <= stage.getRevealedThrough() ? position : null;
+  }, (position) => seekHistory(position.key, position.paragraphIndex));
   const readingHistory = document.createElement("div");
   readingHistory.dataset.currentReadingHistory = "";
   readingHistory.style.cssText = "padding:12px;border:1px solid var(--vn-shell-border,#456);border-radius:12px;overflow-wrap:anywhere";
@@ -76064,6 +76901,20 @@ function setupVisualNovelFrontend(baseContext) {
   readingStyle.textContent = "[data-current-reading-history] button{min-height:44px;font:inherit;max-width:100%;white-space:normal;overflow-wrap:anywhere}[data-current-reading-history]{min-width:0;overflow-wrap:anywhere}[data-current-reading-history] h3{font-size:1rem;margin:12px 0}[data-current-reading-history] article{border-top:1px solid var(--vn-shell-border,#456);padding:10px 0}[data-current-reading-history] small{display:block}[data-relationship-tracker][hidden]{display:none}";
   readingHistory.append(readingStyle, sceneScrubber.element, relationshipTracker.element);
   imageLibrary.setReadingHistorySurface(readingHistory);
+  readingStyle.textContent += `
+    [data-branch-chronicle]{margin-block:8px;padding:8px 12px;border-radius:10px;border:1px solid var(--vn-shell-border,#456);background:var(--vn-shell-field,rgba(0,0,0,.18))}
+    [data-branch-chronicle]>summary{min-height:44px;align-content:center;font-weight:650;color:var(--vn-shell-accent,#85d9fa);cursor:pointer}
+    [data-chronicle-pair]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-block:8px}
+    [data-chronicle-pair] label{display:grid;gap:4px;min-width:0}
+    [data-chronicle-pair] select{min-width:0;min-height:44px;max-width:100%}
+    [data-chronicle-actions]{display:flex;gap:6px;flex-wrap:wrap}
+    [data-chronicle-results]:empty{display:none}
+    [data-chronicle-results] h4{margin:0 0 6px}
+    [data-chronicle-results] article{min-width:0}
+    [data-chronicle-prose]{font:1em/1.65 Georgia,serif;white-space:pre-wrap}
+    @media(max-width:620px){[data-chronicle-pair]{grid-template-columns:1fr}}
+  `;
+  readingHistory.prepend(chronicle.element);
   function syncReadingHistory() {
     const source = loadedReadingCursor.turn;
     if (!source || source.chatId !== chatId() || stage.getState().isUserTurn) {
@@ -76093,7 +76944,11 @@ function setupVisualNovelFrontend(baseContext) {
     if (key)
       seekHistory(key, index);
   }
-  imageLibrary.onReadingHistoryRefresh = syncReadingHistory;
+  imageLibrary.onReadingHistoryRefresh = () => {
+    syncReadingHistory();
+    chronicle.setScope(chatId() ?? null);
+  };
+  imageLibrary.onReadingHistoryHidden = () => chronicle.setScope(null);
   stage.workspace.onMusicSelection = (track) => {
     manualMusicTrack = track;
     if (turn && active)
@@ -76161,12 +77016,15 @@ function setupVisualNovelFrontend(baseContext) {
     pending.finish(JSON.stringify(current) === JSON.stringify(pending.position) ? result : { error: "The reading position changed. Run autofill again." });
     return true;
   }
-  const sendStoryDna = (body2, onReview) => {
+  const sendStoryDna = (body2, onReview, onClockResult) => {
     const owner = chatId();
     const isAutofill = body2.action === "review_autofill" || body2.action === "apply_autofill";
-    const position = isAutofill && active ? loadedReadingCursor.position(stage.getState().currentParagraphIndex) : null;
-    if (!owner || isAutofill && !position) {
+    const clockNeedsPassage = body2.action === "world_clock" && (body2.command.kind === "advance" || body2.command.kind === "correct");
+    const needsPassage = isAutofill || clockNeedsPassage;
+    const position = needsPassage && active && (!clockNeedsPassage || !stage.isReadingUserParagraph()) ? loadedReadingCursor.position(stage.getState().currentParagraphIndex) : null;
+    if (!owner || needsPassage && !position) {
       onReview?.({ error: "Open a prepared passage first." });
+      onClockResult?.("Open a prepared passage first.");
       return;
     }
     const requestId = createUiId();
@@ -76179,7 +77037,9 @@ function setupVisualNovelFrontend(baseContext) {
     });
     if (!checked.success) {
       const error61 = checked.error.issues[0]?.message ?? "Invalid location or item DNA field.";
-      if (onReview)
+      if (onClockResult)
+        onClockResult(error61);
+      else if (onReview)
         onReview({ error: error61 });
       else
         stage.setStoryDnaError(error61);
@@ -76189,6 +77049,12 @@ function setupVisualNovelFrontend(baseContext) {
       const timeoutMessage = body2.action === "apply_autofill" ? "The save did not respond. Refresh the current entry before retrying." : "Autofill timed out. Run it again to retry.";
       const timer = setTimeout(() => finishStoryAutofill(requestId, { error: timeoutMessage }), 60000);
       storyAutofillRequests.set(requestId, { position, finish: onReview, timer });
+    } else if (body2.action === "world_clock" && onClockResult) {
+      const timer = setTimeout(() => {
+        if (finishClockRequest(requestId, "The save did not respond. Check the clock before retrying."))
+          refreshStoryLore();
+      }, 15000);
+      clockRequests.set(requestId, { timer, finish: onClockResult });
     } else if (body2.action === "list")
       latestStoryDnaRequestId = requestId;
     else
@@ -76196,11 +77062,14 @@ function setupVisualNovelFrontend(baseContext) {
     try {
       ctx.sendToBackend(checked.data);
     } catch (error61) {
-      if (!finishStoryAutofill(requestId, { error: error61 instanceof Error ? error61.message : String(error61) }))
+      const message = error61 instanceof Error ? error61.message : String(error61);
+      if (!finishClockRequest(requestId, message) && !finishStoryAutofill(requestId, { error: message }))
         throw error61;
     }
   };
   function clearStoryLore() {
+    for (const id10 of clockRequests.keys())
+      finishClockRequest(id10, "The reading context changed. Check the clock before retrying.");
     settingsPanel?.setSidecarStatus("");
     for (const [requestId, pending] of storyAutofillRequests) {
       clearTimeout(pending.timer);
@@ -76223,9 +77092,9 @@ function setupVisualNovelFrontend(baseContext) {
     onApplyDNA: (proposalId, fields2) => sendDna({ action: "apply", proposalId, fields: fields2 }),
     onCancelDNA: () => {
       const owner = characterFolio.getContext();
-      for (const [id8, r] of dnaRequests)
+      for (const [id10, r] of dnaRequests)
         if (r.chatId === owner && ["propose", "autofill", "harvest"].includes(r.action))
-          dnaRequests.delete(id8);
+          dnaRequests.delete(id10);
       if (owner)
         ctx.sendToBackend({ type: "vn_character_dna", action: "cancel", chatId: owner, requestId: createUiId() });
     },
@@ -76340,7 +77209,7 @@ function setupVisualNovelFrontend(baseContext) {
     getChatId: () => chatId(),
     onPresentationRules: (request) => ctx.sendToBackend(request),
     onCastGallery: (chatId2, requestId, offset) => ctx.sendToBackend({ type: "vn_cast_gallery", chatId: chatId2, requestId, offset }),
-    onCastVoice: (name) => speechSettings?.prepareCharacter(name),
+    onCastVoice: (name2) => speechSettings?.prepareCharacter(name2),
     onCastArt: (chatId2, requestId, action2) => ctx.sendToBackend({ type: "vn_cast_art", version: 1, chatId: chatId2, requestId, ...action2 }),
     onLocationArt: (chatId2, requestId, action2) => ctx.sendToBackend({ type: "vn_location_art", version: 1, chatId: chatId2, requestId, ...action2 }),
     onRefreshContextSources: (chatId2, requestId) => ctx.sendToBackend({ type: "vn_get_context_sources", chatId: chatId2, requestId }),
@@ -76442,7 +77311,7 @@ function setupVisualNovelFrontend(baseContext) {
         if (c?.name?.trim())
           names.add(c.name.trim());
       }
-      return [...names].map((name) => ({ name }));
+      return [...names].map((name2) => ({ name: name2 }));
     }
   });
   function chatId() {
@@ -76711,9 +77580,9 @@ function setupVisualNovelFrontend(baseContext) {
     dnaChangedThisTurn = nextDnaToken !== dnaTurnToken;
     if (dnaChangedThisTurn) {
       characterFolio.invalidateContext();
-      for (const [id8, r] of dnaRequests)
+      for (const [id10, r] of dnaRequests)
         if (dnaTurnScoped(r.action))
-          dnaRequests.delete(id8);
+          dnaRequests.delete(id10);
       dnaTurnToken = nextDnaToken;
     }
     characterFolio.setContext(next.chatId);
@@ -76858,6 +77727,37 @@ function setupVisualNovelFrontend(baseContext) {
       imageLibrary.error(message.chatId ?? "", message.requestId, message.error);
       return;
     }
+    if (message.type === "vn_branch_chronicle") {
+      chronicle.receive(message.chatId, message.requestId, message.result);
+      return;
+    }
+    if (message.type === "vn_error" && message.operation === "vn_branch_chronicle") {
+      chronicle.error(message.chatId ?? "", message.requestId, message.error);
+      return;
+    }
+    if (message.type === "vn_rehearsal_preset" || message.type === "vn_error" && message.operation === "vn_rehearsal_preset") {
+      const pending = rehearsalWrite;
+      if (!pending || pending.id !== message.requestId || pending.chatId !== message.chatId)
+        return;
+      clearTimeout(pending.timer);
+      rehearsalWrite = null;
+      if (pending.chatId !== chatId())
+        return;
+      if (message.type === "vn_error") {
+        pending.finish(undefined, message.error);
+        return;
+      }
+      const current = configRef.current;
+      if (current) {
+        configRef.current = { ...current, readerPreferences: message.preferences };
+        if (pending.apply)
+          stage.setReaderPreferences(message.preferences);
+        quickTuner.setConfig(configRef.current);
+        settingsPanel?.setConfig(configRef.current);
+      }
+      pending.finish(message.preferences);
+      return;
+    }
     if (message.type === "vn_external_image") {
       if (message.result.status !== "accepted")
         externalReview.result(message.result.chatId, message.result.requestId);
@@ -76946,11 +77846,15 @@ function setupVisualNovelFrontend(baseContext) {
         return;
       if (message.requestId === latestStoryDnaRequestId)
         stage.setStoryDna(message.storyDna);
+      else if (finishClockRequest(message.requestId))
+        refreshStoryLore();
       else if (pendingStoryDnaWrites.delete(message.requestId))
         refreshStoryLore();
       return;
     }
     if (type === "vn_error" && message.type === "vn_error" && message.operation === "vn_story_dna") {
+      if (message.requestId && message.chatId === chatId() && finishClockRequest(message.requestId, message.error))
+        return;
       if (message.requestId && message.chatId === chatId() && finishStoryAutofill(message.requestId, { error: message.error }))
         return;
       const accepted = !message.requestId || message.requestId === latestStoryDnaRequestId || pendingStoryDnaWrites.delete(message.requestId);
@@ -77409,6 +78313,9 @@ function setupVisualNovelFrontend(baseContext) {
     deactivate();
     stage.workspace.destroy();
     destroyed = true;
+    if (rehearsalWrite)
+      clearTimeout(rehearsalWrite.timer);
+    rehearsalWrite = null;
     unbindFrontendUuidProvider();
     unsubBackend();
     unsubAction();

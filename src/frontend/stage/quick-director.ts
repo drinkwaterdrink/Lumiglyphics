@@ -1,5 +1,8 @@
 import { trapFocusWithin } from "../image-review/focus-trap.js";
 import { VN_SHELL_PRESET_TOKENS_CSS } from "../theme/palette-tokens.js";
+import { REHEARSAL_CSS, SceneRehearsal, type RehearsalScene } from "./scene-rehearsal.js";
+import type { ReaderPreferences } from "../../shared/reader-preferences.js";
+import type { RehearsalCommand } from "../../shared/rehearsal-presets.js";
 
 export type QuickDirectorCommand =
   | { kind: "regenerate"; label: string; guidance: string }
@@ -24,10 +27,12 @@ export type QuickDirectorPopoverOptions = {
   onDirect: (command: QuickDirectorCommand) => void;
   onOpenArtwork: () => void;
   onVisibility?: (open: boolean) => void;
+  onRehearsalPreset?: (command: RehearsalCommand, finish: (prefs?: ReaderPreferences, error?: string) => void) => void;
 };
 
 const DIRECTOR_CSS = `
 ${VN_SHELL_PRESET_TOKENS_CSS}
+${REHEARSAL_CSS}
 :host {
   position: absolute;
   inset: 0;
@@ -168,6 +173,7 @@ export class QuickDirectorPopover {
   private selectedButton: HTMLButtonElement | undefined;
   private openState = false;
   private opener: HTMLElement | null = null;
+  private readonly rehearsal?: SceneRehearsal;
 
   constructor(private readonly options: QuickDirectorPopoverOptions) {
     this.host = document.createElement("div");
@@ -305,6 +311,10 @@ export class QuickDirectorPopover {
     });
     this.controls.append(regenRow, shotGroup, relightGroup, outfitWrap, this.direction, this.prepareBtn);
     sheet.append(head, target, this.controls, this.openArtworkBtn);
+    if (options.onRehearsalPreset) {
+      this.rehearsal = new SceneRehearsal(options.onRehearsalPreset);
+      sheet.append(this.rehearsal.element);
+    }
     backdrop.appendChild(sheet);
     this.shadow.append(style, backdrop);
     options.mount.appendChild(this.host);
@@ -370,6 +380,11 @@ export class QuickDirectorPopover {
     this.host.dataset.vnPreset = preset;
   }
 
+  setRehearsalScene(scene: RehearsalScene | null, preferences?: ReaderPreferences): void {
+    if (scene && preferences) this.rehearsal?.setScene(scene, preferences);
+    else this.rehearsal?.reset();
+  }
+
   isOpen(): boolean {
     return this.openState;
   }
@@ -395,6 +410,7 @@ export class QuickDirectorPopover {
   close(restoreFocus = true): void {
     if (!this.openState) return;
     this.openState = false;
+    this.rehearsal?.reset();
     this.host.dataset.open = "false";
     this.host.style.display = "none";
     if (restoreFocus) this.opener?.focus?.({ preventScroll: true });

@@ -6,6 +6,7 @@ import { renderEntityStockIcon } from './entity-icons.js';
 import type { StoryDocument, StoryDocumentKind } from '../../shared/story-documents.js';
 import type { LocationArtAction, LocationArtLibrary } from '../../shared/stage-assets.js';
 import { InteractionTray } from './interaction-tray.js';
+import { WorldClockPanel } from './world-clock-panel.js';
 import type { InteractionDraft, DraftMergeMode } from '../../shared/scene-interactions.js';
 import { entityOverride, type ReferenceKind, type referenceEntries, type ReaderDossier, type TooltipPreferences } from '../../shared/dossiers.js';
 import { referenceFieldInfo, REFERENCE_FIELD_GROUPS } from '../../shared/reference-fields.js';
@@ -147,6 +148,7 @@ export class DossierCard {
   private storyDna: StoryDNASet = { locations: {}, items: {}, revision: 0 };
   private storyDnaRequester: StoryDnaRequester | null = null;
   private storyDnaError: string | null = null;
+  private worldClockPanel: WorldClockPanel | null = null;
   private locationArtLibrary: LocationArtLibrary = { version: 1, locations: [] };
   private locationArtRequester: ((action: LocationArtAction) => void) | null = null;
   private sceneHubContext: DossierSceneHubContext | null = null;
@@ -258,6 +260,7 @@ export class DossierCard {
 
   setStoryDna(storyDna: StoryDNASet): void {
     this.storyDna = storyDna;
+    this.worldClockPanel?.setLedger(storyDna.worldClocks);
     this.storyDnaError = null;
     if (this.awaitingDnaSync && this.activeDossierContext && this.isOpen()) {
       this.awaitingDnaSync = false;
@@ -1924,6 +1927,12 @@ export class DossierCard {
       }
 
       if (this.hubView === 'atlas') {
+        if (this.storyDnaRequester) {
+          this.worldClockPanel ??= new WorldClockPanel((command, finish) =>
+            this.storyDnaRequester?.({ action: 'world_clock', command }, undefined, finish));
+          this.worldClockPanel.setLedger(this.storyDna.worldClocks);
+          worldSheet.append(this.worldClockPanel.element);
+        }
         const perspCard = document.createElement('details');
         perspCard.open = this.perspectivesOpen;
         perspCard.ontoggle = () => {
@@ -2869,6 +2878,8 @@ export class DossierCard {
   }
 
   close(): void {
+    this.worldClockPanel?.close();
+    this.worldClockPanel = null;
     this.activeDossierContext = null;
     this.activeDocumentRecord = null;
     this.trayRender = null;

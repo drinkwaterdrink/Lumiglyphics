@@ -11,6 +11,7 @@ import { CardRoleSchema, StoredCardRoleSchema, type CardRole, isScenarioTitle } 
 import { areNamesEquivalent } from "../../shared/nicknames.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
+import { ChronicleDocumentSchema, type ChronicleDocument } from "../../shared/branch-chronicle.js";
 import {normalizeImageVersionHistory,type ImageVersionHistory} from '../../shared/image-version-history.js';
 import type { ImageRequestRecord } from "../../shared/image-review.js";
 import { safeImageHistory } from "./image-review.js";
@@ -170,6 +171,36 @@ export async function saveReadingPosition(spindle: SpindleAPI, position: Reading
   const parsed = ReadingPositionSchema.parse(position);
   const path = `chats/${safeSegment(parsed.key.chatId)}/reading-position.json`;
   await serializedWrite(scopedKey(userId, path), () => spindle.userStorage.setJson(path, parsed, userOptions(userId)));
+}
+
+function chroniclePath(chatId: string): string {
+  return `chronicle/${encodeURIComponent(chatId)}.json`;
+}
+
+export async function loadChronicle(spindle: SpindleAPI, chatId: string, userId: string): Promise<ChronicleDocument> {
+  const raw = await spindle.userStorage.getJson<unknown>(chroniclePath(chatId), { fallback: null, userId });
+  if (raw === null) return { version: 1, bookmarks: [] };
+  const parsed = ChronicleDocumentSchema.safeParse(raw);
+  if (!parsed.success || parsed.data.bookmarks.some(bookmark => bookmark.position.key.chatId !== chatId)) {
+    throw new Error('Branch Chronicle data could not be read. The saved data was preserved.');
+  }
+  return parsed.data;
+}
+
+export async function updateChronicle(
+  spindle: SpindleAPI, chatId: string, userId: string,
+  update: (document: ChronicleDocument) => ChronicleDocument,
+): Promise<ChronicleDocument> {
+  const path = chroniclePath(chatId);
+  let result: ChronicleDocument | undefined;
+  await serializedWrite(scopedKey(userId, path), async () => {
+    const current = await loadChronicle(spindle, chatId, userId);
+    const next = update(current);
+    if (next === current) { result = current; return; }
+    result = ChronicleDocumentSchema.parse(next);
+    await spindle.userStorage.setJson(path, result, { userId });
+  });
+  return result!;
 }
 
 /** Path of the persisted single-character visual state for a chat. */
@@ -711,7 +742,7 @@ export async function loadConfig(spindle: SpindleAPI, userId?: string): Promise<
 
 export async function updateConfig(
   spindle: SpindleAPI,
-  patch: Partial<VisualNovelConfig>,
+  patch: Partial<VisualNovelConfig> | ((current: VisualNovelConfig) => Partial<VisualNovelConfig>),
   userId?: string
 ): Promise<VisualNovelConfig> {
   let next!:VisualNovelConfig;
@@ -719,7 +750,7 @@ export async function updateConfig(
     // Read and merge under the same queue as the write. Independent fast
     // changes must see the preceding save rather than a shared stale snapshot.
     const current = await loadConfig(spindle, userId);
-    next = normalizeConfig({ ...current, ...patch });
+    next = normalizeConfig({ ...current, ...(typeof patch === 'function' ? patch(current) : patch) });
     await spindle.userStorage.setJson("config.json", next, {
       indent: 2,
       ...(userOptions(userId) ?? {})

@@ -17,6 +17,7 @@ export function filterStoryDnaForActiveBranch(
   set: StoryDNASet,
   activeTags: ReadonlySet<string>,
   reader?: ReadingPosition,
+  clockFingerprints?: ReadonlyMap<string, string>,
 ): StoryDNASet {
   const branch = [...activeTags];
   const cursorTag = reader ? sourceSwipeTag(reader.key) : undefined;
@@ -142,6 +143,18 @@ export function filterStoryDnaForActiveBranch(
     }
   }
   const { loreHeads: _loreHeads, hiddenLoreThreads: _hiddenThreads, ...view } = set;
+  const worldClocks = set.worldClocks;
+  let clockEvents: NonNullable<StoryDNASet['worldClocks']>['events'] = [];
+  if (worldClocks && clockFingerprints && reader) {
+    const branchOrder = new Map(branch.map((tag, index) => [tag, index]));
+    clockEvents = worldClocks.events.filter(event => {
+      const { key, paragraphIndex } = event.position;
+      return key.chatId === reader.key.chatId &&
+        clockFingerprints.get(sourceSwipeTag(key)) === event.rawFingerprint && isVisible(key, paragraphIndex);
+    }).sort((left, right) => (branchOrder.get(sourceSwipeTag(left.position.key)) ?? 0) -
+      (branchOrder.get(sourceSwipeTag(right.position.key)) ?? 0) ||
+      left.position.paragraphIndex - right.position.paragraphIndex);
+  }
   return {
     ...view,
     locations,
@@ -151,5 +164,6 @@ export function filterStoryDnaForActiveBranch(
     ...(chapterCodex !== undefined ? { chapterCodex } : {}),
     npcBeliefs,
     ...(set.loreEvents ? { loreEvents } : {}),
+    ...(worldClocks ? { worldClocks: { clocks: worldClocks.clocks, events: clockEvents } } : {}),
   };
 }

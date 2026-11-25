@@ -59,6 +59,15 @@ export class CastStage {
  setAbsenceDisplay(value:'hide'|'dim'):void{this.absenceDisplay=value;this.refresh();}
  toggle():void{this.collapsed=!this.collapsed;this.refresh();}
  set(turn:TurnView|null,index:number):AssetView|null{this.turn=turn;this.index=index;return this.refresh();}
+ rehearsalPortraits(): { url: string; name: string; active: boolean }[] {
+  if (this.host.hidden || this.collapsed) return [];
+  return [...this.host.querySelectorAll<HTMLElement>('[data-vn-cast-portraits] [data-vn-cast-card]')].flatMap(card => {
+   const image = card.querySelector<HTMLImageElement>('img[data-vn-cast-current]');
+   return image?.complete && image.naturalWidth > 0
+    ? [{ url: image.currentSrc || image.src, name: image.alt, active: card.dataset.active === 'true' }]
+    : [];
+  });
+ }
  private refresh():AssetView|null{
   const rootNode = typeof this.host.getRootNode === 'function' ? this.host.getRootNode() : this.host.ownerDocument;
   const active = (rootNode as Document | ShadowRoot | null)?.activeElement ?? null;

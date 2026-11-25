@@ -33,6 +33,7 @@ import { TypewriterController } from "./typewriter-controller.js";
 import { DialogueSheet } from "./dialogue-sheet.js";
 import { TypewriterAudioSynthesizer } from "./typewriter-audio.js";
 import { normalizeReaderPreferences, type ReaderPreferences } from "../../shared/reader-preferences.js";
+import type { RehearsalScene } from "./scene-rehearsal.js";
 import {
   createInitialVnStageState,
   reduceVnStage,
@@ -158,6 +159,16 @@ function bondTier(affinity: number): string {
   if (affinity >= 15) return "Warming";
   return affinity <= -50 ? "Rival / Hostile" : "Guarded";
 }
+
+const SCENE_LIGHTS: Record<string, { glow: string; tint: string }> = {
+  danger_crimson: { glow: "rgba(244, 63, 94, 0.45)", tint: "rgba(225, 29, 72, 0.12)" },
+  sepia_flashback: { glow: "rgba(217, 119, 6, 0.40)", tint: "rgba(180, 83, 9, 0.12)" },
+  romance_rose: { glow: "rgba(244, 114, 182, 0.45)", tint: "rgba(236, 72, 153, 0.12)" },
+  cold_mist: { glow: "rgba(56, 189, 248, 0.40)", tint: "rgba(14, 165, 233, 0.12)" },
+  warm_amber: { glow: "rgba(245, 158, 11, 0.45)", tint: "rgba(217, 119, 6, 0.12)" },
+  nocturne: { glow: "rgba(99, 102, 241, 0.40)", tint: "rgba(79, 70, 229, 0.12)" },
+  neon_violet: { glow: "rgba(217, 70, 239, 0.45)", tint: "rgba(168, 85, 247, 0.14)" },
+};
 
 export class VnStage {
   readonly panelMount: HTMLElement;
@@ -1706,6 +1717,26 @@ export class VnStage {
 
   getActiveSceneImage(): HTMLImageElement {
     return this.activeImageEl;
+  }
+
+  sceneForRehearsal(): RehearsalScene | null {
+    const paragraph = this.state.paragraphs[this.state.currentParagraphIndex];
+    if (!paragraph || this.isReadingUserParagraph()) return null;
+    const image = this.isCrossfading() && this.incomingImageEl.complete && this.incomingImageEl.naturalWidth
+      ? this.incomingImageEl : this.activeImageEl;
+    const art = image.dataset.vnEmpty === 'true' || !image.complete || !image.naturalWidth
+      ? null : image.currentSrc || image.getAttribute('src');
+    const cap = paragraph.effectLimit;
+    return {
+      art,
+      fit: image.dataset.vnSceneImageFit === 'contain' ? 'contain' : 'cover',
+      portraits: this.castStage.rehearsalPortraits(),
+      text: stripUnknownPresetTags(paragraph.text).slice(0, 6000),
+      speaker: paragraph.speaker ?? '',
+      effectCap: this.effectIntensity === 'off' || cap === 'off' ? 'off'
+        : this.effectIntensity === 'gentle' || cap === 'gentle' ? 'gentle' : 'full',
+      tint: SCENE_LIGHTS[this.atmosphereFor(paragraph.text, paragraph.ambient ?? paragraph.cue?.ambient)]?.tint ?? 'transparent',
+    };
   }
 
   getIncomingSceneImage(): HTMLImageElement {
@@ -3446,11 +3477,7 @@ export class VnStage {
     }
   }
 
-  private updateAtmosphericLighting(text: string, ambient?: AmbientEffect | null): void {
-    if (this.readerPreferences?.atmosphericLighting === false || this.effectIntensity === "off") {
-      delete this.scene.dataset.vnAtmosphere;
-      return;
-    }
+  private atmosphereFor(text: string, ambient?: AmbientEffect | null): string {
     const lower = text.toLocaleLowerCase();
     const unquotedLower = text.replace(/["“”][^"“”]*["“”]/g, " ").toLocaleLowerCase();
     let atmosphere = "";
@@ -3474,19 +3501,19 @@ export class VnStage {
         atmosphere = "neon_violet";
       }
     }
+    return atmosphere;
+  }
+
+  private updateAtmosphericLighting(text: string, ambient?: AmbientEffect | null): void {
+    if (this.readerPreferences?.atmosphericLighting === false || this.effectIntensity === "off") {
+      delete this.scene.dataset.vnAtmosphere;
+      return;
+    }
+    const atmosphere = this.atmosphereFor(text, ambient);
     if (atmosphere) {
       this.scene.dataset.vnAtmosphere = atmosphere;
-      const glowMap: Record<string, { glow: string; tint: string }> = {
-        danger_crimson: { glow: "rgba(244, 63, 94, 0.45)", tint: "rgba(225, 29, 72, 0.12)" },
-        sepia_flashback: { glow: "rgba(217, 119, 6, 0.40)", tint: "rgba(180, 83, 9, 0.12)" },
-        romance_rose: { glow: "rgba(244, 114, 182, 0.45)", tint: "rgba(236, 72, 153, 0.12)" },
-        cold_mist: { glow: "rgba(56, 189, 248, 0.40)", tint: "rgba(14, 165, 233, 0.12)" },
-        warm_amber: { glow: "rgba(245, 158, 11, 0.45)", tint: "rgba(217, 119, 6, 0.12)" },
-        nocturne: { glow: "rgba(99, 102, 241, 0.40)", tint: "rgba(79, 70, 229, 0.12)" },
-        neon_violet: { glow: "rgba(217, 70, 239, 0.45)", tint: "rgba(168, 85, 247, 0.14)" },
-      };
       const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
-      const conf = glowMap[atmosphere];
+      const conf = SCENE_LIGHTS[atmosphere];
       if (conf) {
         if (typeof this.root.style?.setProperty === "function") {
           this.root.style.setProperty("--vn-atmosphere-glow", conf.glow);

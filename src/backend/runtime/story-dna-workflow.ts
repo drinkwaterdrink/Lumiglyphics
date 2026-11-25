@@ -27,6 +27,7 @@ import { activeBranchSwipeTags, activeMessageSwipeMap } from './character-dna-wo
 import { generateItemPropArtwork } from './document-art.js';
 import { loadReadingPosition, loadTurnRecord, turnPath } from './storage.js';
 import { sameLoreSource } from './story-dna-projection.js';
+import { applyWorldClock, clockFingerprints } from './world-clock-workflow.js';
 import {
   autofillItemDNA,
   autofillLocationDNA,
@@ -56,7 +57,9 @@ export async function handleStoryDnaRequest(
         : null;
       if (!record || !sameLoreSource(record.plan.key, key)) branch.clear();
     }
-    const filtered = filterStoryDnaForActiveBranch(storyDna, branch, position ?? undefined);
+    const filtered = filterStoryDnaForActiveBranch(
+      storyDna, branch, position ?? undefined, storyDna.worldClocks ? clockFingerprints(msgs) : undefined,
+    );
     spindle.sendToFrontend({
       type: 'vn_story_dna',
       chatId: request.chatId,
@@ -66,6 +69,10 @@ export async function handleStoryDnaRequest(
   };
 
   try {
+    if (request.action === 'world_clock') {
+      await reply(await applyWorldClock(spindle, request, userId));
+      return;
+    }
     if (request.action === 'review_autofill' || request.action === 'apply_autofill') {
       if (!readAutofillScope) throw new Error('Open a prepared reply before running autofill.');
       const proposal = await reviewStoryAutofill(spindle, request, userId, readAutofillScope);

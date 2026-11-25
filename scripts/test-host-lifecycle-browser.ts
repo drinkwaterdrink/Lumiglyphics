@@ -124,7 +124,14 @@ try{
   await openDirector();
   assert.match(await director.innerText(), /no saved picture/);
   assert.equal(await director.getByRole('button', { name: 'Open Artwork Studio' }).isVisible(), true);
+  const rehearsal = director.locator('[data-scene-rehearsal]');
+  await rehearsal.locator('summary').click();
+  assert.match(await rehearsal.innerText(), /No saved artwork is visible/);
+  assert.match(await rehearsal.locator('[data-rehearsal-caption]').innerText(), /First paragraph/);
+  await rehearsal.getByLabel('Camera move', { exact: true }).selectOption('gentle');
+  assert.equal(await page.evaluate(() => (window as any).hostFixture.sent.some((m: any) => m.type === 'vn_rehearsal_preset')), false);
   await page.keyboard.press('Escape');
+  assert.equal(await rehearsal.isVisible(), false);
 
   await setPictures(['saved', 'other']);
   await openDirector();
@@ -159,9 +166,38 @@ try{
   await page.getByRole('button', { name: 'Close workspace and return to reader' }).click();
 
   await setPictures(['saved']);
+  await page.waitForFunction(() => Boolean((window as any).hostFixture.stage().sceneForRehearsal()?.art));
   await openDirector();
+  const rehearsalBefore = await page.evaluate(() => (window as any).hostFixture.stage().getState());
+  await rehearsal.locator('summary').click();
+  assert.equal(await rehearsal.locator('[data-rehearsal-art]').isVisible(), true);
+  const cameraMove = rehearsal.getByLabel('Camera move', { exact: true });
+  assert.equal(await cameraMove.inputValue(), 'full', 'reopening uses the current reader preferences');
+  for (const viewport of [{ width: 360, height: 740 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    assert.ok(await rehearsal.evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'rehearsal fits the viewport');
+    assert.ok((await cameraMove.boundingBox())!.height >= 44);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await cameraMove.selectOption('gentle');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await rehearsal.locator('[data-rehearsal-art]').evaluate(element => getComputedStyle(element).animationName), 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await rehearsal.getByLabel('Preset name', { exact: true }).fill('Night watch');
+  await rehearsal.getByRole('button', { name: 'Save preset', exact: true }).click();
+  const presetRequest = await page.evaluate(() => (window as any).hostFixture.sent.filter((m: any) => m.type === 'vn_rehearsal_preset').at(-1));
+  assert.deepEqual(presetRequest.command, { action: 'save', preset: { name: 'Night watch', camera: 'gentle', lighting: true, captionOpacity: 0.9 } });
+  await page.evaluate(request => {
+    const f = (window as any).hostFixture;
+    f.receive({ type: 'vn_rehearsal_preset', requestId: request.requestId, chatId: 'A',
+      preferences: { ...f.config.readerPreferences, rehearsalPresets: [request.command.preset] } });
+  }, presetRequest);
+  assert.match(await rehearsal.getByRole('status').innerText(), /Preset saved/);
+  assert.equal((await preparations()).length, 0);
+  assert.deepEqual(await page.evaluate(() => (window as any).hostFixture.stage().getState()), rehearsalBefore);
+  await rehearsal.locator('summary').click();
   await director.getByRole('button', { name: 'Close-up', exact: true }).click();
-  assert.match(await director.getByRole('status').innerText(), /intimate close-up/);
+  assert.match(await director.getByRole('status').filter({ hasText: 'intimate close-up' }).innerText(), /intimate close-up/);
   assert.equal((await preparations()).length, 0, 'selecting a direction is local');
   await setPictures(['replaced']);
   await director.getByRole('button', { name: 'Prepare revised prompt', exact: true }).click();
@@ -207,6 +243,62 @@ try{
   }));
   assert.ok(sizes.every((size, index) => size.style === 'static' && size.height >= 40
     && (!index || size.y >= sizes[index - 1]!.bottom)));
+  const clockPanel = page.locator('[data-world-clocks]');
+  const clockRequest = () => page.evaluate(() => (window as any).hostFixture.sent
+    .filter((message: any) => message.type === 'vn_story_dna' && message.action === 'world_clock').at(-1));
+  const respondClock = (requestId: string, error?: string) => page.evaluate(({ requestId, error }) => {
+    const f = (window as any).hostFixture;
+    f.receive(error ? { type: 'vn_error', operation: 'vn_story_dna', requestId, chatId: 'A', error }
+      : { type: 'vn_story_dna', requestId, chatId: 'A', storyDna: { locations: {}, items: {}, revision: 1 } });
+  }, { requestId, error });
+  await clockPanel.locator('summary').click();
+  assert.equal(await clockRequest(), undefined, 'opening clocks does not write to Story DNA');
+  assert.match(await clockPanel.innerText(), /No clocks in this chat yet/);
+  const exampleClocks = [
+    { id: 'ferry', title: 'Catch the last ferry', kind: 'deadline', steps: 4, paused: false },
+    { id: 'truce', title: 'Rebuild trust with Rowan', kind: 'relationship', steps: 6, paused: false },
+    { id: 'circle', title: 'The Circle secures a workshop', kind: 'faction', steps: 8, paused: true },
+  ];
+  const createClock = clockPanel.getByRole('button', { name: 'Create clock' });
+  await clockPanel.getByLabel('Clock name').fill(exampleClocks[0]!.title);
+  await clockPanel.getByLabel('Type', { exact: true }).selectOption('deadline');
+  await createClock.click();
+  const createRequest = await clockRequest();
+  assert.deepEqual(createRequest.command, { kind: 'create', clock: { title: 'Catch the last ferry', kind: 'deadline', steps: 4 } });
+  assert.equal(await createClock.isDisabled(), true);
+  await respondClock(createRequest.requestId, 'Clock store temporarily unavailable.');
+  assert.match(await clockPanel.getByRole('status').innerText(), /temporarily unavailable/);
+  assert.equal(await clockPanel.getByLabel('Clock name').inputValue(), exampleClocks[0]!.title);
+  await createClock.click();
+  await respondClock((await clockRequest()).requestId);
+  await page.evaluate(clocks => {
+    const f = (window as any).hostFixture;
+    const latest = f.sent.filter((m: any) => m.type === 'vn_story_dna' && m.action === 'list').at(-1);
+    const storyDna = { locations: Object.fromEntries(Array.from({ length: 31 }, (_, index) => {
+      const id = 'place-' + index;
+      return [id, { id, name: 'Place ' + index + ' with an unusually long location name',
+        aliases: [], persistentElements: [], connectedLocations: [], lastUpdated: index,
+        ...(index % 2 ? { environmentDescription: 'Previously visited' } : { autoDiscovered: true }) }];
+    })), items: {}, revision: 1, worldClocks: { clocks, events: [] } };
+    f.receive({ type: 'vn_story_dna', requestId: latest.requestId, chatId: 'A', storyDna });
+  }, exampleClocks);
+  await clockPanel.getByText('Catch the last ferry · 0/4').click();
+  assert.equal(await clockPanel.getByText('Rebuild trust with Rowan · 0/6').isVisible(), true);
+  assert.equal(await clockPanel.getByText('The Circle secures a workshop · 0/8 · Paused').isVisible(), true);
+  const ferryClock = clockPanel.locator('[data-clock-id="ferry"]');
+  await ferryClock.getByLabel('What happened in this passage?').fill('Mira reached the quay.');
+  await ferryClock.getByRole('button', { name: 'Save progress' }).click();
+  const advanceRequest = await clockRequest();
+  assert.equal(advanceRequest.readingPosition.paragraphIndex, 0);
+  assert.deepEqual(advanceRequest.command, { kind: 'advance', clockId: 'ferry', note: 'Mira reached the quay.' });
+  await respondClock(advanceRequest.requestId, 'This passage already contributed to this clock.');
+  assert.equal(await ferryClock.getByLabel('What happened in this passage?').inputValue(), 'Mira reached the quay.');
+  for (const viewport of [{ width: 360, height: 740 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    assert.ok(await clockPanel.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+    assert.ok((await ferryClock.getByRole('button', { name: 'Save progress' }).boundingBox())!.height >= 44);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await places.filter({ hasText: 'Place 1 with an unusually long location name' }).click();
   await page.getByRole('button', { name: /Inspect location/ }).click();
   await page.locator('[data-story-dna-drawer] summary').click();
@@ -302,6 +394,73 @@ try{
   assert.equal(switched, false);
   await page.evaluate(requestId => (window as any).hostFixture.receive({ type: 'vn_choice_saved', chatId: 'A', requestId }), retry.requestId);
   assert.equal(await page.evaluate(() => (window as any).hostFixture.stage().getState().isUserTurn), false, 'stale acknowledgement cannot append a local paragraph');
+  await page.reload();
+  await page.waitForFunction(() => Boolean((window as any).hostFixture));
+  const readerBefore = await page.evaluate(() => {
+    const f = (window as any).hostFixture;
+    f.state(f.turn()); f.open(); f.state(f.turn());
+    f.stage().advance();
+    f.stage().restoreReplyDraft('Keep this Chronicle draft');
+    f.stage().openBacklog();
+    return f.stage().getState();
+  });
+  const chronicle = page.locator('[data-branch-chronicle]');
+  await chronicle.locator('summary').click();
+  const chronicleRequest = (action: string) => page.evaluate(action => (window as any).hostFixture.sent
+    .filter((message: any) => message.type === 'vn_branch_chronicle' && message.action === action).at(-1), action);
+  const respond = (requestId: string, result: unknown) => page.evaluate(({ requestId, result }) =>
+    (window as any).hostFixture.receive({ type: 'vn_branch_chronicle', chatId: 'A', requestId, result }), { requestId, result });
+  await page.waitForFunction(() => (window as any).hostFixture.sent.some((message: any) => message.type === 'vn_branch_chronicle'));
+  await respond((await chronicleRequest('list')).requestId, { bookmarks: [] });
+  assert.match(await chronicle.innerText(), /No bookmarks in this chat yet/);
+  await chronicle.getByRole('button', { name: 'Bookmark current passage' }).click();
+  const bookmarkRequest = await chronicleRequest('bookmark');
+  assert.equal(bookmarkRequest.position.paragraphIndex, 1);
+  const bookmarks = [{
+    id: bookmarkRequest.requestId, replyNumber: 7, position: bookmarkRequest.position,
+  }, {
+    id: 'alternate-bookmark', replyNumber: 7,
+    position: { ...bookmarkRequest.position, key: { ...bookmarkRequest.position.key, swipeId: 1 } },
+  }];
+  await respond(bookmarkRequest.requestId, { bookmarks });
+  const compareButton = chronicle.getByRole('button', { name: 'Compare bookmarks' });
+  await compareButton.click();
+  const compareRequest = await chronicleRequest('compare');
+  assert.equal(compareRequest.secondId, 'alternate-bookmark');
+  const comparison = [
+    { status: 'ready', passage: 'A saved passage.', facts: ['Location: Observatory'], completeFacts: true, choices: [], pictures: [], morePictures: false },
+    { status: 'changed' },
+  ];
+  await respond(compareRequest.requestId, { bookmarks, comparison });
+  assert.match(await chronicle.innerText(), /A saved passage/);
+  assert.match(await chronicle.innerText(), /saved reply or its passage layout changed/);
+  for (const viewport of [{ width: 360, height: 740 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    assert.ok(await chronicle.evaluate(element => {
+      const results = element.querySelector('[data-chronicle-results]')!;
+      return results.scrollWidth <= results.clientWidth + 1 && element.scrollWidth <= element.clientWidth + 1;
+    }), `Chronicle fits a ${viewport.width}px viewport`);
+    assert.ok((await compareButton.boundingBox())!.height >= 44);
+  }
+  await compareButton.click();
+  const cancelled = await chronicleRequest('compare');
+  await page.getByRole('button', { name: 'Close workspace and return to reader' }).click();
+  await respond(cancelled.requestId, { bookmarks, comparison });
+  assert.equal(await chronicle.locator('[data-chronicle-results]').textContent(), '');
+  const readerAfter = await page.evaluate(() => (window as any).hostFixture.stage().getState());
+  assert.equal(readerAfter.currentParagraphIndex, readerBefore.currentParagraphIndex);
+  assert.equal(readerAfter.draft, readerBefore.draft);
+  await openDirector();
+  await rehearsal.locator('summary').click();
+  await rehearsal.getByLabel('Preset name', { exact: true }).fill('Unsaved preview');
+  await page.evaluate(() => {
+    const f = (window as any).hostFixture;
+    f.changeChat('B');
+    f.state(f.turn('B'));
+  });
+  assert.equal(await rehearsal.isVisible(), false, 'changing chats closes the previous rehearsal');
+  assert.equal(await page.evaluate(() => (window as any).hostFixture.sent.some((message: any) => message.type === 'vn_rehearsal_preset')), false,
+    'closing an unsaved rehearsal sends zero preset changes');
   assert.deepEqual(errors, []);
-  console.log('Real host controller: revised presentation/draft/cursor, stale chats/state attempts, replacement acknowledgements, close suspension, Director picture ownership, the 31-place Atlas, selected-field autofill, and opt-in CYOA passed.');
+  console.log('Real host controller: saved artwork, Atlas and autofill, opt-in CYOA, Branch Chronicle, Living World clocks, and Scene Rehearsal passed.');
 }finally{await browser.close();await server.stop();}

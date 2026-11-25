@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TurnKeySchema } from './turn-key.js';
 import { ReadingPositionSchema } from './reading-position.js';
+import { WorldClockCommandSchema, WorldClockLedgerSchema } from './world-clocks.js';
 
 export const LocationSpatialAnchorsSchema = z.object({
   lightSourceAxis: z.enum(['left', 'right', 'backlit', 'overhead', 'ambient']).optional(),
@@ -157,6 +158,7 @@ export const StoryDNASetSchema = z.object({
   npcBeliefs: z.record(z.string(), z.array(NpcBeliefSchema).max(12)).optional(),
   loreEvents: z.array(StoryLoreEventSchema).max(96).optional(),
   loreHeads: z.array(TurnKeySchema).max(192).optional(),
+  worldClocks: WorldClockLedgerSchema.optional(),
   hiddenLoreThreads: z.array(z.string().max(200)).max(96).optional(),
   deletedLocations: z.record(z.string(), LocationDNASchema).optional(),
   deletedItems: z.record(z.string(), ItemDNASchema).optional(),
@@ -510,6 +512,14 @@ export type StoryAutofillResult =
 export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
   z.object({
     type: z.literal('vn_story_dna'),
+    action: z.literal('world_clock'),
+    chatId: z.string().min(1).max(256),
+    requestId: z.string().min(1).max(160),
+    command: WorldClockCommandSchema,
+    readingPosition: ReadingPositionSchema.optional(),
+  }).strict(),
+  z.object({
+    type: z.literal('vn_story_dna'),
     action: z.literal('list'),
     chatId: z.string(),
     requestId: z.string().optional(),
@@ -685,7 +695,11 @@ export type StoryDnaRequest = z.infer<typeof StoryDnaRequestSchema>;
 export type StoryDnaActionBody<T = StoryDnaRequest> = T extends StoryDnaRequest
   ? Omit<T, 'type' | 'chatId' | 'requestId' | (T['action'] extends 'review_autofill' | 'apply_autofill' ? 'readingPosition' : never)>
   : never;
-export type StoryDnaRequester = (body: StoryDnaActionBody, onReview?: (result: StoryAutofillResult) => void) => void;
+export type StoryDnaRequester = (
+  body: StoryDnaActionBody,
+  onReview?: (result: StoryAutofillResult) => void,
+  onClockResult?: (error?: string) => void,
+) => void;
 
 function isSwipeEntryActive(
   entry: { autoDiscovered?: boolean | undefined; locked?: boolean | undefined; seenInSwipes?: string[] | undefined },

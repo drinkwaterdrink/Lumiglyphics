@@ -6,6 +6,9 @@ import {QueueImageRetriesSchema,type QueueImageRetriesRequest,type ImageRetryQue
 import {PresentationRuleRequestSchema,type PresentationRuleRequest,type PresentationRuleCatalog} from './shared/presentation-rules.js';
 import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary,type CastContextScan} from './shared/cast-art.js';
 import {ImageLibraryRequestSchema,type ImageLibraryPage} from './shared/image-library.js';
+import {BranchChronicleRequestSchema,type BranchChronicleRequest,type BranchChronicleResult} from './shared/branch-chronicle.js';
+import {RehearsalRequestSchema} from './shared/rehearsal-presets.js';
+import type {ReaderPreferences} from './shared/reader-preferences.js';
 import {LocationArtRequestSchema,type LocationArtLibrary} from './shared/stage-assets.js';
 import type { CharacterDNA, CharacterDNALibrary } from './shared/character-dna.js';
 import type { ContextSourceReport } from './shared/context-sources.js';
@@ -59,6 +62,8 @@ export type FrontendRequest =
   | QueueImageRetriesRequest
   | PresentationRuleRequest
   | z.infer<typeof ImageLibraryRequestSchema>
+  | BranchChronicleRequest
+  | z.infer<typeof RehearsalRequestSchema>
   | z.infer<typeof DeleteImageRequestSchema>
   | GenerateDocumentImageRequest
   | z.infer<typeof CastGalleryRequestSchema>
@@ -260,6 +265,8 @@ export type BackendResponse =
   | {type:"vn_image_retry_queue";queue:ImageRetryQueueView}
   | {type:"vn_presentation_rules";chatId:string;requestId:string;catalog:PresentationRuleCatalog}
   | {type:'vn_image_library';chatId:string;requestId:string;page:ImageLibraryPage}
+  | {type:'vn_branch_chronicle';chatId:string;requestId:string;result:BranchChronicleResult}
+  | {type:'vn_rehearsal_preset';chatId:string;requestId:string;preferences:ReaderPreferences}
   | {type:"vn_cast_gallery";chatId:string;requestId:string;gallery:CastGallery}
   | {type:"vn_cast_context";chatId:string;requestId:string;scan:CastContextScan}
   | {type:"vn_cast_art";chatId:string;requestId:string;library:CastArtLibrary}
@@ -342,6 +349,8 @@ export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if((value as {type?:unknown}).type==='vn_restore_previous_image')return RestorePreviousImageRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_external_image_review") return z.object({type:z.literal("vn_external_image_review"),chatId:z.string().min(1).max(128),requestId:z.string().min(1).max(128),reviewRequestId:z.string().min(1).max(100),action:z.enum(["generate","skip"]),edits:z.object({prompt:z.string().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
   if((value as {type?:unknown}).type==='vn_image_library')return ImageLibraryRequestSchema.safeParse(value).success;
+  if((value as {type?:unknown}).type==='vn_branch_chronicle')return BranchChronicleRequestSchema.safeParse(value).success;
+  if((value as {type?:unknown}).type==='vn_rehearsal_preset')return RehearsalRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_gallery") return CastGalleryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_art") return CastArtRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_get_context_sources") return ContextSourcesRequestSchema.safeParse(value).success;

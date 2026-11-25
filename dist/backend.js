@@ -20823,6 +20823,49 @@ var init_reading_position = __esm(() => {
   }).strict();
 });
 
+// src/shared/world-clocks.ts
+function visibleClockProgress(ledger, clockId) {
+  const clock = ledger.clocks.find((entry) => entry.id === clockId);
+  if (!clock)
+    return 0;
+  return ledger.events.reduce((progress, event) => event.clockId !== clockId ? progress : Math.min(clock.steps, event.kind === "advance" ? progress + 1 : event.value), 0);
+}
+var id2, WorldClockKindSchema, WorldClockDraftSchema, WorldClockSchema, WorldClockEventSchema, WorldClockLedgerSchema, WorldClockCommandSchema;
+var init_world_clocks = __esm(() => {
+  init_zod();
+  init_reading_position();
+  id2 = exports_external.string().trim().min(1).max(160);
+  WorldClockKindSchema = exports_external.enum(["deadline", "relationship", "faction", "objective"]);
+  WorldClockDraftSchema = exports_external.object({
+    title: exports_external.string().trim().min(1).max(100),
+    kind: WorldClockKindSchema,
+    steps: exports_external.number().int().min(2).max(12)
+  }).strict();
+  WorldClockSchema = WorldClockDraftSchema.extend({
+    id: id2,
+    paused: exports_external.boolean()
+  }).strict();
+  WorldClockEventSchema = exports_external.object({
+    id: id2,
+    clockId: id2,
+    position: ReadingPositionSchema,
+    rawFingerprint: exports_external.string().min(8).max(256),
+    kind: exports_external.enum(["advance", "correct"]),
+    value: exports_external.number().int().min(0).max(12),
+    note: exports_external.string().trim().min(1).max(280)
+  }).strict();
+  WorldClockLedgerSchema = exports_external.object({
+    clocks: exports_external.array(WorldClockSchema).max(24),
+    events: exports_external.array(WorldClockEventSchema).max(512)
+  }).strict();
+  WorldClockCommandSchema = exports_external.discriminatedUnion("kind", [
+    exports_external.object({ kind: exports_external.literal("create"), clock: WorldClockDraftSchema }).strict(),
+    exports_external.object({ kind: exports_external.literal("pause"), clockId: id2, paused: exports_external.boolean() }).strict(),
+    exports_external.object({ kind: exports_external.literal("advance"), clockId: id2, note: WorldClockEventSchema.shape.note }).strict(),
+    exports_external.object({ kind: exports_external.literal("correct"), clockId: id2, note: WorldClockEventSchema.shape.note, value: WorldClockEventSchema.shape.value }).strict()
+  ]);
+});
+
 // src/shared/story-dna.ts
 function storyLoreThreadId(title) {
   return `lore:${title.trim().toLowerCase()}`;
@@ -21078,7 +21121,7 @@ function isSwipeEntryActive(entry, activeMessageSwipes) {
     return true;
   if (!entry.seenInSwipes || entry.seenInSwipes.length === 0)
     return true;
-  const knownMessageIds = entry.seenInSwipes.map((tag) => tag.split("::")[0] ?? "").filter((id2) => Object.prototype.hasOwnProperty.call(activeMessageSwipes, id2));
+  const knownMessageIds = entry.seenInSwipes.map((tag) => tag.split("::")[0] ?? "").filter((id3) => Object.prototype.hasOwnProperty.call(activeMessageSwipes, id3));
   if (knownMessageIds.length === 0)
     return true;
   return entry.seenInSwipes.some((tag) => {
@@ -21089,21 +21132,21 @@ function isSwipeEntryActive(entry, activeMessageSwipes) {
 }
 function scrubStoryDNASwipes(set2, activeMessageSwipes) {
   const nextLocations = {};
-  for (const [id2, loc] of Object.entries(set2.locations)) {
+  for (const [id3, loc] of Object.entries(set2.locations)) {
     if (isSwipeEntryActive(loc, activeMessageSwipes))
-      nextLocations[id2] = loc;
+      nextLocations[id3] = loc;
   }
   const nextItems = {};
-  for (const [id2, item] of Object.entries(set2.items)) {
+  for (const [id3, item] of Object.entries(set2.items)) {
     if (isSwipeEntryActive(item, activeMessageSwipes))
-      nextItems[id2] = item;
+      nextItems[id3] = item;
   }
   let nextDocuments;
   if (set2.documents) {
     nextDocuments = {};
-    for (const [id2, doc2] of Object.entries(set2.documents)) {
+    for (const [id3, doc2] of Object.entries(set2.documents)) {
       if (isSwipeEntryActive(doc2, activeMessageSwipes))
-        nextDocuments[id2] = doc2;
+        nextDocuments[id3] = doc2;
     }
   }
   const nextThoughtCabinet = set2.thoughtCabinet?.filter((t) => !t.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: t.seenInSwipes }, activeMessageSwipes));
@@ -21133,6 +21176,7 @@ var init_story_dna = __esm(() => {
   init_zod();
   init_turn_key();
   init_reading_position();
+  init_world_clocks();
   LocationSpatialAnchorsSchema = exports_external.object({
     lightSourceAxis: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
     windowOrPortalSide: exports_external.enum(["left", "right", "center-back", "none"]).optional(),
@@ -21276,6 +21320,7 @@ var init_story_dna = __esm(() => {
     npcBeliefs: exports_external.record(exports_external.string(), exports_external.array(NpcBeliefSchema).max(12)).optional(),
     loreEvents: exports_external.array(StoryLoreEventSchema).max(96).optional(),
     loreHeads: exports_external.array(TurnKeySchema).max(192).optional(),
+    worldClocks: WorldClockLedgerSchema.optional(),
     hiddenLoreThreads: exports_external.array(exports_external.string().max(200)).max(96).optional(),
     deletedLocations: exports_external.record(exports_external.string(), LocationDNASchema).optional(),
     deletedItems: exports_external.record(exports_external.string(), ItemDNASchema).optional(),
@@ -21467,6 +21512,14 @@ var init_story_dna = __esm(() => {
   ITEM_AUTOFILL_FIELDS = ["itemType", "description", "materials", "distinctiveFeatures", "colors", "heldBy", "loreText"];
   StoryAutofillFieldSchema = exports_external.enum([...LOCATION_AUTOFILL_FIELDS, ...ITEM_AUTOFILL_FIELDS]);
   StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("world_clock"),
+      chatId: exports_external.string().min(1).max(256),
+      requestId: exports_external.string().min(1).max(160),
+      command: WorldClockCommandSchema,
+      readingPosition: ReadingPositionSchema.optional()
+    }).strict(),
     exports_external.object({
       type: exports_external.literal("vn_story_dna"),
       action: exports_external.literal("list"),
@@ -23283,22 +23336,22 @@ var init_image_shot_spec = __esm(() => {
 
 // src/shared/image-model-output.ts
 function isFluxKleinModel(model) {
-  const id2 = String(model ?? "").trim().toLowerCase();
-  return Boolean(id2) && id2.includes("klein");
+  const id3 = String(model ?? "").trim().toLowerCase();
+  return Boolean(id3) && id3.includes("klein");
 }
 function isFlux3KleinSquareModel(model) {
-  const id2 = String(model ?? "").trim().toLowerCase();
-  return Boolean(id2) && (/flux[-_./]?3.*klein/i.test(id2) || id2.startsWith("blackforestlabs/flux-3/klein"));
+  const id3 = String(model ?? "").trim().toLowerCase();
+  return Boolean(id3) && (/flux[-_./]?3.*klein/i.test(id3) || id3.startsWith("blackforestlabs/flux-3/klein"));
 }
 function imageOutputRule(provider, model) {
   if (provider?.trim().toLowerCase() !== "nanogpt")
     return null;
-  const id2 = model?.trim().toLowerCase() ?? "";
-  if (ANIMA_MODELS.has(id2))
+  const id3 = model?.trim().toLowerCase() ?? "";
+  if (ANIMA_MODELS.has(id3))
     return "anima";
-  if (id2 === "qwen-image-2.1-turbo")
+  if (id3 === "qwen-image-2.1-turbo")
     return "qwen-turbo";
-  return isFlux3KleinSquareModel(id2) ? "klein-square" : null;
+  return isFlux3KleinSquareModel(id3) ? "klein-square" : null;
 }
 var KLEIN_OUTPUT_SIZES, ANIMA_OUTPUT_RATIOS, QWEN_TURBO_OUTPUT_RATIOS, ANIMA_MODELS;
 var init_image_model_output = __esm(() => {
@@ -24204,13 +24257,13 @@ function reduceRpgState(previous, update) {
     });
   }
   for (const q of update.quests ?? []) {
-    const id2 = q.id?.trim() || slugId("quest", q.title);
-    const prev = questMap.get(id2);
+    const id3 = q.id?.trim() || slugId("quest", q.title);
+    const prev = questMap.get(id3);
     const nextStatus = q.status ?? prev?.status ?? "active";
     if (!prev || prev.status !== "completed" && nextStatus === "completed" || prev.objective !== q.objective)
       progressed = true;
-    questMap.set(id2, RpgQuestSchema.parse({
-      id: id2,
+    questMap.set(id3, RpgQuestSchema.parse({
+      id: id3,
       title: q.title,
       objective: q.objective,
       status: q.status ?? prev?.status ?? "active",
@@ -24961,15 +25014,15 @@ function archiveImageVersion(history, jobId, version2) {
   next[jobId] = [...next[jobId] ?? [], parsed.data].slice(-MAX_IMAGE_VERSIONS);
   return next;
 }
-var MAX_IMAGE_VERSIONS = 50, id2, ImageVersionProvenanceSchema, ImageVersionSchema;
+var MAX_IMAGE_VERSIONS = 50, id3, ImageVersionProvenanceSchema, ImageVersionSchema;
 var init_image_version_history = __esm(() => {
   init_contracts();
   init_zod();
-  id2 = exports_external.string().min(1).max(256);
-  ImageVersionProvenanceSchema = exports_external.object({ version: exports_external.literal(1), job: AssetJobSchema, cue: VisualCueSchema, requestId: id2 }).strict().refine((value) => JSON.stringify(value).length <= 200000);
+  id3 = exports_external.string().min(1).max(256);
+  ImageVersionProvenanceSchema = exports_external.object({ version: exports_external.literal(1), job: AssetJobSchema, cue: VisualCueSchema, requestId: id3 }).strict().refine((value) => JSON.stringify(value).length <= 200000);
   ImageVersionSchema = exports_external.object({
-    versionId: id2,
-    imageId: id2,
+    versionId: id3,
+    imageId: id3,
     imageUrl: exports_external.string().min(1).max(8192).refine((value) => /^(?:\/(?!\/)|https?:\/\/|blob:)/.test(value) && !/[\s"'<>\u0000-\u001f]/.test(value)),
     timestamp: exports_external.string().max(64).refine((value) => Number.isFinite(Date.parse(value))),
     prompt: exports_external.string().max(65000).optional(),
@@ -25224,8 +25277,8 @@ function findCharacterDNA(records, identity) {
   const nickMatches = all.filter((c) => areNamesEquivalent(c.name, identity) || c.aliases.some((a) => areNamesEquivalent(a, identity)));
   return nickMatches.length === 1 ? nickMatches[0] : undefined;
 }
-function createEmptyCharacterDNA(name, id3) {
-  const normalizedId = (id3 || name).trim().toLowerCase().replace(/\s+/g, "-");
+function createEmptyCharacterDNA(name, id4) {
+  const normalizedId = (id4 || name).trim().toLowerCase().replace(/\s+/g, "-");
   return CharacterDNASchema.parse({
     id: normalizedId || "unnamed-character",
     name: name.trim() || "Unnamed Character",
@@ -25631,14 +25684,14 @@ function isCharacterActiveOnBranch(char, activeBranchSwipeTags) {
 }
 function scrubCharacterDNASwipes(library, activeMessageSwipes) {
   const nextCharacters = {};
-  for (const [id3, char] of Object.entries(library.characters)) {
+  for (const [id4, char] of Object.entries(library.characters)) {
     if (!char.autoDiscovered || char.locked || !char.seenInSwipes || char.seenInSwipes.length === 0) {
-      nextCharacters[id3] = char;
+      nextCharacters[id4] = char;
       continue;
     }
     const knownMessageIds = char.seenInSwipes.map((tag) => tag.split("::")[0] ?? "").filter((msgId) => Object.prototype.hasOwnProperty.call(activeMessageSwipes, msgId));
     if (knownMessageIds.length === 0) {
-      nextCharacters[id3] = char;
+      nextCharacters[id4] = char;
       continue;
     }
     const isActive = char.seenInSwipes.some((tag) => {
@@ -25647,7 +25700,7 @@ function scrubCharacterDNASwipes(library, activeMessageSwipes) {
       return !activeTag || tag === activeTag;
     });
     if (isActive) {
-      nextCharacters[id3] = char;
+      nextCharacters[id4] = char;
     }
   }
   return CharacterDNALibrarySchema.parse({
@@ -26095,18 +26148,18 @@ function findRegistryEntryByName(registry2, name) {
   return entries.find((entry) => characterAppearanceKey(entry.name) === key) ?? entries.find((entry) => aliasKeys(entry).includes(key));
 }
 function resolveCharacterReference(registry2, reference) {
-  const id3 = normalizeCharacterId(reference.characterId);
+  const id4 = normalizeCharacterId(reference.characterId);
   const name = normalizeCharacterName(reference.name);
-  const byId = id3 ? registry2[id3] : undefined;
+  const byId = id4 ? registry2[id4] : undefined;
   const byName = name ? findRegistryEntryByName(registry2, name) : undefined;
   if (byId && byName && byId.id !== byName.id)
     return byName;
   return byId ?? byName;
 }
 function referenceConflict(registry2, reference) {
-  const id3 = normalizeCharacterId(reference.characterId);
+  const id4 = normalizeCharacterId(reference.characterId);
   const name = normalizeCharacterName(reference.name);
-  const byId = id3 ? registry2[id3] : undefined;
+  const byId = id4 ? registry2[id4] : undefined;
   const byName = name ? findRegistryEntryByName(registry2, name) : undefined;
   return byId && byName && byId.id !== byName.id ? { requested: byId, owner: byName } : undefined;
 }
@@ -26133,8 +26186,8 @@ function tagString(tags) {
 }
 function mergeCharacterDeclarations(registry2, declarations) {
   const next = {};
-  for (const [id3, entry] of Object.entries(registry2))
-    next[id3] = { ...entry, aliases: [...entry.aliases] };
+  for (const [id4, entry] of Object.entries(registry2))
+    next[id4] = { ...entry, aliases: [...entry.aliases] };
   let changed = false;
   const rejectedAliases = [];
   const rejectedSubjects = [];
@@ -26151,17 +26204,17 @@ function mergeCharacterDeclarations(registry2, declarations) {
     if (!entry) {
       if (!name)
         continue;
-      let id3 = explicitId && !next[explicitId] ? explicitId : characterIdFor(name);
-      if (!id3)
+      let id4 = explicitId && !next[explicitId] ? explicitId : characterIdFor(name);
+      if (!id4)
         continue;
       let suffix = 2;
-      const base = id3;
-      while (next[id3]) {
-        id3 = `${base}-${suffix}`;
+      const base = id4;
+      while (next[id4]) {
+        id4 = `${base}-${suffix}`;
         suffix += 1;
       }
-      entry = { id: id3, name, aliases: [], tags: "", subjectCategory: "unknown" };
-      next[id3] = entry;
+      entry = { id: id4, name, aliases: [], tags: "", subjectCategory: "unknown" };
+      next[id4] = entry;
       changed = true;
     }
     const canonicalKey = characterAppearanceKey(entry.name);
@@ -26224,15 +26277,15 @@ function normalizeCharacterRegistry(raw) {
     const name = normalizeCharacterName(record2.name);
     if (!name)
       continue;
-    const id3 = normalizeCharacterId(typeof record2.id === "string" ? record2.id : rawId) || characterIdFor(name);
-    if (!id3 || registry2[id3])
+    const id4 = normalizeCharacterId(typeof record2.id === "string" ? record2.id : rawId) || characterIdFor(name);
+    if (!id4 || registry2[id4])
       continue;
     if (Object.values(registry2).some((entry) => characterAppearanceKey(entry.name) === characterAppearanceKey(name)))
       continue;
     const rawTags = typeof record2.tags === "string" ? record2.tags : Array.isArray(record2.tags) ? record2.tags.filter((tag) => typeof tag === "string").join(", ") : "";
     const tags = hasIdentityDocumentNoise(rawTags) ? "" : toUsableTags(name, splitTags(rawTags)).join(", ");
     const aliases = uniqueNames(Array.isArray(record2.aliases) ? record2.aliases.filter((alias) => typeof alias === "string") : []).filter((alias) => characterAppearanceKey(alias) !== characterAppearanceKey(name));
-    registry2[id3] = { id: id3, name, aliases, tags, subjectCategory: normalizeSubjectCategory(record2.subjectCategory) };
+    registry2[id4] = { id: id4, name, aliases, tags, subjectCategory: normalizeSubjectCategory(record2.subjectCategory) };
   }
   const taken = new Map;
   for (const entry of Object.values(registry2))
@@ -26452,7 +26505,7 @@ async function saveCharacterDNA(spindle2, chatId, dna, userId, revision) {
     if (existingByName && existingByName.id !== parsed.id)
       throw new Error("This character already exists. Open its saved profile or merge identities explicitly.");
     const existing = existingById ?? existingByName;
-    const id3 = existing?.id ?? parsed.id;
+    const id4 = existing?.id ?? parsed.id;
     if (existing && existing.name && existing.name.toLowerCase() !== parsed.name.toLowerCase()) {
       const aliases = new Set(parsed.aliases ?? []);
       aliases.add(existing.name);
@@ -26462,7 +26515,7 @@ async function saveCharacterDNA(spindle2, chatId, dna, userId, revision) {
     for (const path of DNA_FIELDS)
       if (JSON.stringify(existing && dnaFieldValue(existing, path)) !== JSON.stringify(dnaFieldValue(parsed, path)))
         parsed.fieldSources[path] = { classification: "manual", sources: [] };
-    l.characters[id3] = { ...parsed, id: id3, ...existing?.autoDiscovered || parsed.autoDiscovered ? { autoDiscovered: false } : {} };
+    l.characters[id4] = { ...parsed, id: id4, ...existing?.autoDiscovered || parsed.autoDiscovered ? { autoDiscovered: false } : {} };
   });
 }
 var pathFor = (chatId) => `chats/${encodeURIComponent(chatId).replace(/%/g, "_")}/character-dna.json`, queues;
@@ -34489,9 +34542,9 @@ function parsePromptCapabilities(value) {
   if (!Array.isArray(data) || data.length > 2000)
     return result;
   for (const item of data) {
-    const id3 = item?.id, p = item?.supported_parameters, n = p?.max_prompt_characters;
-    if (typeof id3 === "string" && id3.length <= 256 && Number.isInteger(n) && n >= 256 && n <= 50000 && p?.prompt_length?.status === "known" && ["utf16_code_units", "unicode_code_points"].includes(p.prompt_length.unit))
-      result.set(id3, n);
+    const id4 = item?.id, p = item?.supported_parameters, n = p?.max_prompt_characters;
+    if (typeof id4 === "string" && id4.length <= 256 && Number.isInteger(n) && n >= 256 && n <= 50000 && p?.prompt_length?.status === "known" && ["utf16_code_units", "unicode_code_points"].includes(p.prompt_length.unit))
+      result.set(id4, n);
   }
   return result;
 }
@@ -34521,17 +34574,17 @@ function family(model, provider) {
   return "generic";
 }
 function resolveImagePromptProfile(provider, model, settings = {}, live, liveOutputs) {
-  const p = provider?.trim().toLowerCase() ?? "", id3 = model?.trim() ?? "", f = family(id3.toLowerCase(), p), auto = settings.automaticImagePromptSettings !== false;
-  const isIdeogram = /ideogram/i.test(id3) || /ideogram/i.test(model ?? "");
-  const liveLimit = p === "nanogpt" ? live?.get(id3) : undefined;
-  const catalogueLimit = p === "nanogpt" ? Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id3) ? NANOGPT_PROMPT_CAPABILITIES[id3] : isIdeogram ? 1e4 : undefined : undefined;
+  const p = provider?.trim().toLowerCase() ?? "", id4 = model?.trim() ?? "", f = family(id4.toLowerCase(), p), auto = settings.automaticImagePromptSettings !== false;
+  const isIdeogram = /ideogram/i.test(id4) || /ideogram/i.test(model ?? "");
+  const liveLimit = p === "nanogpt" ? live?.get(id4) : undefined;
+  const catalogueLimit = p === "nanogpt" ? Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id4) ? NANOGPT_PROMPT_CAPABILITIES[id4] : isIdeogram ? 1e4 : undefined : undefined;
   const providerLimit = liveLimit ?? catalogueLimit;
   const budget = typeof settings.imagePromptBudget === "number" && Number.isFinite(settings.imagePromptBudget) ? settings.imagePromptBudget : 3000;
   const manual = settings.imagePromptBudgetOverride ? Math.min(50000, Math.max(256, Math.trunc(budget))) : undefined;
   const fallbackTarget = isIdeogram ? 1e4 : 3000;
   const maximum = Math.min(manual ?? (auto ? providerLimit ?? fallbackTarget : fallbackTarget), providerLimit ?? 50000);
-  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id3) : undefined;
-  const output2 = auto && p === "nanogpt" ? liveOutput ?? (Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id3) ? NANOGPT_OUTPUT_CAPABILITIES[id3] : undefined) : undefined;
+  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id4) : undefined;
+  const output2 = auto && p === "nanogpt" ? liveOutput ?? (Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id4) ? NANOGPT_OUTPUT_CAPABILITIES[id4] : undefined) : undefined;
   return {
     version: 1,
     family: f,
@@ -34541,7 +34594,7 @@ function resolveImagePromptProfile(provider, model, settings = {}, live, liveOut
     ...manual !== undefined ? { manualBudget: manual } : {},
     format: !auto ? settings.imagePromptFormat ?? "description" : f === "novelai" ? "tags" : f === "anima" ? "hybrid" : "description",
     ...output2 ? { output: output2, outputSource: liveOutput ? "live" : "catalogue" } : {},
-    negativeMode: auto && (isIdeogram || p === "nanogpt" && (/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id3) || Boolean(output2) && /^flux-2-/.test(id3) || /^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id3) || /^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id3))) ? "positive-only" : "supported-or-unknown",
+    negativeMode: auto && (isIdeogram || p === "nanogpt" && (/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id4) || Boolean(output2) && /^flux-2-/.test(id4) || /^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id4) || /^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id4))) ? "positive-only" : "supported-or-unknown",
     guidance: auto ? guidance[f] : `Keep the user's ${settings.imagePromptFormat ?? "description"} prompt format and weighting syntax.`
   };
 }
@@ -34747,12 +34800,12 @@ function resolveRouteDialect(provider, modelId, parameters, settings) {
 function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits, liveOutputs, parameters) {
   const p = provider?.trim().toLowerCase() ?? "";
   const rawModel = model?.trim() ?? "unknown";
-  const id3 = rawModel;
-  const resolution = resolveRouteDialect(p, id3, parameters, settings);
+  const id4 = rawModel;
+  const resolution = resolveRouteDialect(p, id4, parameters, settings);
   const dialect = resolution.dialect;
   const family2 = resolution.family;
-  const liveLimit = p === "nanogpt" ? liveLimits?.get(id3) : undefined;
-  const catalogueLimit = p === "nanogpt" && Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id3) ? NANOGPT_PROMPT_CAPABILITIES[id3] : undefined;
+  const liveLimit = p === "nanogpt" ? liveLimits?.get(id4) : undefined;
+  const catalogueLimit = p === "nanogpt" && Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id4) ? NANOGPT_PROMPT_CAPABILITIES[id4] : undefined;
   const providerLimit = liveLimit ?? catalogueLimit;
   let capabilitySource = "fallback";
   if (liveLimit !== undefined) {
@@ -34780,8 +34833,8 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
     const manualBudget = Math.min(65000, Math.max(256, Math.trunc(settings.imagePromptBudget)));
     hardMaxCharacters = providerLimit !== undefined ? Math.min(manualBudget, providerLimit) : manualBudget;
   }
-  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id3) : undefined;
-  const catalogueOutput = p === "nanogpt" && Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id3) ? NANOGPT_OUTPUT_CAPABILITIES[id3] : undefined;
+  const liveOutput = p === "nanogpt" ? liveOutputs?.get(id4) : undefined;
+  const catalogueOutput = p === "nanogpt" && Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id4) ? NANOGPT_OUTPUT_CAPABILITIES[id4] : undefined;
   const outputCapabilities = liveOutput ?? catalogueOutput;
   let softBudgets = DIALECT_BUDGETS[dialect];
   if (dialect === "qwen-image-3" && resolution.promptExpansion?.enabled === false) {
@@ -34988,8 +35041,8 @@ async function loadImagePromptProfileV2(spindle2, config2, provider, model, para
 }
 async function plannerImagePromptProfile(spindle2, config2, userId) {
   try {
-    const id3 = config2.imageConnectionId?.split("::")[0];
-    const selected = id3 && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(id3, userId) : typeof spindle2.imageGen?.listConnections === "function" ? (await spindle2.imageGen.listConnections(userId)).find((c) => c.is_default) : undefined;
+    const id4 = config2.imageConnectionId?.split("::")[0];
+    const selected = id4 && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(id4, userId) : typeof spindle2.imageGen?.listConnections === "function" ? (await spindle2.imageGen.listConnections(userId)).find((c) => c.is_default) : undefined;
     return await loadImagePromptProfile(spindle2, config2, selected?.provider, config2.imageModel || selected?.model);
   } catch {
     return resolveImagePromptProfile(undefined, config2.imageModel, config2);
@@ -35098,31 +35151,31 @@ var init_continuity = __esm(() => {
 function samePresentationTurn(a, b) {
   return a.chatId === b.chatId && a.assistantMessageId === b.assistantMessageId && a.swipeId === b.swipeId && a.sourceFingerprint === b.sourceFingerprint && a.revision === b.revision;
 }
-var id3, PresentationAnchorSchema, EvidenceSourceSchema, EntityFactSchema, PresentationEntitySchema, PresentationStateSchema, EntityStateDeltaSchema, ReaderEntitySchema, PresentationSnapshotSchema, ReaderPresentationV1Schema, MAX_PRESENTATION_BYTES = 2000000, presentationSerializedBytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length, MAX_PRESENTATION_PARAGRAPHS = 1e4, MAX_PRESENTATION_CHANGES, CompactPresentationChangeSchema, PresentationBeatSchema, ReaderPresentationV2Schema, ReaderPresentationSchema;
+var id4, PresentationAnchorSchema, EvidenceSourceSchema, EntityFactSchema, PresentationEntitySchema, PresentationStateSchema, EntityStateDeltaSchema, ReaderEntitySchema, PresentationSnapshotSchema, ReaderPresentationV1Schema, MAX_PRESENTATION_BYTES = 2000000, presentationSerializedBytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length, MAX_PRESENTATION_PARAGRAPHS = 1e4, MAX_PRESENTATION_CHANGES, CompactPresentationChangeSchema, PresentationBeatSchema, ReaderPresentationV2Schema, ReaderPresentationSchema;
 var init_presentation_entities = __esm(() => {
   init_story_documents();
   init_zod();
   init_contracts();
-  id3 = exports_external.string().trim().min(1).max(256);
+  id4 = exports_external.string().trim().min(1).max(256);
   PresentationAnchorSchema = exports_external.object({ key: TurnKeySchema, paragraphIndex: exports_external.number().int().nonnegative() }).strict();
-  EvidenceSourceSchema = exports_external.object({ provider: exports_external.enum(["story", "card", "manual", "lumibooks", "warp", "simtracker", "lumiscript"]), recordId: id3, chatId: id3, messageId: id3.optional(), sourceFingerprint: id3.optional(), observedAt: exports_external.string().max(64) }).strict();
-  EntityFactSchema = exports_external.object({ id: id3, entityId: id3, field: exports_external.string().min(1).max(64), value: exports_external.string().max(1200), visibility: exports_external.enum(["observed", "private", "unclassified"]), source: EvidenceSourceSchema, revealedAt: PresentationAnchorSchema.optional() }).strict();
-  PresentationEntitySchema = exports_external.object({ id: id3, kind: exports_external.enum(["npc", "place", "object"]), name: id3, aliases: exports_external.array(id3).max(12), firstParagraph: exports_external.number().int().nonnegative(), legacyCharacterId: id3.optional(), facts: exports_external.array(EntityFactSchema).max(128) }).strict();
+  EvidenceSourceSchema = exports_external.object({ provider: exports_external.enum(["story", "card", "manual", "lumibooks", "warp", "simtracker", "lumiscript"]), recordId: id4, chatId: id4, messageId: id4.optional(), sourceFingerprint: id4.optional(), observedAt: exports_external.string().max(64) }).strict();
+  EntityFactSchema = exports_external.object({ id: id4, entityId: id4, field: exports_external.string().min(1).max(64), value: exports_external.string().max(1200), visibility: exports_external.enum(["observed", "private", "unclassified"]), source: EvidenceSourceSchema, revealedAt: PresentationAnchorSchema.optional() }).strict();
+  PresentationEntitySchema = exports_external.object({ id: id4, kind: exports_external.enum(["npc", "place", "object"]), name: id4, aliases: exports_external.array(id4).max(12), firstParagraph: exports_external.number().int().nonnegative(), legacyCharacterId: id4.optional(), facts: exports_external.array(EntityFactSchema).max(128) }).strict();
   PresentationStateSchema = exports_external.object({ appearance: exports_external.string().max(1200).optional(), outfit: exports_external.string().max(1200).optional(), condition: exports_external.string().max(1200).optional(), owner: exports_external.string().max(256).optional(), location: exports_external.string().max(256).optional(), presence: exports_external.enum(["present", "absent"]).optional() }).strict();
-  EntityStateDeltaSchema = exports_external.object({ entityId: id3, at: PresentationAnchorSchema, changes: PresentationStateSchema.partial().extend({ appearance: exports_external.string().max(1200).nullable().optional(), outfit: exports_external.string().max(1200).nullable().optional(), condition: exports_external.string().max(1200).nullable().optional(), owner: exports_external.string().max(256).nullable().optional(), location: exports_external.string().max(256).nullable().optional(), presence: exports_external.enum(["present", "absent"]).nullable().optional() }) }).strict();
+  EntityStateDeltaSchema = exports_external.object({ entityId: id4, at: PresentationAnchorSchema, changes: PresentationStateSchema.partial().extend({ appearance: exports_external.string().max(1200).nullable().optional(), outfit: exports_external.string().max(1200).nullable().optional(), condition: exports_external.string().max(1200).nullable().optional(), owner: exports_external.string().max(256).nullable().optional(), location: exports_external.string().max(256).nullable().optional(), presence: exports_external.enum(["present", "absent"]).nullable().optional() }) }).strict();
   ReaderEntitySchema = PresentationEntitySchema.omit({ facts: true }).extend({ facts: exports_external.array(EntityFactSchema.extend({ visibility: exports_external.literal("observed") })).max(128) });
-  PresentationSnapshotSchema = exports_external.object({ at: PresentationAnchorSchema, locationId: id3.nullable(), presentEntityIds: exports_external.array(id3).max(32), speakerEntityId: id3.nullable(), drawableEntityId: id3.nullable(), stateByEntity: exports_external.record(id3, PresentationStateSchema), entities: exports_external.array(ReaderEntitySchema).max(32) }).strict();
+  PresentationSnapshotSchema = exports_external.object({ at: PresentationAnchorSchema, locationId: id4.nullable(), presentEntityIds: exports_external.array(id4).max(32), speakerEntityId: id4.nullable(), drawableEntityId: id4.nullable(), stateByEntity: exports_external.record(id4, PresentationStateSchema), entities: exports_external.array(ReaderEntitySchema).max(32) }).strict();
   ReaderPresentationV1Schema = exports_external.object({ version: exports_external.literal(1), snapshots: exports_external.array(PresentationSnapshotSchema).max(1e4), documents: exports_external.array(StoryDocumentSchema).max(12).optional() }).strict();
   MAX_PRESENTATION_CHANGES = MAX_PRESENTATION_PARAGRAPHS * 32;
   CompactPresentationChangeSchema = EntityStateDeltaSchema.omit({ at: true }).extend({ paragraphIndex: exports_external.number().int().nonnegative() }).strict();
-  PresentationBeatSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), locationId: id3.nullable(), speakerEntityId: id3.nullable(), drawableEntityId: id3.nullable() }).strict();
+  PresentationBeatSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), locationId: id4.nullable(), speakerEntityId: id4.nullable(), drawableEntityId: id4.nullable() }).strict();
   ReaderPresentationV2Schema = exports_external.object({
     version: exports_external.literal(2),
     key: TurnKeySchema,
     paragraphCount: exports_external.number().int().positive(),
     availableThrough: exports_external.number().int().min(-1).max(MAX_PRESENTATION_PARAGRAPHS - 1),
     entities: exports_external.array(ReaderEntitySchema).max(32),
-    baseline: exports_external.record(id3, PresentationStateSchema),
+    baseline: exports_external.record(id4, PresentationStateSchema),
     changes: exports_external.array(CompactPresentationChangeSchema).max(MAX_PRESENTATION_CHANGES),
     beats: exports_external.array(PresentationBeatSchema).max(MAX_PRESENTATION_PARAGRAPHS),
     documents: exports_external.array(StoryDocumentSchema).max(12).optional(),
@@ -35190,7 +35243,7 @@ function parseReaderPresentation(raw, key, paragraphCount) {
         const ids = new Set(snapshot.entities.map((e) => e.id));
         if (ids.size !== snapshot.entities.length || snapshot.entities.some((e) => e.firstParagraph > index || e.facts.some((f) => f.entityId !== e.id || f.source.chatId !== ownKey.chatId || f.source.messageId !== ownKey.assistantMessageId || f.source.sourceFingerprint !== ownKey.sourceFingerprint || !f.revealedAt || !samePresentationTurn(f.revealedAt.key, ownKey) || f.revealedAt.paragraphIndex > index)))
           return;
-        if (Object.keys(snapshot.stateByEntity).some((id4) => !ids.has(id4)) || snapshot.presentEntityIds.some((id4) => !ids.has(id4)) || [snapshot.speakerEntityId, snapshot.drawableEntityId, snapshot.locationId].some((id4) => id4 !== null && !ids.has(id4)))
+        if (Object.keys(snapshot.stateByEntity).some((id5) => !ids.has(id5)) || snapshot.presentEntityIds.some((id5) => !ids.has(id5)) || [snapshot.speakerEntityId, snapshot.drawableEntityId, snapshot.locationId].some((id5) => id5 !== null && !ids.has(id5)))
           return;
       }
     }
@@ -35207,8 +35260,8 @@ function selectPresentationSnapshot(value, index) {
   if (index > value.availableThrough)
     return;
   const state = Object.create(null);
-  for (const [id4, baseline] of Object.entries(value.baseline))
-    state[id4] = { ...baseline };
+  for (const [id5, baseline] of Object.entries(value.baseline))
+    state[id5] = { ...baseline };
   for (const change of value.changes) {
     if (change.paragraphIndex > index)
       break;
@@ -35310,7 +35363,7 @@ function buildCompactPresentation(input2, documents = [], warnings = []) {
   const through = (index) => {
     const keptEntities = entities.filter((e) => e.firstParagraph <= index).map((e) => ({ ...e, facts: e.facts.filter((f) => f.revealedAt.paragraphIndex <= index) }));
     const known = new Set(keptEntities.map((e) => e.id));
-    return { ...raw, availableThrough: index, entities: keptEntities, baseline: Object.fromEntries(Object.entries(baseline).filter(([id4]) => known.has(id4))), changes: raw.changes.filter((c) => c.paragraphIndex <= index), beats: beats.slice(0, index + 1), ...documents.length ? { documents: documents.filter((d) => d.paragraphIndex <= index).map((d) => ({ ...d, sections: d.sections.filter((s) => s.paragraphIndex <= index) })) } : {}, ...notices.size ? { warnings: [...notices] } : {} };
+    return { ...raw, availableThrough: index, entities: keptEntities, baseline: Object.fromEntries(Object.entries(baseline).filter(([id5]) => known.has(id5))), changes: raw.changes.filter((c) => c.paragraphIndex <= index), beats: beats.slice(0, index + 1), ...documents.length ? { documents: documents.filter((d) => d.paragraphIndex <= index).map((d) => ({ ...d, sections: d.sections.filter((s) => s.paragraphIndex <= index) })) } : {}, ...notices.size ? { warnings: [...notices] } : {} };
   };
   if (presentationSerializedBytes(raw) <= MAX_PRESENTATION_BYTES)
     return ReaderPresentationV2Schema.parse(raw);
@@ -35339,7 +35392,7 @@ function sameLoreSource(left, right) {
 function sourceSwipeTag(source) {
   return swipeTurnTag(source.assistantMessageId, Number(source.swipeId ?? 0) || 0);
 }
-function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
+function filterStoryDnaForActiveBranch(set2, activeTags, reader, clockFingerprints) {
   const branch = [...activeTags];
   const cursorTag = reader ? sourceSwipeTag(reader.key) : undefined;
   if (cursorTag) {
@@ -35356,25 +35409,25 @@ function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
   };
   const locations = Object.create(null);
   const belongsToBranch = (entry) => (!reader || hasBranch || !entry.autoDiscovered || entry.locked) && isStoryEntryActiveOnBranch(entry, activeTags);
-  for (const [id4, loc] of Object.entries(set2.locations)) {
+  for (const [id5, loc] of Object.entries(set2.locations)) {
     if (belongsToBranch(loc))
-      locations[id4] = loc;
+      locations[id5] = loc;
   }
   const documentKinds = new Map(Object.values(set2.documents ?? {}).map((doc2) => [createItemId(doc2.name), doc2.kind]));
   const items = Object.create(null);
-  for (const [id4, item] of Object.entries(set2.items)) {
+  for (const [id5, item] of Object.entries(set2.items)) {
     if (!belongsToBranch(item))
       continue;
-    if (item.autoDiscovered && !item.locked && documentKinds.get(id4) === item.itemType && item.itemType) {
+    if (item.autoDiscovered && !item.locked && documentKinds.get(id5) === item.itemType && item.itemType) {
       const { loreText: _oldTranscript, materials: _oldMaterials, ...prop } = item;
-      items[id4] = { ...prop, description: `${item.itemType}: ${item.name}` };
+      items[id5] = { ...prop, description: `${item.itemType}: ${item.name}` };
     } else
-      items[id4] = item;
+      items[id5] = item;
   }
   let documents;
   if (set2.documents) {
     documents = Object.create(null);
-    for (const [id4, doc2] of Object.entries(set2.documents)) {
+    for (const [id5, doc2] of Object.entries(set2.documents)) {
       if (!belongsToBranch(doc2) && !doc2.customNotes)
         continue;
       const visible = (entry2) => entry2.sourceTurn ? isVisible(entry2.sourceTurn, entry2.paragraphIndex) : !doc2.autoDiscovered;
@@ -35387,7 +35440,7 @@ function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
         continue;
       if (doc2.autoDiscovered && !doc2.appearances?.length && !sections.length && !visibleObservations?.length && !doc2.customNotes && (doc2.sections.some((section) => section.sourceTurn) || observations?.some((observation) => observation.sourceTurn)))
         continue;
-      documents[id4] = {
+      documents[id5] = {
         ...entry,
         ...visibleAppearances ? { appearances: visibleAppearances } : {},
         sections,
@@ -35397,9 +35450,9 @@ function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
     }
   }
   const visibleDocumentItemIds = new Set(Object.values(documents ?? {}).filter((doc2) => !doc2.appearances || doc2.appearances.length > 0).map((doc2) => createItemId(doc2.name)));
-  for (const [id4, prop] of Object.entries(items)) {
-    if (prop.autoDiscovered && !prop.locked && documentKinds.get(id4) === prop.itemType && prop.itemType && !visibleDocumentItemIds.has(id4))
-      delete items[id4];
+  for (const [id5, prop] of Object.entries(items)) {
+    if (prop.autoDiscovered && !prop.locked && documentKinds.get(id5) === prop.itemType && prop.itemType && !visibleDocumentItemIds.has(id5))
+      delete items[id5];
   }
   const thoughtCabinet = (set2.thoughtCabinet ?? []).filter((entry) => (entry.authored || !hidden.has(storyLoreThreadId(entry.title))) && (entry.authored || !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)))).map((entry) => ({ ...entry }));
   const chapterCodex = set2.chapterCodex?.filter((entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)));
@@ -35446,8 +35499,8 @@ function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
       }].slice(-12);
     }
     for (const { title, action, summary } of event.threadUpdates) {
-      const id4 = storyLoreThreadId(title);
-      if (hidden.has(id4))
+      const id5 = storyLoreThreadId(title);
+      if (hidden.has(id5))
         continue;
       const existing = thoughtCabinet.find((entry) => entry.title.toLowerCase() === title.toLowerCase());
       if (existing) {
@@ -35461,7 +35514,7 @@ function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
           existing.description = summary;
       } else if (action !== "resolve") {
         thoughtCabinet.push({
-          id: id4,
+          id: id5,
           title,
           category: "fact",
           description: summary || title,
@@ -35473,6 +35526,15 @@ function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
     }
   }
   const { loreHeads: _loreHeads, hiddenLoreThreads: _hiddenThreads, ...view } = set2;
+  const worldClocks = set2.worldClocks;
+  let clockEvents = [];
+  if (worldClocks && clockFingerprints && reader) {
+    const branchOrder = new Map(branch.map((tag, index) => [tag, index]));
+    clockEvents = worldClocks.events.filter((event) => {
+      const { key, paragraphIndex } = event.position;
+      return key.chatId === reader.key.chatId && clockFingerprints.get(sourceSwipeTag(key)) === event.rawFingerprint && isVisible(key, paragraphIndex);
+    }).sort((left, right) => (branchOrder.get(sourceSwipeTag(left.position.key)) ?? 0) - (branchOrder.get(sourceSwipeTag(right.position.key)) ?? 0) || left.position.paragraphIndex - right.position.paragraphIndex);
+  }
   return {
     ...view,
     locations,
@@ -35481,7 +35543,8 @@ function filterStoryDnaForActiveBranch(set2, activeTags, reader) {
     thoughtCabinet: thoughtCabinet.slice(-40),
     ...chapterCodex !== undefined ? { chapterCodex } : {},
     npcBeliefs,
-    ...set2.loreEvents ? { loreEvents } : {}
+    ...set2.loreEvents ? { loreEvents } : {},
+    ...worldClocks ? { worldClocks: { clocks: worldClocks.clocks, events: clockEvents } } : {}
   };
 }
 var init_story_dna_projection = __esm(() => {
@@ -35506,10 +35569,10 @@ function errorText(error61) {
 function normalizedOptions(connections) {
   const byId = new Map;
   for (const connection of connections) {
-    const id4 = text(connection.id);
-    if (!id4)
+    const id5 = text(connection.id);
+    if (!id5)
       continue;
-    const connName = text(connection.name) || id4;
+    const connName = text(connection.name) || id5;
     const provider = text(connection.provider);
     const model = text(connection.model);
     const isDefault = connection.is_default === true;
@@ -35517,8 +35580,8 @@ function normalizedOptions(connections) {
     const workflows = Array.isArray(metadata?.comfyui_workflows) ? metadata.comfyui_workflows : [];
     if (provider === "comfyui" && workflows.length > 0) {
       const activeId = typeof metadata?.comfyui_active_workflow_id === "string" ? metadata.comfyui_active_workflow_id : null;
-      byId.set(id4, {
-        id: id4,
+      byId.set(id5, {
+        id: id5,
         name: `${connName} (active workflow)`,
         provider,
         model,
@@ -35531,7 +35594,7 @@ function normalizedOptions(connections) {
         const wName = text(wf.name) || wId;
         if (!wId)
           continue;
-        const compoundId = `${id4}::${wId}`;
+        const compoundId = `${id5}::${wId}`;
         byId.set(compoundId, {
           id: compoundId,
           name: `${connName} \u2014 ${wName}`,
@@ -35542,15 +35605,15 @@ function normalizedOptions(connections) {
       }
     } else {
       const option = {
-        id: id4,
+        id: id5,
         name: connName,
         provider,
         model,
         isDefault
       };
-      const existing = byId.get(id4);
+      const existing = byId.get(id5);
       if (!existing || option.isDefault)
-        byId.set(id4, option);
+        byId.set(id5, option);
     }
   }
   return [...byId.values()].sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.name.localeCompare(right.name) || left.provider.localeCompare(right.provider) || left.model.localeCompare(right.model) || left.id.localeCompare(right.id));
@@ -35961,9 +36024,9 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
     let loc = findMatchingLocation(set2.locations, locName);
     const atmosphere = [scene.environment.timeOfDay, scene.environment.weather].filter((x) => Boolean(x && x.trim())).join(", ");
     if (!loc) {
-      const id4 = createLocationId(locName);
+      const id5 = createLocationId(locName);
       loc = {
-        id: id4,
+        id: id5,
         name: locName,
         aliases: deriveShortAliases(locName),
         ...scene.environment.description?.trim() ? { environmentDescription: scene.environment.description.trim().slice(0, 2000) } : {},
@@ -35975,7 +36038,7 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
         seenInSwipes: swipeTag ? [swipeTag] : [],
         lastUpdated: Date.now()
       };
-      set2.locations[id4] = loc;
+      set2.locations[id5] = loc;
       changed = true;
     } else {
       if (recordSwipeTag(loc, swipeTag))
@@ -36074,9 +36137,9 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
       continue;
     let match = findMatchingLocation(set2.locations, placeName);
     if (!match) {
-      const id4 = createLocationId(placeName);
+      const id5 = createLocationId(placeName);
       match = {
-        id: id4,
+        id: id5,
         name: placeName,
         aliases: deriveShortAliases(placeName),
         persistentElements: [],
@@ -36085,7 +36148,7 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
         seenInSwipes: swipeTag ? [swipeTag] : [],
         lastUpdated: Date.now()
       };
-      set2.locations[id4] = match;
+      set2.locations[id5] = match;
       changed = true;
     } else if (recordSwipeTag(match, swipeTag)) {
       changed = true;
@@ -36132,9 +36195,9 @@ ${line2}`;
       return;
     let item = findMatchingItem(set2.items, cleanName);
     if (!item) {
-      const id4 = createItemId(cleanName);
+      const id5 = createItemId(cleanName);
       item = {
-        id: id4,
+        id: id5,
         name: cleanName,
         aliases: deriveShortAliases(cleanName, patch.aliases),
         ...patch.itemType ? { itemType: patch.itemType.slice(0, 100) } : {},
@@ -36148,7 +36211,7 @@ ${line2}`;
         seenInSwipes: swipeTag ? [swipeTag] : [],
         lastUpdated: Date.now()
       };
-      set2.items[id4] = item;
+      set2.items[id5] = item;
       changed = true;
       return;
     }
@@ -37011,9 +37074,9 @@ function projectTurnPresentation(plan, options) {
         nextCast.add(person.id);
         change(person, at, { presence: "present", location: locationId });
       }
-      for (const id4 of cast)
-        if (!nextCast.has(id4)) {
-          const prior = entities.find((e) => e.id === id4);
+      for (const id5 of cast)
+        if (!nextCast.has(id5)) {
+          const prior = entities.find((e) => e.id === id5);
           if (prior)
             change(prior, at, { presence: "absent", location: null });
         }
@@ -37196,19 +37259,19 @@ var init_entity_projection = __esm(() => {
 });
 
 // src/shared/image-library.ts
-var id4, SavedLibraryImageSchema, ImageLibraryArchiveSchema, ImageLibraryRequestSchema, url2, LibraryImageViewSchema, LibraryReplySchema, ImageLibraryPageSchema;
+var id5, SavedLibraryImageSchema, ImageLibraryArchiveSchema, ImageLibraryRequestSchema, url2, LibraryImageViewSchema, LibraryReplySchema, ImageLibraryPageSchema;
 var init_image_library = __esm(() => {
   init_zod();
   init_contracts();
-  id4 = exports_external.string().min(1).max(256);
+  id5 = exports_external.string().min(1).max(256);
   SavedLibraryImageSchema = exports_external.object({
     key: TurnKeySchema,
-    imageId: id4,
-    jobId: id4,
+    imageId: id5,
+    jobId: id5,
     paragraphIndex: exports_external.number().int().nonnegative(),
     createdAt: exports_external.string().max(64),
     excerpt: exports_external.string().max(600),
-    rawFingerprint: id4.optional(),
+    rawFingerprint: id5.optional(),
     template: exports_external.string().max(256).optional(),
     role: exports_external.enum(["scene", "background", "portrait"]).default("scene"),
     characters: exports_external.array(exports_external.string().max(160)).max(24).optional(),
@@ -37222,9 +37285,9 @@ var init_image_library = __esm(() => {
   ImageLibraryArchiveSchema = exports_external.object({ version: exports_external.literal(1), entries: exports_external.array(SavedLibraryImageSchema).max(128), full: exports_external.boolean().default(false), incomplete: exports_external.boolean().optional() }).strict();
   ImageLibraryRequestSchema = exports_external.object({
     type: exports_external.literal("vn_image_library"),
-    chatId: id4,
-    requestId: id4,
-    anchor: exports_external.object({ messageId: id4, swipeId: exports_external.number().int().nonnegative(), sourceFingerprint: id4, paragraphIndex: exports_external.number().int().nonnegative() }).strict(),
+    chatId: id5,
+    requestId: id5,
+    anchor: exports_external.object({ messageId: id5, swipeId: exports_external.number().int().nonnegative(), sourceFingerprint: id5, paragraphIndex: exports_external.number().int().nonnegative() }).strict(),
     mode: exports_external.enum(["story", "images"]).default("images"),
     range: exports_external.enum(["read", "all"]),
     versions: exports_external.enum(["active", "all"]),
@@ -38002,9 +38065,9 @@ function parseRecord(raw) {
     return null;
   const previousImages = {};
   if (r.previousImages && typeof r.previousImages === "object") {
-    for (const [id5, value] of Object.entries(r.previousImages))
+    for (const [id6, value] of Object.entries(r.previousImages))
       if (value && typeof value.imageId === "string" && value.imageId.length <= 256)
-        previousImages[id5] = { imageId: value.imageId, imageUrl: "" };
+        previousImages[id6] = { imageId: value.imageId, imageUrl: "" };
   }
   const source = r.source?.version === 2 && typeof r.source.rawFingerprint === "string" ? r.source : undefined;
   const result = { ...r, speaker: typeof r.speaker === "string" ? r.speaker : "", previousImages, updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : plan.data.createdAt, plan: plan.data, jobs: r.jobs.flatMap((j) => {
@@ -38303,7 +38366,7 @@ function setupAppearance(setup) {
     parts.push(outfit);
   return parts.filter(Boolean).join(", ");
 }
-var id5, AppearanceOriginSchema, outfitShape, setupShape, validateSetup = (value, ctx) => {
+var id6, AppearanceOriginSchema, outfitShape, setupShape, validateSetup = (value, ctx) => {
   if (new Set(value.outfits.map((o) => o.id)).size !== value.outfits.length)
     ctx.addIssue({ code: "custom", path: ["outfits"], message: "Outfit IDs must be distinct." });
   if (value.defaultOutfitId && !value.outfits.some((o) => o.id === value.defaultOutfitId))
@@ -38311,30 +38374,30 @@ var id5, AppearanceOriginSchema, outfitShape, setupShape, validateSetup = (value
 }, CastSetupInputSchema, CastSetupSchema, CastArtVariantSchema, CastArtRecordSchema, CastArtLibrarySchema, CastArtRequestSchema, CastGalleryRequestSchema, CastGallerySchema, CastSetupDraftSchema, CastContextScanSchema;
 var init_cast_art = __esm(() => {
   init_zod();
-  id5 = exports_external.string().trim().min(1).max(256);
+  id6 = exports_external.string().trim().min(1).max(256);
   AppearanceOriginSchema = exports_external.object({ source: exports_external.string().trim().min(1).max(256), appearance: exports_external.string().min(1).max(2000) }).strict();
-  outfitShape = { id: id5, name: exports_external.string().trim().min(1).max(100), description: exports_external.string().trim().min(1).max(1000) };
-  setupShape = { appearance: exports_external.string().trim().min(1).max(2000), aliases: exports_external.array(exports_external.string().trim().min(1).max(160)).max(16).default([]), defaultOutfitId: id5.nullable().default(null), appearanceOrigin: AppearanceOriginSchema.optional(), anchors: exports_external.array(exports_external.string().trim().min(1).max(100)).max(12).default([]) };
+  outfitShape = { id: id6, name: exports_external.string().trim().min(1).max(100), description: exports_external.string().trim().min(1).max(1000) };
+  setupShape = { appearance: exports_external.string().trim().min(1).max(2000), aliases: exports_external.array(exports_external.string().trim().min(1).max(160)).max(16).default([]), defaultOutfitId: id6.nullable().default(null), appearanceOrigin: AppearanceOriginSchema.optional(), anchors: exports_external.array(exports_external.string().trim().min(1).max(100)).max(12).default([]) };
   CastSetupInputSchema = exports_external.object({ ...setupShape, outfits: exports_external.array(exports_external.object(outfitShape).strict()).max(7).default([]) }).strict().superRefine(validateSetup);
-  CastSetupSchema = exports_external.object({ ...setupShape, outfits: exports_external.array(exports_external.object({ ...outfitShape, imageId: id5.optional(), imageAppearance: exports_external.string().max(2000).optional(), imageAttire: exports_external.string().max(1000).optional() }).strict()).max(7).default([]), imageId: id5.optional(), imageAppearance: exports_external.string().max(2000).optional() }).strict().superRefine(validateSetup);
+  CastSetupSchema = exports_external.object({ ...setupShape, outfits: exports_external.array(exports_external.object({ ...outfitShape, imageId: id6.optional(), imageAppearance: exports_external.string().max(2000).optional(), imageAttire: exports_external.string().max(1000).optional() }).strict()).max(7).default([]), imageId: id6.optional(), imageAppearance: exports_external.string().max(2000).optional() }).strict().superRefine(validateSetup);
   CastArtVariantSchema = exports_external.object({
-    id: id5,
-    imageId: id5,
-    requestFingerprint: id5,
-    appearanceFingerprint: id5,
+    id: id6,
+    imageId: id6,
+    requestFingerprint: id6,
+    appearanceFingerprint: id6,
     description: exports_external.string().max(4000),
-    displayImageId: id5.optional(),
+    displayImageId: id6.optional(),
     approved: exports_external.literal(true),
     createdAt: exports_external.string().max(64),
     lastUsedAt: exports_external.number().nonnegative().optional(),
     pinned: exports_external.boolean().optional()
   }).strict();
   CastArtRecordSchema = exports_external.object({
-    entityId: id5,
-    name: id5,
+    entityId: id6,
+    name: id6,
     artRevision: exports_external.number().int().nonnegative(),
     description: exports_external.string().max(4000),
-    preferredVariantId: id5.nullable().default(null),
+    preferredVariantId: id6.nullable().default(null),
     variants: exports_external.array(CastArtVariantSchema).max(8),
     setup: CastSetupSchema.optional()
   }).strict();
@@ -38342,13 +38405,13 @@ var init_cast_art = __esm(() => {
   CastArtRequestSchema = exports_external.object({
     type: exports_external.literal("vn_cast_art"),
     version: exports_external.literal(1),
-    chatId: id5,
-    requestId: id5,
+    chatId: id6,
+    requestId: id6,
     action: exports_external.enum(["list", "scan", "select", "forget", "reset", "supply", "restore", "setup", "clear_setup", "setup_supply", "setup_restore"]),
-    characterId: id5.optional(),
-    variantId: id5.optional(),
-    imageId: id5.optional(),
-    outfitId: id5.optional(),
+    characterId: id6.optional(),
+    variantId: id6.optional(),
+    imageId: id6.optional(),
+    outfitId: id6.optional(),
     name: exports_external.string().trim().min(1).max(160).optional(),
     setup: CastSetupInputSchema.optional()
   }).strict().superRefine((value, ctx) => {
@@ -38365,8 +38428,8 @@ var init_cast_art = __esm(() => {
     if (value.action === "setup_supply" && !value.imageId)
       ctx.addIssue({ code: "custom", path: ["imageId"], message: "Choose artwork." });
   });
-  CastGalleryRequestSchema = exports_external.object({ type: exports_external.literal("vn_cast_gallery"), chatId: id5, requestId: id5, offset: exports_external.number().int().min(0).max(1e4) }).strict();
-  CastGallerySchema = exports_external.object({ offset: exports_external.number().int().nonnegative(), total: exports_external.number().int().nonnegative(), images: exports_external.array(exports_external.object({ id: id5, name: exports_external.string().max(256), url: exports_external.string().max(1024).refine((v) => v.startsWith("/") && !v.startsWith("//") && !v.includes("\\")) }).strict()).max(12) }).strict();
+  CastGalleryRequestSchema = exports_external.object({ type: exports_external.literal("vn_cast_gallery"), chatId: id6, requestId: id6, offset: exports_external.number().int().min(0).max(1e4) }).strict();
+  CastGallerySchema = exports_external.object({ offset: exports_external.number().int().nonnegative(), total: exports_external.number().int().nonnegative(), images: exports_external.array(exports_external.object({ id: id6, name: exports_external.string().max(256), url: exports_external.string().max(1024).refine((v) => v.startsWith("/") && !v.startsWith("//") && !v.includes("\\")) }).strict()).max(12) }).strict();
   CastSetupDraftSchema = exports_external.object({ ...setupShape, appearance: exports_external.string().trim().max(2000), outfits: exports_external.array(exports_external.object(outfitShape).strict()).max(7).default([]) }).strict().superRefine(validateSetup);
   CastContextScanSchema = exports_external.object({ candidates: exports_external.array(exports_external.object({ name: exports_external.string().min(1).max(160), source: exports_external.string().max(256), setup: CastSetupDraftSchema }).strict()).max(32), notice: exports_external.string().max(1000) }).strict();
 });
@@ -39113,6 +39176,52 @@ var init_cast_art2 = __esm(() => {
   runtimes = new WeakMap;
 });
 
+// src/shared/branch-chronicle.ts
+var id7, ChronicleBookmarkSchema, ChronicleDocumentSchema, scope2, BranchChronicleRequestSchema, ChronicleSideSchema, BranchChronicleResultSchema;
+var init_branch_chronicle = __esm(() => {
+  init_zod();
+  init_reading_position();
+  id7 = exports_external.string().min(1).max(256);
+  ChronicleBookmarkSchema = exports_external.object({
+    id: id7,
+    position: ReadingPositionSchema,
+    replyNumber: exports_external.number().int().positive(),
+    swipeTimestamp: exports_external.number().int().nonnegative().optional()
+  }).strict();
+  ChronicleDocumentSchema = exports_external.object({
+    version: exports_external.literal(1),
+    bookmarks: exports_external.array(ChronicleBookmarkSchema).max(100)
+  }).strict();
+  scope2 = { type: exports_external.literal("vn_branch_chronicle"), chatId: id7, requestId: id7 };
+  BranchChronicleRequestSchema = exports_external.discriminatedUnion("action", [
+    exports_external.object({ ...scope2, action: exports_external.literal("list") }).strict(),
+    exports_external.object({ ...scope2, action: exports_external.literal("bookmark"), position: ReadingPositionSchema }).strict(),
+    exports_external.object({ ...scope2, action: exports_external.literal("remove"), bookmarkId: id7 }).strict(),
+    exports_external.object({ ...scope2, action: exports_external.literal("compare"), firstId: id7, secondId: id7 }).strict()
+  ]);
+  ChronicleSideSchema = exports_external.discriminatedUnion("status", [
+    exports_external.object({ status: exports_external.literal("missing") }).strict(),
+    exports_external.object({ status: exports_external.literal("changed") }).strict(),
+    exports_external.object({
+      status: exports_external.literal("ready"),
+      passage: exports_external.string().max(4000),
+      facts: exports_external.array(exports_external.string().max(1000)).max(256),
+      completeFacts: exports_external.boolean(),
+      choices: exports_external.array(exports_external.object({ label: exports_external.string().max(512), locked: exports_external.boolean() }).strict()).max(32),
+      pictures: exports_external.array(exports_external.object({
+        passage: exports_external.number().int().positive(),
+        provider: exports_external.string().max(256),
+        imageId: id7
+      }).strict()).max(128),
+      morePictures: exports_external.boolean()
+    }).strict()
+  ]);
+  BranchChronicleResultSchema = exports_external.object({
+    bookmarks: ChronicleDocumentSchema.shape.bookmarks,
+    comparison: exports_external.tuple([ChronicleSideSchema, ChronicleSideSchema]).optional()
+  }).strict();
+});
+
 // src/shared/sidecar-collection.ts
 function normalizeSidecarCollection(value) {
   const raw = value && typeof value === "object" ? value : {};
@@ -39195,17 +39304,17 @@ function normalizeTooltipPreferences(value) {
   }) : [];
   return { enabled: input2.enabled === true, rememberReferences: input2.rememberReferences !== false, actionsEnabled: input2.actionsEnabled === true, categories: { npcs: categories.npcs !== false, locations: categories.locations !== false, objects: categories.objects !== false }, fieldGroups, detail: input2.detail === "expanded" || input2.detail === "standard" ? input2.detail : "brief", linking: input2.linking === "menu-only" ? "menu-only" : input2.linking === "all-known" ? "all-known" : "important", maxLinksPerParagraph: typeof input2.maxLinksPerParagraph === "number" && Number.isFinite(input2.maxLinksPerParagraph) ? Math.max(1, Math.min(6, Math.round(input2.maxLinksPerParagraph))) : 3, maxFactsPerEntity: typeof input2.maxFactsPerEntity === "number" && Number.isFinite(input2.maxFactsPerEntity) ? Math.max(1, Math.min(32, Math.round(input2.maxFactsPerEntity))) : 8, maxFactChars: typeof input2.maxFactChars === "number" && Number.isFinite(input2.maxFactChars) ? Math.max(80, Math.min(1200, Math.round(input2.maxFactChars))) : 320, overrides };
 }
-function selectReaderDossier(id6, snapshot, detail, fieldGroups = {}, maxFacts) {
-  const entity = snapshot.entities.find((e) => e.id === id6 && e.firstParagraph <= snapshot.at.paragraphIndex);
+function selectReaderDossier(id8, snapshot, detail, fieldGroups = {}, maxFacts) {
+  const entity = snapshot.entities.find((e) => e.id === id8 && e.firstParagraph <= snapshot.at.paragraphIndex);
   if (!entity)
     return null;
-  const facts = entity.facts.filter((f) => f.entityId === id6 && f.visibility === "observed" && f.source.chatId === snapshot.at.key.chatId && f.source.messageId === snapshot.at.key.assistantMessageId && f.source.sourceFingerprint === snapshot.at.key.sourceFingerprint && f.revealedAt && samePresentationTurn(f.revealedAt.key, snapshot.at.key) && f.revealedAt.paragraphIndex <= snapshot.at.paragraphIndex);
+  const facts = entity.facts.filter((f) => f.entityId === id8 && f.visibility === "observed" && f.source.chatId === snapshot.at.key.chatId && f.source.messageId === snapshot.at.key.assistantMessageId && f.source.sourceFingerprint === snapshot.at.key.sourceFingerprint && f.revealedAt && samePresentationTurn(f.revealedAt.key, snapshot.at.key) && f.revealedAt.paragraphIndex <= snapshot.at.paragraphIndex);
   const latest = new Map;
   for (const f of facts)
     latest.set(f.field, f);
   const limit = detail === "brief" ? 1 : detail === "standard" ? Math.max(1, Math.min(32, maxFacts ?? 4)) : 32;
   const visible = [...latest.values()].filter((fact) => fieldGroups[referenceFieldInfo(fact.field).section] !== false).slice(0, limit);
-  const state = Object.fromEntries(Object.entries(snapshot.stateByEntity[id6] ?? {}).filter((entry) => typeof entry[1] === "string"));
+  const state = Object.fromEntries(Object.entries(snapshot.stateByEntity[id8] ?? {}).filter((entry) => typeof entry[1] === "string"));
   if (state.location)
     state.location = snapshot.entities.find((e) => e.id === state.location)?.name ?? state.location;
   const visibleState = Object.fromEntries(Object.entries(state).filter(([field]) => fieldGroups.state !== false && fieldGroups[referenceFieldInfo(field).section] !== false));
@@ -39337,9 +39446,37 @@ var init_speech_config = __esm(() => {
   };
 });
 
+// src/shared/rehearsal-presets.ts
+var name, RehearsalLookSchema, RehearsalPresetSchema, REHEARSAL_PRESET_LIMIT = 12, RehearsalCommandSchema, RehearsalRequestSchema;
+var init_rehearsal_presets = __esm(() => {
+  init_zod();
+  name = exports_external.string().trim().min(1).max(48);
+  RehearsalLookSchema = exports_external.object({
+    camera: exports_external.enum(["off", "gentle", "full"]),
+    lighting: exports_external.boolean(),
+    captionOpacity: exports_external.number().min(0).max(1)
+  }).strict();
+  RehearsalPresetSchema = RehearsalLookSchema.extend({ name }).strict();
+  RehearsalCommandSchema = exports_external.discriminatedUnion("action", [
+    exports_external.object({ action: exports_external.literal("save"), preset: RehearsalPresetSchema }).strict(),
+    exports_external.object({ action: exports_external.literal("apply"), name }).strict(),
+    exports_external.object({ action: exports_external.literal("remove"), name }).strict()
+  ]);
+  RehearsalRequestSchema = exports_external.object({
+    type: exports_external.literal("vn_rehearsal_preset"),
+    chatId: exports_external.string().min(1).max(256),
+    requestId: exports_external.string().min(1).max(160),
+    command: RehearsalCommandSchema
+  }).strict();
+});
+
 // src/shared/reader-preferences.ts
 function normalizeReaderPreferences(value) {
   const input2 = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const savedLooks = Array.isArray(input2.rehearsalPresets) ? input2.rehearsalPresets.slice(0, REHEARSAL_PRESET_LIMIT).flatMap((value2) => {
+    const parsed = RehearsalPresetSchema.safeParse(value2);
+    return parsed.success ? [parsed.data] : [];
+  }) : [];
   return {
     adjustableSheetEnabled: input2.adjustableSheetEnabled === true,
     layout: input2.layout === "image-first" ? "image-first" : "overlay",
@@ -39363,11 +39500,37 @@ function normalizeReaderPreferences(value) {
     ...input2.cameraMotionIntensity === "gentle" || input2.cameraMotionIntensity === "full" ? { cameraMotionIntensity: input2.cameraMotionIntensity } : {},
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
     confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true,
-    adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true
+    adaptiveTint: input2.adaptiveTint !== undefined ? input2.adaptiveTint === true : DEFAULT_READER_PREFERENCES.adaptiveTint ?? true,
+    ...savedLooks.length ? { rehearsalPresets: savedLooks } : {}
   };
+}
+function changeRehearsalPreset(preferences, command) {
+  const presets = preferences.rehearsalPresets ?? [];
+  const name2 = (command.action === "save" ? command.preset.name : command.name).toLowerCase();
+  const saved = presets.find((preset) => preset.name.toLowerCase() === name2);
+  const other = presets.filter((preset) => preset.name.toLowerCase() !== name2);
+  switch (command.action) {
+    case "save":
+      if (other.length >= REHEARSAL_PRESET_LIMIT)
+        throw new Error("Remove a saved preset to make room for a new one.");
+      return { ...preferences, rehearsalPresets: [command.preset, ...other] };
+    case "remove":
+      return { ...preferences, rehearsalPresets: other };
+    case "apply":
+      if (!saved)
+        throw new Error("That presentation preset is unavailable.");
+      return {
+        ...preferences,
+        virtualCameraEnabled: saved.camera !== "off",
+        ...saved.camera !== "off" ? { cameraMotionIntensity: saved.camera } : {},
+        atmosphericLighting: saved.lighting,
+        backgroundOpacity: saved.captionOpacity
+      };
+  }
 }
 var READER_DIALOGUE_STYLES, DEFAULT_READER_PREFERENCES;
 var init_reader_preferences = __esm(() => {
+  init_rehearsal_presets();
   READER_DIALOGUE_STYLES = [
     "preset",
     "glass-card",
@@ -39424,14 +39587,14 @@ function promptPresetList(value) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw))
       continue;
     const record3 = raw;
-    const id6 = typeof record3.id === "string" ? record3.id.trim() : "";
-    const name = typeof record3.name === "string" ? record3.name.trim() : "";
-    if (!id6 || !name || seen.has(id6))
+    const id8 = typeof record3.id === "string" ? record3.id.trim() : "";
+    const name2 = typeof record3.name === "string" ? record3.name.trim() : "";
+    if (!id8 || !name2 || seen.has(id8))
       continue;
-    seen.add(id6);
+    seen.add(id8);
     presets.push({
-      id: id6,
-      name,
+      id: id8,
+      name: name2,
       positive: typeof record3.positive === "string" ? record3.positive : "",
       ...typeof record3.suffix === "string" ? { suffix: record3.suffix } : {},
       negative: typeof record3.negative === "string" ? record3.negative : ""
@@ -39764,11 +39927,11 @@ function selectPoseExpression(catalogue, paragraphIndex, text2, preferredExpress
   }
   if (text2 && text2.trim()) {
     let earliestMatch = null;
-    for (const [regex, id6] of KEYWORD_PATTERNS) {
+    for (const [regex, id8] of KEYWORD_PATTERNS) {
       const m = regex.exec(text2);
       if (m && !isNegatedInClause(text2, m.index)) {
         if (!earliestMatch || m.index < earliestMatch.index) {
-          earliestMatch = { index: m.index, id: id6 };
+          earliestMatch = { index: m.index, id: id8 };
         }
       }
     }
@@ -39784,14 +39947,14 @@ function selectPoseExpression(catalogue, paragraphIndex, text2, preferredExpress
     return FALLBACK_POSE;
   return catalogue[paragraphIndex % catalogue.length] ?? firstEntry(catalogue);
 }
-function poseById(catalogue, id6) {
-  if (!id6)
+function poseById(catalogue, id8) {
+  if (!id8)
     return firstEntry(catalogue);
-  const norm = id6.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  const found = catalogue.find((entry) => entry.id === norm || entry.id === id6.trim().toLowerCase());
+  const norm = id8.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const found = catalogue.find((entry) => entry.id === norm || entry.id === id8.trim().toLowerCase());
   if (found)
     return found;
-  const aliasTarget = EXPRESSION_ALIASES[norm] || EXPRESSION_ALIASES[id6.trim().toLowerCase()];
+  const aliasTarget = EXPRESSION_ALIASES[norm] || EXPRESSION_ALIASES[id8.trim().toLowerCase()];
   if (aliasTarget) {
     const aliased = catalogue.find((entry) => entry.id === aliasTarget);
     if (aliased)
@@ -40321,8 +40484,8 @@ function emptySingleCharacter(environment = DEFAULT_ENVIRONMENT_DESCRIPTOR) {
 function singleCharacterTagBlock(state) {
   return tagBlockFor(state.protagonist);
 }
-function profileFor(existing, name) {
-  return existing[name.trim().toLowerCase()];
+function profileFor(existing, name2) {
+  return existing[name2.trim().toLowerCase()];
 }
 function parseProfiles(value) {
   if (!value || typeof value !== "object")
@@ -40332,11 +40495,11 @@ function parseProfiles(value) {
     if (!entry || typeof entry !== "object")
       continue;
     const record3 = entry;
-    const name = typeof record3.name === "string" ? record3.name.trim() : "";
+    const name2 = typeof record3.name === "string" ? record3.name.trim() : "";
     const description = typeof record3.description === "string" ? record3.description.trim() : "";
-    if (!name || !description)
+    if (!name2 || !description)
       continue;
-    next[name.toLowerCase()] = { name, description };
+    next[name2.toLowerCase()] = { name: name2, description };
   }
   return next;
 }
@@ -40364,11 +40527,11 @@ function normalizeSingleCharacter(value, preferredName) {
     return emptySingleCharacter();
   if (value.protagonist && isRecord(value.protagonist)) {
     const p = value.protagonist;
-    const name = typeof p.name === "string" ? p.name.trim() : "";
+    const name2 = typeof p.name === "string" ? p.name.trim() : "";
     const tags = normalizeTagsFromArray(p.tags);
     return {
       schemaVersion: SINGLE_CHARACTER_SCHEMA_VERSION,
-      protagonist: { name, tags },
+      protagonist: { name: name2, tags },
       environment: environmentString(value.environment),
       updatedAt: updatedAtString(value.updatedAt)
     };
@@ -40417,15 +40580,15 @@ async function serializedWrite(taskKey, writer) {
 function userOptions(userId) {
   return userId ? { userId } : undefined;
 }
-function presentationRulePath(scope2, chatId) {
-  if (scope2 === "chat" && !chatId)
+function presentationRulePath(scope3, chatId) {
+  if (scope3 === "chat" && !chatId)
     throw new Error("Open a chat to manage chat preferences.");
-  return scope2 === "user" ? "presentation-rules.json" : `chats/${safeSegment(chatId)}/presentation-rules.json`;
+  return scope3 === "user" ? "presentation-rules.json" : `chats/${safeSegment(chatId)}/presentation-rules.json`;
 }
-async function loadPresentationRuleDocument(spindle2, scope2, chatId, userId) {
-  const path2 = presentationRulePath(scope2, chatId);
+async function loadPresentationRuleDocument(spindle2, scope3, chatId, userId) {
+  const path2 = presentationRulePath(scope3, chatId);
   let raw = await spindle2.userStorage.getJson(path2, { fallback: null, userId });
-  if (!raw && scope2 === "chat" && chatId) {
+  if (!raw && scope3 === "chat" && chatId) {
     const legacyPath = `chats/${safeSegment(chatId)}/presentation-entities.json`;
     raw = await spindle2.userStorage.getJson(legacyPath, { fallback: null, userId });
   }
@@ -40433,15 +40596,15 @@ async function loadPresentationRuleDocument(spindle2, scope2, chatId, userId) {
     raw = { version: 1, revision: 0, rules: [] };
   }
   const value = PresentationRuleDocumentSchema.safeParse(raw);
-  if (!value.success || value.data.rules.some((rule) => rule.scope !== scope2))
-    throw new Error(`${scope2 === "chat" ? "Chat" : "Account"} presentation preferences are unavailable or use an unsupported format. Stored data was preserved.`);
+  if (!value.success || value.data.rules.some((rule) => rule.scope !== scope3))
+    throw new Error(`${scope3 === "chat" ? "Chat" : "Account"} presentation preferences are unavailable or use an unsupported format. Stored data was preserved.`);
   return value.data;
 }
-async function updatePresentationRuleDocument(spindle2, scope2, chatId, userId, expectedRevision, change) {
-  const path2 = presentationRulePath(scope2, chatId);
+async function updatePresentationRuleDocument(spindle2, scope3, chatId, userId, expectedRevision, change) {
+  const path2 = presentationRulePath(scope3, chatId);
   let saved;
   await serializedWrite(scopedKey(userId, path2), async () => {
-    const current = await loadPresentationRuleDocument(spindle2, scope2, chatId, userId);
+    const current = await loadPresentationRuleDocument(spindle2, scope3, chatId, userId);
     if (current.revision !== expectedRevision)
       throw new Error("Presentation preferences changed in another editor. Refresh, review your draft, and save again.");
     saved = PresentationRuleDocumentSchema.parse(change(current));
@@ -40464,6 +40627,34 @@ async function saveReadingPosition(spindle2, position, userId) {
   const parsed = ReadingPositionSchema.parse(position);
   const path2 = `chats/${safeSegment(parsed.key.chatId)}/reading-position.json`;
   await serializedWrite(scopedKey(userId, path2), () => spindle2.userStorage.setJson(path2, parsed, userOptions(userId)));
+}
+function chroniclePath(chatId) {
+  return `chronicle/${encodeURIComponent(chatId)}.json`;
+}
+async function loadChronicle(spindle2, chatId, userId) {
+  const raw = await spindle2.userStorage.getJson(chroniclePath(chatId), { fallback: null, userId });
+  if (raw === null)
+    return { version: 1, bookmarks: [] };
+  const parsed = ChronicleDocumentSchema.safeParse(raw);
+  if (!parsed.success || parsed.data.bookmarks.some((bookmark) => bookmark.position.key.chatId !== chatId)) {
+    throw new Error("Branch Chronicle data could not be read. The saved data was preserved.");
+  }
+  return parsed.data;
+}
+async function updateChronicle(spindle2, chatId, userId, update) {
+  const path2 = chroniclePath(chatId);
+  let result;
+  await serializedWrite(scopedKey(userId, path2), async () => {
+    const current = await loadChronicle(spindle2, chatId, userId);
+    const next = update(current);
+    if (next === current) {
+      result = current;
+      return;
+    }
+    result = ChronicleDocumentSchema.parse(next);
+    await spindle2.userStorage.setJson(path2, result, { userId });
+  });
+  return result;
 }
 function singleCharacterStatePath(chatId) {
   return `chats/${safeSegment(chatId)}/visual-state.json`;
@@ -40509,8 +40700,8 @@ async function saveSingleCharacterState(spindle2, chatId, state, userId, isCurre
     } else if (existingUsable) {
       protagonist = { name: existing.protagonist.name, tags: toUsableTags(existing.protagonist.name, existing.protagonist.tags) };
     } else {
-      const name = incomingName || existingName;
-      protagonist = { name, tags: [] };
+      const name2 = incomingName || existingName;
+      protagonist = { name: name2, tags: [] };
     }
     if (!isCurrent())
       return;
@@ -40535,14 +40726,14 @@ function normalizeAppearanceMap(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw))
     return {};
   const map2 = {};
-  for (const [name, rawTags] of Object.entries(raw)) {
-    const cleanName = normalizeCharacterName(name);
+  for (const [name2, rawTags] of Object.entries(raw)) {
+    const cleanName = normalizeCharacterName(name2);
     if (typeof rawTags !== "string" || hasIdentityDocumentNoise(rawTags))
       continue;
     const tags = splitTags(rawTags);
     if (!cleanName || !isUsableIdentity(cleanName, tags))
       continue;
-    map2[name] = toUsableTags(cleanName, tags).join(", ");
+    map2[name2] = toUsableTags(cleanName, tags).join(", ");
   }
   return map2;
 }
@@ -40569,11 +40760,11 @@ async function loadCharacterAppearance(spindle2, userId, chatId) {
       const appearance = formatCharacterDNAToPromptClause(dna);
       if (!appearance)
         continue;
-      for (const name of [dna.name, ...dna.aliases]) {
-        const key = appearanceMapKeyFor(map2, name);
+      for (const name2 of [dna.name, ...dna.aliases]) {
+        const key = appearanceMapKeyFor(map2, name2);
         if (key)
           delete map2[key];
-        map2[name] = appearance;
+        map2[name2] = appearance;
       }
     }
     for (const record3 of await manualCastRecords(spindle2, chatId, userId)) {
@@ -40586,11 +40777,11 @@ async function loadCharacterAppearance(spindle2, userId, chatId) {
       const appearance = formatCharacterDNAToPromptClause(dna);
       if (!appearance)
         continue;
-      for (const name of [dna.name, ...dna.aliases]) {
-        const key = appearanceMapKeyFor(map2, name);
+      for (const name2 of [dna.name, ...dna.aliases]) {
+        const key = appearanceMapKeyFor(map2, name2);
         if (key)
           delete map2[key];
-        map2[name] = appearance;
+        map2[name2] = appearance;
       }
     }
     return map2;
@@ -40611,11 +40802,11 @@ async function saveCharacterAppearance(spindle2, map2, userId) {
   }));
 }
 async function mergeCharacterAppearanceFromState(spindle2, state, userId, chatId, isCurrent = () => true) {
-  const name = normalizeCharacterName(state.protagonist.name);
-  if (chatId && manualOwnsName(await manualCastRecords(spindle2, chatId, userId), name))
+  const name2 = normalizeCharacterName(state.protagonist.name);
+  if (chatId && manualOwnsName(await manualCastRecords(spindle2, chatId, userId), name2))
     return;
-  const tags = toUsableTags(name, state.protagonist.tags);
-  if (!name || tags.length === 0)
+  const tags = toUsableTags(name2, state.protagonist.tags);
+  if (!name2 || tags.length === 0)
     return;
   const path2 = chatId ? `chats/${safeSegment(chatId)}/characters.json` : characterAppearancePath();
   await serializedWrite(scopedKey(userId, path2), async () => {
@@ -40624,12 +40815,12 @@ async function mergeCharacterAppearanceFromState(spindle2, state, userId, chatId
       ...userOptions(userId) ?? {}
     });
     const existing = normalizeAppearanceMap(existingRaw);
-    const existingKey = appearanceMapKeyFor(existing, name);
-    if (existingKey && isUsableIdentity(name, splitTags(existing[existingKey] ?? "")))
+    const existingKey = appearanceMapKeyFor(existing, name2);
+    if (existingKey && isUsableIdentity(name2, splitTags(existing[existingKey] ?? "")))
       return;
     if (existingKey)
       delete existing[existingKey];
-    existing[name] = tags.join(", ");
+    existing[name2] = tags.join(", ");
     if (!isCurrent())
       return;
     await spindle2.userStorage.setJson(path2, existing, {
@@ -40651,20 +40842,20 @@ async function mergePlannerCharacters(spindle2, characters, userId, chatId, isCu
     const existing = normalizeAppearanceMap(existingRaw);
     let changed = false;
     for (const char of characters) {
-      const name = normalizeCharacterName(char.name);
-      if (!name || manualOwnsName(manual, name))
+      const name2 = normalizeCharacterName(char.name);
+      if (!name2 || manualOwnsName(manual, name2))
         continue;
-      const key = characterAppearanceKey(name);
+      const key = characterAppearanceKey(name2);
       if (!key)
         continue;
       const tags = distillVisualTags(char.description);
       if (tags.length === 0)
         continue;
-      const existingKey = appearanceMapKeyFor(existing, name);
-      if (!existingKey || !isUsableIdentity(name, splitTags(existing[existingKey] ?? ""))) {
+      const existingKey = appearanceMapKeyFor(existing, name2);
+      if (!existingKey || !isUsableIdentity(name2, splitTags(existing[existingKey] ?? ""))) {
         if (existingKey)
           delete existing[existingKey];
-        existing[name] = tags.join(", ");
+        existing[name2] = tags.join(", ");
         changed = true;
       }
     }
@@ -40701,8 +40892,8 @@ async function loadLearnedCharacterRegistry(spindle2, chatId, userId) {
   const stored = normalizeCharacterRegistry(raw);
   const declarations = [];
   const rosterRaw = await spindle2.userStorage.getJson(chatRosterPath(chatId), { fallback: {}, ...userOptions(userId) ?? {} });
-  for (const [name, tags] of Object.entries(normalizeAppearanceMap(rosterRaw)))
-    declarations.push({ name, tags });
+  for (const [name2, tags] of Object.entries(normalizeAppearanceMap(rosterRaw)))
+    declarations.push({ name: name2, tags });
   const visualRaw = await spindle2.userStorage.getJson(singleCharacterStatePath(chatId), options2);
   const visual = migrateVisualProfilesToSingleCharacter(visualRaw);
   if (normalizeCharacterName(visual.protagonist.name))
@@ -40723,8 +40914,8 @@ async function loadCharacterRegistry(spindle2, chatId, userId) {
   }
   return registry2;
 }
-function manualOwnsName(records, name) {
-  const key = characterAppearanceKey(name);
+function manualOwnsName(records, name2) {
+  const key = characterAppearanceKey(name2);
   return records.some((record3) => [record3.name, ...record3.setup.aliases].some((value) => characterAppearanceKey(value) === key));
 }
 async function manualCastRecords(spindle2, chatId, userId) {
@@ -40790,11 +40981,11 @@ async function migrateCharacterAppearanceStates(spindle2, base, userId) {
     }
   }
   const candidates = new Map;
-  for (const [name, rawTags] of Object.entries(base)) {
-    const key = characterAppearanceKey(name);
+  for (const [name2, rawTags] of Object.entries(base)) {
+    const key = characterAppearanceKey(name2);
     const tags = splitTags(rawTags);
-    if (key && isUsableIdentity(name, tags))
-      candidates.set(key, { name, tags });
+    if (key && isUsableIdentity(name2, tags))
+      candidates.set(key, { name: name2, tags });
   }
   const chatStates = new Map;
   for (const file2 of chatPaths) {
@@ -40823,10 +41014,10 @@ async function migrateCharacterAppearanceStates(spindle2, base, userId) {
     if (candidate.tags.length)
       next[candidate.name] = candidate.tags.join(", ");
   }
-  for (const [name, tags] of Object.entries(base)) {
-    const key = characterAppearanceKey(name);
+  for (const [name2, tags] of Object.entries(base)) {
+    const key = characterAppearanceKey(name2);
     if (!next[key])
-      next[name] = tags;
+      next[name2] = tags;
   }
   for (const [file2, state] of chatStates) {
     if (isUsableIdentity(state.protagonist.name, state.protagonist.tags))
@@ -40865,7 +41056,7 @@ async function updateConfig(spindle2, patch, userId) {
   let next;
   await serializedWrite(scopedKey(userId, "config.json"), async () => {
     const current = await loadConfig(spindle2, userId);
-    next = normalizeConfig({ ...current, ...patch });
+    next = normalizeConfig({ ...current, ...typeof patch === "function" ? patch(current) : patch });
     await spindle2.userStorage.setJson("config.json", next, {
       indent: 2,
       ...userOptions(userId) ?? {}
@@ -40953,8 +41144,8 @@ async function loadTurnRecord(spindle2, path2, userId, isCurrent = () => true) {
     ...raw.referenceLineage !== undefined ? { referenceLineage: raw.referenceLineage } : {},
     ...raw.imageLibrary !== undefined ? { imageLibrary: raw.imageLibrary } : {},
     speaker: raw.speaker,
-    ...Array.isArray(raw.correctionRequestIds) ? { correctionRequestIds: raw.correctionRequestIds.filter((id6) => typeof id6 === "string" && id6.length <= 100).slice(-32) } : {},
-    ...Array.isArray(raw.replanRequestIds) ? { replanRequestIds: raw.replanRequestIds.filter((id6) => typeof id6 === "string" && id6.length <= 100).slice(-32) } : {},
+    ...Array.isArray(raw.correctionRequestIds) ? { correctionRequestIds: raw.correctionRequestIds.filter((id8) => typeof id8 === "string" && id8.length <= 100).slice(-32) } : {},
+    ...Array.isArray(raw.replanRequestIds) ? { replanRequestIds: raw.replanRequestIds.filter((id8) => typeof id8 === "string" && id8.length <= 100).slice(-32) } : {},
     ...raw.forceImageReview === true ? { forceImageReview: true } : {},
     ...raw.plannerMode === "model" || raw.plannerMode === "fallback" ? { plannerMode: raw.plannerMode } : {},
     ...raw.replyUsage && ReplyUsageSchema.safeParse(raw.replyUsage).success ? { replyUsage: ReplyUsageSchema.parse(raw.replyUsage) } : {},
@@ -40970,7 +41161,7 @@ async function loadTurnRecord(spindle2, path2, userId, isCurrent = () => true) {
     ...typeof raw.resolvedSourceText === "string" ? { resolvedSourceText: raw.resolvedSourceText } : {},
     ...raw.source && typeof raw.source === "object" && raw.source.version === 2 && typeof raw.source.rawFingerprint === "string" ? { source: { version: 2, rawFingerprint: raw.source.rawFingerprint } } : {},
     ...raw.settingsSnapshot && typeof raw.settingsSnapshot === "object" ? { settingsSnapshot: raw.settingsSnapshot } : {},
-    ...Array.isArray(raw.imageRecoveryRequestIds) ? { imageRecoveryRequestIds: raw.imageRecoveryRequestIds.filter((id6) => typeof id6 === "string" && id6.length <= 100).slice(-32) } : {},
+    ...Array.isArray(raw.imageRecoveryRequestIds) ? { imageRecoveryRequestIds: raw.imageRecoveryRequestIds.filter((id8) => typeof id8 === "string" && id8.length <= 100).slice(-32) } : {},
     ...Array.isArray(raw.attempts) ? { attempts: raw.attempts } : {},
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date(0).toISOString()
   };
@@ -41078,40 +41269,40 @@ async function saveCardRole(spindle2, chatId, cardId, role, userId) {
   const value = StoredCardRoleSchema.parse({ version: 1, cardId, role });
   await serializedWrite(scopedKey(userId, path2), () => spindle2.userStorage.setJson(path2, value, { indent: 2, ...userOptions(userId) ?? {} }));
 }
-async function saveCorrectedAppearance(spindle2, chatId, name, tags, userId) {
+async function saveCorrectedAppearance(spindle2, chatId, name2, tags, userId) {
   const path2 = chatRosterPath(chatId);
   await serializedWrite(scopedKey(userId, path2), async () => {
     const map2 = await loadCharacterAppearance(spindle2, userId, chatId);
-    const old = appearanceMapKeyFor(map2, name);
+    const old = appearanceMapKeyFor(map2, name2);
     if (old)
       delete map2[old];
-    map2[name] = tags;
+    map2[name2] = tags;
     await spindle2.userStorage.setJson(path2, map2, { indent: 2, userId });
   });
   const visual = await loadSingleCharacterState(spindle2, chatId, userId);
-  if (characterAppearanceKey(visual.protagonist.name) === characterAppearanceKey(name)) {
+  if (characterAppearanceKey(visual.protagonist.name) === characterAppearanceKey(name2)) {
     const visualPath = singleCharacterStatePath(chatId);
     await serializedWrite(scopedKey(userId, visualPath), async () => {
       const current = await loadSingleCharacterState(spindle2, chatId, userId);
-      if (characterAppearanceKey(current.protagonist.name) !== characterAppearanceKey(name))
+      if (characterAppearanceKey(current.protagonist.name) !== characterAppearanceKey(name2))
         return;
       await spindle2.userStorage.setJson(visualPath, { ...current, protagonist: { name: current.protagonist.name, tags: splitTags(tags) }, updatedAt: new Date().toISOString() }, { indent: 2, userId });
     });
   }
   const registry2 = await loadCharacterRegistry(spindle2, chatId, userId);
-  const entry = Object.values(registry2).find((e) => characterAppearanceKey(e.name) === characterAppearanceKey(name));
+  const entry = Object.values(registry2).find((e) => characterAppearanceKey(e.name) === characterAppearanceKey(name2));
   if (entry) {
     entry.tags = tags;
     const category = subjectCategoryFromTags(tags);
     if (category !== "unknown")
       entry.subjectCategory = category;
   }
-  const report = mergeCharacterDeclarations(registry2, [{ name, tags }]);
+  const report = mergeCharacterDeclarations(registry2, [{ name: name2, tags }]);
   const registryPath = characterRegistryPath(chatId);
   await serializedWrite(scopedKey(userId, registryPath), () => spindle2.userStorage.setJson(registryPath, { schemaVersion: CHARACTER_REGISTRY_SCHEMA_VERSION, characters: report.registry, updatedAt: new Date().toISOString() }, { indent: 2, userId }));
 }
-async function purgeDeletedCharacterFromStorage(spindle2, chatId, name, aliases = [], userId) {
-  const names = [name, ...aliases].map((n) => n.trim()).filter(Boolean);
+async function purgeDeletedCharacterFromStorage(spindle2, chatId, name2, aliases = [], userId) {
+  const names = [name2, ...aliases].map((n) => n.trim()).filter(Boolean);
   if (!names.length)
     return;
   const isMatch = (target2) => {
@@ -41152,9 +41343,9 @@ async function purgeDeletedCharacterFromStorage(spindle2, chatId, name, aliases 
     const raw = await spindle2.userStorage.getJson(registryPathToUse, { fallback: null, ...userOptions(userId) ?? {} });
     const reg = normalizeCharacterRegistry(raw);
     let changed = false;
-    for (const [id6, entry] of Object.entries(reg)) {
+    for (const [id8, entry] of Object.entries(reg)) {
       if (isMatch(entry.name) || entry.aliases.some((a) => isMatch(a))) {
-        delete reg[id6];
+        delete reg[id8];
         changed = true;
       }
     }
@@ -41171,7 +41362,7 @@ async function purgeDeletedCharacterFromStorage(spindle2, chatId, name, aliases 
       const chat = await spindle2.chats.get(chatId, userId);
       if (chat?.character_id) {
         const card = await spindle2.characters?.get?.(chat.character_id, userId);
-        if (card && (isMatch(card.name) || isScenarioTitle(card.name) || isScenarioTitle(name))) {
+        if (card && (isMatch(card.name) || isScenarioTitle(card.name) || isScenarioTitle(name2))) {
           await saveCardRole(spindle2, chatId, chat.character_id, "scenario", userId);
         }
       }
@@ -41181,7 +41372,7 @@ async function purgeDeletedCharacterFromStorage(spindle2, chatId, name, aliases 
     const rawPrefs = await spindle2.userStorage.getJson("settings/tooltips.json", { fallback: null, ...userOptions(userId) ?? {} });
     if (rawPrefs && Array.isArray(rawPrefs.overrides)) {
       if (!rawPrefs.overrides.some((o) => o.chatId === chatId && isMatch(o.name))) {
-        rawPrefs.overrides.unshift({ chatId, kind: "npc", name, suppressed: true });
+        rawPrefs.overrides.unshift({ chatId, kind: "npc", name: name2, suppressed: true });
         await spindle2.userStorage.setJson("settings/tooltips.json", rawPrefs, { indent: 2, ...userOptions(userId) ?? {} });
       }
     }
@@ -41360,6 +41551,7 @@ var init_storage = __esm(() => {
   init_card_role();
   init_nicknames();
   init_reading_position();
+  init_branch_chronicle();
   init_image_version_history();
   init_image_review();
   init_config();
@@ -41631,7 +41823,7 @@ function applyContinuityDelta2(state, input2) {
     ...character2,
     ...character2.sources ? { sources: { ...character2.sources } } : {}
   }));
-  const removedNames = new Set((delta.removeCharacters || []).map((name) => name.trim().toLowerCase()));
+  const removedNames = new Set((delta.removeCharacters || []).map((name2) => name2.trim().toLowerCase()));
   if (removedNames.size > 0) {
     characters = characters.filter((character2) => !removedNames.has(character2.name.toLowerCase()));
   }
@@ -41847,7 +42039,7 @@ var init_domain = __esm(() => {
     environment: EnvironmentContinuityDeltaSchema.optional(),
     place: exports_external.string().nullable().optional()
   }).strict().superRefine((delta, context) => {
-    if (delta.removeCharacters && new Set(delta.removeCharacters.map((name) => name.toLowerCase())).size !== delta.removeCharacters.length) {
+    if (delta.removeCharacters && new Set(delta.removeCharacters.map((name2) => name2.toLowerCase())).size !== delta.removeCharacters.length) {
       context.addIssue({ code: "custom", path: ["removeCharacters"], message: "Removed character names must be unique." });
     }
     if (!(delta.characters?.length || delta.removeCharacters?.length || delta.environment !== undefined || delta.place !== undefined)) {
@@ -41977,7 +42169,7 @@ var init_domain = __esm(() => {
 
 // src/backend/inlay-prompt/shot-resolution.ts
 function isFragmentRenderScope(value) {
-  const scope2 = cleanString(value).toLowerCase();
+  const scope3 = cleanString(value).toLowerCase();
   const subject = "(?:head|face|eye|eyes|mouth|hair|hand|hands|finger|fingers|arm|arms|sleeve|sleeves|feet|foot|leg|legs|lower body|torso|chest|back|shoulder|tail|wing|silhouette|shadow)";
   return new RegExp([
     "\\b(?:head|face|eyes)\\s+out\\s+of\\s+frame\\b",
@@ -41986,7 +42178,7 @@ function isFragmentRenderScope(value) {
     `\\b(?:close(?:-up)?|tight|crop(?:ped)?)\\s+(?:view|crop|focus)(?:\\s+(?:on|of))?\\s+(?:the\\s+|her\\s+|his\\s+|their\\s+)?${subject}\\b`,
     `\\b(?:focus|detail|close(?:-up)?|crop|view)\\s+(?:on|of)\\s+(?:the\\s+|her\\s+|his\\s+|their\\s+)?(?:[a-z-]+\\s+){0,2}${subject}\\b`,
     `\\b${subject}\\s+(?:fills?|filling)\\s+(?:the\\s+)?frame\\b`
-  ].join("|"), "i").test(scope2);
+  ].join("|"), "i").test(scope3);
 }
 function fallbackVisibilityRegions(source) {
   if (source === "identity")
@@ -42163,8 +42355,8 @@ var init_shot_resolution = __esm(() => {
 function stripParenthetical(value) {
   return value.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
 }
-function displayName(name, config2) {
-  const clean2 = stripParenthetical(name);
+function displayName(name2, config2) {
+  const clean2 = stripParenthetical(name2);
   const source = config2.originalCreationName.trim();
   if (!config2.originalReference || !clean2 || !source)
     return clean2;
@@ -42199,9 +42391,9 @@ function buildNameReplacementMap(characters) {
     const descriptor = characterDescriptor(character2);
     const raw = cleanString(character2.name);
     const normalized = normalizeCharacterName2(raw);
-    for (const name of unique([raw, normalized].filter(Boolean))) {
-      if (name.length >= 2)
-        replacements.set(name, descriptor);
+    for (const name2 of unique([raw, normalized].filter(Boolean))) {
+      if (name2.length >= 2)
+        replacements.set(name2, descriptor);
     }
     const first2 = normalized.split(/\s+/)[0];
     if (first2.length >= 2 && firstNameCounts.get(first2.toLowerCase()) === 1)
@@ -42215,19 +42407,19 @@ function stripOrReplaceNames(value, replacements, tagField) {
   if (tagField) {
     return unique(csvParts(value).map((tag) => {
       let next2 = tag;
-      for (const [name, descriptor] of replacements) {
+      for (const [name2, descriptor] of replacements) {
         const tagName = next2.replace(/\\\(|\\\)/g, "").replace(/[()]/g, "").trim().toLowerCase();
-        const cleanName = name.replace(/[()]/g, "").trim().toLowerCase();
+        const cleanName = name2.replace(/[()]/g, "").trim().toLowerCase();
         if (tagName === cleanName || tagName === cleanName.replace(/\s+/g, "_"))
           return "";
-        next2 = next2.replace(new RegExp(`\\b${escapeRegExp2(name)}\\b`, "gi"), descriptor);
+        next2 = next2.replace(new RegExp(`\\b${escapeRegExp2(name2)}\\b`, "gi"), descriptor);
       }
       return next2.trim();
     }).filter(Boolean)).join(", ");
   }
   let next = value;
-  for (const [name, descriptor] of replacements) {
-    next = next.replace(new RegExp(`\\b${escapeRegExp2(name)}\\b`, "gi"), descriptor);
+  for (const [name2, descriptor] of replacements) {
+    next = next.replace(new RegExp(`\\b${escapeRegExp2(name2)}\\b`, "gi"), descriptor);
   }
   return next.replace(/\s+/g, " ").trim();
 }
@@ -42678,11 +42870,11 @@ function assembleAnimaPrompt(scene, shot, config2, replacements, perspectiveMode
   const conceptScope = perspectiveMode === "creative" ? sanitizeComposition(cleanString(creativeConcept?.renderScope), replacements) : "";
   const characterParts = characters.map((character2, index) => {
     const composition = perspectiveMode === "asset" ? assembleAssetCharacterComposition(character2.composition, replacements) : perspectiveMode === "static" ? assembleStaticCharacterComposition(character2.composition, replacements, index, characters.length) : hybridDynamic ? assembleDynamicCharacterComposition(character2.composition, replacements, dynamicShotPlan.text) : assembleAtomicCharacterComposition(character2.composition, replacements);
-    const scope2 = perspectiveMode === "creative" ? index === 0 && conceptScope || (() => {
+    const scope3 = perspectiveMode === "creative" ? index === 0 && conceptScope || (() => {
       const parserScope = sanitizeComposition(cleanString(character2.renderScope), replacements);
       return isIdentitySafeCreativeCue(parserScope) ? parserScope : "";
     })() : "";
-    const compositionText = perspectiveMode === "creative" ? scope2 : composition.text;
+    const compositionText = perspectiveMode === "creative" ? scope3 : composition.text;
     const conceptTags = perspectiveMode === "creative" && index === 0 ? stripOrReplaceNames(creativeCueTags(creativeConcept?.anchor, creativeConcept?.visibleCues, character2.visibleTags), replacements, true) : "";
     const baseTags = conceptTags || (perspectiveMode === "dynamic" ? assembleVisibilityTierCharacterBlock(character2, config2, replacements, cameraView, shot, dynamicCamera.adjusted, dynamicCamera.adjusted && isFragmentCameraFraming(dynamicCamera.originalFraming) && characters.length === 1) : assembleCharacterBlock(character2, config2, replacements, false, perspectiveMode));
     const uncoveredActions = composition.structured ? "" : stripOrReplaceNames(uncoveredActionTags(character2.action, compositionText), replacements, true);
@@ -42818,14 +43010,14 @@ function normalizePromptPresets(value) {
   for (const candidate of value) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate))
       continue;
-    const id6 = cleanString2(candidate.id);
-    const name = cleanString2(candidate.name);
-    if (!id6 || !name || seen.has(id6))
+    const id8 = cleanString2(candidate.id);
+    const name2 = cleanString2(candidate.name);
+    if (!id8 || !name2 || seen.has(id8))
       continue;
-    seen.add(id6);
+    seen.add(id8);
     presets.push({
-      id: id6,
-      name,
+      id: id8,
+      name: name2,
       positivePrefix: cleanString2(candidate.positivePrefix),
       negativePrefix: cleanString2(candidate.negativePrefix)
     });
@@ -43163,24 +43355,24 @@ function resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary, s
   const rawName = normalizeCharacterName(cue.character || scene.character || scene.cast[0] || "");
   const deletedChars = characterDNALibrary && "deleted" in characterDNALibrary ? characterDNALibrary.deleted : undefined;
   const isExcluded = isScenarioTitle(rawName) || Boolean(deletedChars && (findCharacterDNA(deletedChars, rawName) || findMatchingCharacterId(deletedChars, rawName)));
-  const name = isExcluded ? "" : rawName;
-  const sameCharacter = characterAppearanceKey(name) === characterAppearanceKey(scene.character || scene.cast[0] || "");
+  const name2 = isExcluded ? "" : rawName;
+  const sameCharacter = characterAppearanceKey(name2) === characterAppearanceKey(scene.character || scene.cast[0] || "");
   let lockedDNA;
   if (characterDNALibrary) {
     const chars = "characters" in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary;
-    const matchId = findMatchingCharacterId(chars, name);
+    const matchId = findMatchingCharacterId(chars, name2);
     if (matchId && chars[matchId]) {
       lockedDNA = chars[matchId];
     } else {
-      const key = name.trim().toLowerCase();
+      const key = name2.trim().toLowerCase();
       lockedDNA = chars[key] ?? Object.values(chars).find((r) => r.name.trim().toLowerCase() === key || r.aliases.some((a) => a.trim().toLowerCase() === key));
     }
   }
   const dnaAppearance = lockedDNA ? formatCharacterDNAForImagePrompt(lockedDNA, { includeOutfit: false }) : undefined;
-  const saved = lockedDNA?.locked && dnaAppearance || Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, name))?.[1]?.trim() || dnaAppearance;
+  const saved = lockedDNA?.locked && dnaAppearance || Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, name2))?.[1]?.trim() || dnaAppearance;
   const resolved = cue.resolvedIdentity?.trim() || (sameCharacter ? scene.identityPrompt?.trim() : "") || "";
   return {
-    name,
+    name: name2,
     sameCharacter,
     saved,
     resolved,
@@ -43192,7 +43384,7 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
   const template = cue.imageTemplate ?? resolveImageTemplate(config2).template;
   const noPeople = template.subjectMode === "none";
   const ensemble = template.subjectMode === "ensemble";
-  const { name, sameCharacter, saved, resolved, identity: identity2, lockedDNA } = resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary);
+  const { name: name2, sameCharacter, saved, resolved, identity: identity2, lockedDNA } = resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary);
   const dnaAttire = lockedDNA ? lockedDNA.activeWardrobeKey && lockedDNA.wardrobeStates?.[lockedDNA.activeWardrobeKey] || lockedDNA.activeOutfit || lockedDNA.signatureOutfit || null : null;
   const attire = lockedDNA?.lockActiveWardrobe && dnaAttire ? dnaAttire : cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null) ?? dnaAttire;
   const manual = cue.visualSources?.includes("manual subject correction");
@@ -43212,7 +43404,7 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
   const chars = characterDNALibrary ? "characters" in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary : undefined;
   const deletedLibrary = characterDNALibrary && "deleted" in characterDNALibrary ? characterDNALibrary.deleted : undefined;
   const isMemberExcluded = (n) => isScenarioTitle(n) || Boolean(deletedLibrary && (findCharacterDNA(deletedLibrary, n) || findMatchingCharacterId(deletedLibrary, n)));
-  const members2 = (cue.ensembleSubjects ?? scene.cast.map((name2) => ({ name: name2, appearance: "" }))).filter((m) => !isMemberExcluded(m.name)).map((member) => {
+  const members2 = (cue.ensembleSubjects ?? scene.cast.map((name3) => ({ name: name3, appearance: "" }))).filter((m) => !isMemberExcluded(m.name)).map((member) => {
     let dnaAppearance;
     let memberDna;
     if (chars) {
@@ -43269,7 +43461,7 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
   }
   return {
     ...!noPeople ? { subjectPreparation: {
-      name: ensemble ? "Named ensemble" : name.slice(0, 256),
+      name: ensemble ? "Named ensemble" : name2.slice(0, 256),
       identity: ensemble ? "" : (attire ? applyAttireOverride(identity2, "") : identity2).slice(0, 4000),
       identitySource: ensemble ? "ensemble snapshot" : !identity2 ? "unavailable" : manual ? "manual correction" : lockedDNA?.locked ? "locked DNA" : saved ? "saved appearance" : "resolved context",
       attire: ensemble ? null : attire?.slice(0, 2000) ?? null,
@@ -43403,8 +43595,8 @@ function applyTemplatePreferences(plan, config2, rules, previous, appearances, d
       return cue;
     const target2 = enabled.find((t) => t.id === decision.preferredTemplateId);
     const winning = [...rules].reverse().find((r) => r.id === decision.selectedRuleId && r.scope === decision.selectedScope && r.then.kind === "prefer_template" && r.then.templateId === target2?.id);
-    const outcome = target2 ? `Applied ${target2.name}${winning ? ` from ${winning.name} (${winning.scope === "chat" ? "this chat" : "all chats"}) \u2014 ${describePresentationCondition(winning.when, (id6) => config2.imageTemplates.find((t) => t.id === id6)?.name ?? id6)}` : ""}.` : "Kept the planner template.";
-    const summary = [outcome, ...diagnostics, ...decision.diagnostics, ...!usable && decision.matchedRuleIds.some((id6) => rules.some((r) => r.id === id6 && config2.imageTemplates.some((t) => r.then.kind === "prefer_template" && t.id === r.then.templateId && t.subjectMode === "one"))) ? ["Character preferences need a usable identity; existing subject guidance was kept."] : []].join(`
+    const outcome = target2 ? `Applied ${target2.name}${winning ? ` from ${winning.name} (${winning.scope === "chat" ? "this chat" : "all chats"}) \u2014 ${describePresentationCondition(winning.when, (id8) => config2.imageTemplates.find((t) => t.id === id8)?.name ?? id8)}` : ""}.` : "Kept the planner template.";
+    const summary = [outcome, ...diagnostics, ...decision.diagnostics, ...!usable && decision.matchedRuleIds.some((id8) => rules.some((r) => r.id === id8 && config2.imageTemplates.some((t) => r.then.kind === "prefer_template" && t.id === r.then.templateId && t.subjectMode === "one"))) ? ["Character preferences need a usable identity; existing subject guidance was kept."] : []].join(`
 `).slice(0, 4000);
     return {
       ...cue,
@@ -43489,12 +43681,12 @@ async function freshPlanPreferences(api2, plan, config2, previous, appearances, 
 }
 async function readPresentationRuleCatalog(api2, chatId, userId) {
   const diagnostics = [];
-  const read2 = async (scope2) => {
+  const read2 = async (scope3) => {
     let timer;
-    const label = scope2 === "chat" ? "Chat" : "Account";
+    const label = scope3 === "chat" ? "Chat" : "Account";
     try {
       return await Promise.race([
-        loadPresentationRuleDocument(api2, scope2, chatId, userId),
+        loadPresentationRuleDocument(api2, scope3, chatId, userId),
         new Promise((resolve) => {
           timer = setTimeout(() => {
             diagnostics.push(`${label} preferences timed out; other scopes and planner defaults remain available.`);
@@ -43526,8 +43718,8 @@ async function managePresentationRules(api2, raw, userId) {
     }
     await updatePresentationRuleDocument(api2, request.scope, request.chatId, userId, request.expectedRevision, (current) => {
       const rules = [...current.rules];
-      const id6 = request.action === "save" ? request.rule.id : request.id;
-      const index = rules.findIndex((rule) => rule.id === id6);
+      const id8 = request.action === "save" ? request.rule.id : request.id;
+      const index = rules.findIndex((rule) => rule.id === id8);
       if (request.action === "save") {
         if (index < 0 && rules.length >= 48)
           throw new Error("This scope already has 48 preferences. Remove one to make room.");
@@ -43649,15 +43841,15 @@ function resolveCueTimeline(input2) {
     if (reference === null || reference === undefined)
       return "";
     const ref = typeof reference === "string" ? { character: reference } : reference;
-    const name = ref.character ?? "";
-    if (!name && !ref.characterId)
+    const name2 = ref.character ?? "";
+    if (!name2 && !ref.characterId)
       return "";
-    return canonicalCharacterName(registry2, { name, characterId: ref.characterId }) || name.trim();
+    return canonicalCharacterName(registry2, { name: name2, characterId: ref.characterId }) || name2.trim();
   };
   const wardrobe = new Map;
   const names = new Map;
-  for (const [name, state] of Object.entries(input2.continuity.characters)) {
-    const canonical = canon(name) || name;
+  for (const [name2, state] of Object.entries(input2.continuity.characters)) {
+    const canonical = canon(name2) || name2;
     const key = characterAppearanceKey(canonical);
     if (!names.has(key))
       names.set(key, canonical);
@@ -43674,42 +43866,42 @@ function resolveCueTimeline(input2) {
   const snapshots = [];
   const deltas = [];
   const available = input2.roster.map((c) => ({ ...c, name: canon(c.name) || c.name })).filter((c) => !input2.isPersona(c.name));
-  const identityFor = (name) => {
-    const entry = resolveCharacterReference(registry2, { name });
+  const identityFor = (name2) => {
+    const entry = resolveCharacterReference(registry2, { name: name2 });
     if (entry?.tags.trim())
       return entry.tags;
-    const key = appearanceMapKeyFor(input2.appearances, name);
+    const key = appearanceMapKeyFor(input2.appearances, name2);
     if (key)
       return input2.appearances[key] ?? "";
-    const extracted = available.find((c) => characterAppearanceKey(c.name) === characterAppearanceKey(name));
+    const extracted = available.find((c) => characterAppearanceKey(c.name) === characterAppearanceKey(name2));
     if (extracted) {
       const tags = distillVisualTags(extracted.description);
       if (tags.length)
         return tags.join(", ");
     }
-    return characterAppearanceKey(name) === characterAppearanceKey(baselineName) ? input2.baseline.identity : "";
+    return characterAppearanceKey(name2) === characterAppearanceKey(baselineName) ? input2.baseline.identity : "";
   };
-  const describe3 = (name, identity2) => {
-    const entry = resolveCharacterReference(registry2, { name });
-    const characterId2 = entry?.id ?? characterIdFor(name);
+  const describe3 = (name2, identity2) => {
+    const entry = resolveCharacterReference(registry2, { name: name2 });
+    const characterId2 = entry?.id ?? characterIdFor(name2);
     const subjectCategory = entry && entry.subjectCategory !== "unknown" ? entry.subjectCategory : subjectCategoryFromTags(identity2);
     return { characterId: characterId2, subjectCategory };
   };
   const valid = (reference) => {
-    const name = canon(reference);
-    return name && !input2.isPersona(name) ? name : "";
+    const name2 = canon(reference);
+    return name2 && !input2.isPersona(name2) ? name2 : "";
   };
   for (let p = 0;p < input2.paragraphs; p++) {
     const updates = {};
-    const dress = (name, attire) => {
-      if (!attire?.trim() || !name)
+    const dress = (name2, attire) => {
+      if (!attire?.trim() || !name2)
         return;
-      const key = characterAppearanceKey(name);
+      const key = characterAppearanceKey(name2);
       const next = input2.isReset(attire) ? null : attire.trim();
       if ((wardrobe.get(key) ?? null) !== next)
-        updates[names.get(key) ?? name] = { wardrobe: { attire: next } };
+        updates[names.get(key) ?? name2] = { wardrobe: { attire: next } };
       wardrobe.set(key, next);
-      names.set(key, names.get(key) ?? name);
+      names.set(key, names.get(key) ?? name2);
     };
     for (const proposal of input2.proposals.filter((s) => s.startParagraph === p)) {
       const openingCue = input2.cues.find((c) => c.paragraphIndex === p && valid(c));
@@ -43747,18 +43939,18 @@ function repairScenarioSubjects(plan, card) {
   });
   if (!card.explicitScenario && described.length === 0 || !card.explicitScenario && described.some((person) => characterAppearanceKey(person.name) === key))
     return plan;
-  const wrapper = (name) => !!name && characterAppearanceKey(name) === key;
-  const personFor = (name) => described.find((person) => characterAppearanceKey(person.name) === characterAppearanceKey(name ?? ""));
+  const wrapper = (name2) => !!name2 && characterAppearanceKey(name2) === key;
+  const personFor = (name2) => described.find((person) => characterAppearanceKey(person.name) === characterAppearanceKey(name2 ?? ""));
   const replacementFor = (scene) => {
     const cue = plan.cues.find((c) => c.paragraphIndex === scene.startParagraph && !wrapper(c.character) && personFor(c.character));
     if (cue)
       return personFor(cue.character);
-    const candidates = described.filter((person) => scene.cast.some((name) => characterAppearanceKey(name) === characterAppearanceKey(person.name)));
+    const candidates = described.filter((person) => scene.cast.some((name2) => characterAppearanceKey(name2) === characterAppearanceKey(person.name)));
     return candidates.length === 1 ? candidates[0] : undefined;
   };
   const scenes = plan.scenes.map((scene) => {
     const person = wrapper(scene.character) ? replacementFor(scene) : undefined;
-    return { ...scene, cast: scene.cast.filter((name) => !wrapper(name)), ...person ? { character: person.name, characterId: person.characterId ?? null } : card.explicitScenario && wrapper(scene.character) ? { character: null, characterId: null } : {} };
+    return { ...scene, cast: scene.cast.filter((name2) => !wrapper(name2)), ...person ? { character: person.name, characterId: person.characterId ?? null } : card.explicitScenario && wrapper(scene.character) ? { character: null, characterId: null } : {} };
   });
   const cues = plan.cues.map((cue) => {
     if (!wrapper(cue.character))
@@ -43781,7 +43973,7 @@ function scenarioPersonaSubject(input2) {
   const key = characterAppearanceKey(persona.name), card = characterAppearanceKey(input2.cardName);
   if (key === card)
     return null;
-  const personaLabel = (name) => characterAppearanceKey(name) === key || ["user", "player", "persona", "{{user}}"].includes(name.trim().toLowerCase());
+  const personaLabel = (name2) => characterAppearanceKey(name2) === key || ["user", "player", "persona", "{{user}}"].includes(name2.trim().toLowerCase());
   if (!input2.visible.some(personaLabel) || !mentioned(input2.paragraph, persona.name))
     return null;
   const focus = characterAppearanceKey(input2.currentName);
@@ -43796,7 +43988,7 @@ function scenarioPersonaSubject(input2) {
   const tags = distillVisualTags(persona.description);
   return isUsableIdentity(persona.name, tags) ? { name: persona.name.trim(), identity: tags.join(", ") } : null;
 }
-var words = (text3) => text3.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim(), mentioned = (text3, name) => Boolean(words(name)) && ` ${words(text3)} `.includes(` ${words(name)} `);
+var words = (text3) => text3.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim(), mentioned = (text3, name2) => Boolean(words(name2)) && ` ${words(text3)} `.includes(` ${words(name2)} `);
 var init_scenario_persona = __esm(() => {
   init_identity();
 });
@@ -44181,8 +44373,8 @@ function stripIgnoredTags(content, tags) {
     const tag = rawTag.trim().replace(/^[<\[]|[>\]]$/g, "").replace(/^\//, "");
     if (!tag)
       continue;
-    const name = escapeRegExp3(tag);
-    output2 = output2.replace(new RegExp(`<${name}\\b[^>]*>[\\s\\S]*?<\\/${name}>`, "gi"), "").replace(new RegExp(`<\\/?${name}\\b[^>]*>`, "gi"), "").replace(new RegExp(`\\[${name}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name}\\]`, "gi"), "").replace(new RegExp(`\\[\\/?${name}\\b[^\\]]*\\]`, "gi"), "");
+    const name2 = escapeRegExp3(tag);
+    output2 = output2.replace(new RegExp(`<${name2}\\b[^>]*>[\\s\\S]*?<\\/${name2}>`, "gi"), "").replace(new RegExp(`<\\/?${name2}\\b[^>]*>`, "gi"), "").replace(new RegExp(`\\[${name2}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name2}\\]`, "gi"), "").replace(new RegExp(`\\[\\/?${name2}\\b[^\\]]*\\]`, "gi"), "");
   }
   return output2;
 }
@@ -44204,9 +44396,9 @@ function extractTagAssetName(tag) {
 function extractInlineCardImages(text3) {
   const assetNames = [];
   const cleaned = text3.replace(INLINE_IMG_REGEX, (match) => {
-    const name = extractTagAssetName(match);
-    if (name)
-      assetNames.push(name);
+    const name2 = extractTagAssetName(match);
+    if (name2)
+      assetNames.push(name2);
     return "";
   });
   return { text: cleaned, assetNames };
@@ -44231,17 +44423,17 @@ function extractInlineCardImagesWithParagraphs(content, paragraphs) {
       continue;
     const paragraphIndex = sawParagraph ? lastKnownParaIndex : 0;
     for (const match of matches) {
-      const name = extractTagAssetName(match[0]);
-      if (name) {
-        results.push({ name, paragraphIndex });
+      const name2 = extractTagAssetName(match[0]);
+      if (name2) {
+        results.push({ name: name2, paragraphIndex });
       }
     }
   }
   return results;
 }
 function stripUnknownInlineTags(text3) {
-  return text3.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name) => {
-    const lower = name.toLowerCase();
+  return text3.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name2) => {
+    const lower = name2.toLowerCase();
     return PROSE_FORMATTING_TAGS.has(lower) || isTextEffectId(lower) ? match : "";
   });
 }
@@ -44306,8 +44498,8 @@ function isStructuredSidecarBody(body2) {
 function findStructuredSidecarRanges(content) {
   const ranges = [];
   for (const match of content.matchAll(/<([A-Za-z][\w:-]*)(\s[^<>]*)?>([\s\S]*?)<\/\1\s*>/g)) {
-    const name = match[1].toLowerCase();
-    if (SIDECAR_EXEMPT_TAGS.has(name) || BUILTIN_HEURISTIC_TAGS.includes(name))
+    const name2 = match[1].toLowerCase();
+    if (SIDECAR_EXEMPT_TAGS.has(name2) || BUILTIN_HEURISTIC_TAGS.includes(name2))
       continue;
     if (!isStructuredSidecarBody(match[3] ?? ""))
       continue;
@@ -44608,12 +44800,12 @@ ${cleanBody}
     const tag = raw.trim().replace(/^[<\[]|[>\]]$/g, "").replace(/^\//, "");
     if (!tag)
       continue;
-    const name = escapeRegExp3(tag);
-    const balancedXml = findBalancedXmlTagRanges(content, name, {
+    const name2 = escapeRegExp3(tag);
+    const balancedXml = findBalancedXmlTagRanges(content, name2, {
       respectProseBoundary: tag.toLowerCase() !== "prose"
     });
     const tagRanges = [...balancedXml];
-    const standaloneAndBracket = new RegExp(`<\\/?${name}\\b[^>]*>|\\[${name}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name}\\]|\\[\\/?${name}\\b[^\\]]*\\]`, "gi");
+    const standaloneAndBracket = new RegExp(`<\\/?${name2}\\b[^>]*>|\\[${name2}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name2}\\]|\\[\\/?${name2}\\b[^\\]]*\\]`, "gi");
     for (const match of content.matchAll(standaloneAndBracket)) {
       const mStart = match.index ?? 0;
       const mEnd = mStart + match[0].length;
@@ -44707,12 +44899,12 @@ ${cleanBody}
   const usedIds = new Set;
   const choices = rawChoices.map((choice, index) => {
     const baseId = choice.id || stableChoiceId(choice.label, index);
-    let id6 = baseId;
+    let id8 = baseId;
     let suffix = 2;
-    while (usedIds.has(id6))
-      id6 = `${baseId}-${suffix++}`;
-    usedIds.add(id6);
-    return { id: id6, label: choice.label, submission: choice.submission, source: "authored", unlocksAfterParagraph };
+    while (usedIds.has(id8))
+      id8 = `${baseId}-${suffix++}`;
+    usedIds.add(id8);
+    return { id: id8, label: choice.label, submission: choice.submission, source: "authored", unlocksAfterParagraph };
   });
   return {
     paragraphs,
@@ -45177,14 +45369,14 @@ function normalizedPath(input2) {
   return input2.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/{2,}/g, "/");
 }
 function extensionOf(input2) {
-  const name = normalizedPath(input2).split("/").at(-1) ?? "";
-  const dot = name.lastIndexOf(".");
-  return dot >= 0 ? name.slice(dot).toLowerCase() : "";
+  const name2 = normalizedPath(input2).split("/").at(-1) ?? "";
+  const dot = name2.lastIndexOf(".");
+  return dot >= 0 ? name2.slice(dot).toLowerCase() : "";
 }
 function stemOf(input2) {
-  const name = normalizedPath(input2).split("/").at(-1) ?? "";
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(0, dot) : name;
+  const name2 = normalizedPath(input2).split("/").at(-1) ?? "";
+  const dot = name2.lastIndexOf(".");
+  return dot > 0 ? name2.slice(0, dot) : name2;
 }
 function joinStoragePath(prefix, relativePath) {
   return [prefix.replace(/^\/+|\/+$/g, ""), relativePath.replace(/^\/+/, "")].filter(Boolean).join("/");
@@ -45376,9 +45568,9 @@ function findAudioEntry(query, preferredCategory, userId) {
   const candidates = catalog.all.filter(matches);
   return candidates.length === 1 ? candidates[0] : null;
 }
-function cacheAudioUrl(id6, url3) {
-  audioUrlCache.delete(id6);
-  audioUrlCache.set(id6, url3);
+function cacheAudioUrl(id8, url3) {
+  audioUrlCache.delete(id8);
+  audioUrlCache.set(id8, url3);
   let total = 0;
   for (const value of audioUrlCache.values())
     total += value.length;
@@ -45525,8 +45717,8 @@ function chunkDebugText(text3, size = DEBUG_LOG_CHUNK_CHARS) {
     chunks.push(text3.slice(index, index + size));
   return chunks;
 }
-function plannerDebugPrefix(scope2) {
-  return `[VN] planner chat=${scope2.chatId} msg=${scope2.messageId} swipe=${scope2.swipeId}${scope2.fingerprint ? ` fp=${scope2.fingerprint}` : ""}`;
+function plannerDebugPrefix(scope3) {
+  return `[VN] planner chat=${scope3.chatId} msg=${scope3.messageId} swipe=${scope3.swipeId}${scope3.fingerprint ? ` fp=${scope3.fingerprint}` : ""}`;
 }
 function debugJson(value, maxChars = 2000) {
   let text3;
@@ -45553,10 +45745,10 @@ function debugErrorSummary(error61, maxChars = 600) {
   }
   return debugQuote(error61 instanceof Error ? error61.message : String(error61), maxChars);
 }
-function plannerDebugLogger(spindle2, config2, scope2) {
+function plannerDebugLogger(spindle2, config2, scope3) {
   if (!config2.debugLogging)
     return SILENT_PLANNER_DEBUG;
-  const prefix = plannerDebugPrefix(scope2);
+  const prefix = plannerDebugPrefix(scope3);
   const emit = (message) => {
     try {
       spindle2.log.info(message);
@@ -45614,8 +45806,8 @@ function rankByRelevance(items, text3, limit, always = []) {
     return { item, index, score };
   }).sort((a, b) => b.score - a.score || a.index - b.index);
   const picked = [];
-  for (const id6 of always) {
-    const hit = items.find((item) => item.id === id6);
+  for (const id8 of always) {
+    const hit = items.find((item) => item.id === id8);
     if (hit && picked.length < limit)
       picked.push(hit);
   }
@@ -45721,7 +45913,7 @@ async function decidePresentation(spindle2, input2) {
     offeredCounts.expressions = Math.max(offeredCounts.expressions, poses.length);
     offeredCounts.bgm = Math.max(offeredCounts.bgm, music.length);
     offeredCounts.sfx = Math.max(offeredCounts.sfx, sounds.length);
-    questions[`speaker_${index}`] = { type: "choice", instructions: `Who speaks or owns paragraph ${index}? Choose Narrator for omniscient narration; choose unknown when the text does not identify a speaker.`, criteria: Object.fromEntries([...names, "unknown"].map((name) => [name, name === "unknown" ? "The speaker cannot be determined" : name === "Narrator" ? "Omniscient narration rather than a named speaker" : `The paragraph is spoken or owned by ${name}`])) };
+    questions[`speaker_${index}`] = { type: "choice", instructions: `Who speaks or owns paragraph ${index}? Choose Narrator for omniscient narration; choose unknown when the text does not identify a speaker.`, criteria: Object.fromEntries([...names, "unknown"].map((name2) => [name2, name2 === "unknown" ? "The speaker cannot be determined" : name2 === "Narrator" ? "Omniscient narration rather than a named speaker" : `The paragraph is spoken or owned by ${name2}`])) };
     questions[`expression_${index}`] = { type: "choice", instructions: `Which expression should the on-screen companion show as a reaction to paragraph ${index}?`, criteria: Object.fromEntries(poses.map((pose) => [pose.id, poseById2.get(pose.id)?.suffix ?? pose.id])) };
     if (music.length)
       questions[`bgm_${index}`] = { type: "choice", instructions: `Should background music change at paragraph ${index}?`, criteria: { keep_current: "No music change", ...Object.fromEntries(music.map((entry) => [entry.id, `${entry.name}; ${entry.tags.join(", ")}`])) } };
@@ -45733,9 +45925,9 @@ async function decidePresentation(spindle2, input2) {
     const batchQuestions = sceneQuestions2 && questions.scene_change ? { scene_change: questions.scene_change, needs_description: questions.needs_description } : {};
     for (const paragraph of batch)
       for (const prefix of ["speaker", "expression", "bgm", "sfx"]) {
-        const name = `${prefix}_${paragraph.index}`;
-        if (questions[name])
-          batchQuestions[name] = questions[name];
+        const name2 = `${prefix}_${paragraph.index}`;
+        if (questions[name2])
+          batchQuestions[name2] = questions[name2];
       }
     return JSON.stringify({ model, state: { previousScene: input2.previousScene ? { environment: input2.previousScene.environment, character: input2.previousScene.character, attire: input2.previousScene.attire } : null, paragraphs: batch.map((p) => ({ index: p.index, text: p.text.slice(0, 3000) })) }, questions: batchQuestions });
   };
@@ -45799,7 +45991,7 @@ async function decidePresentation(spindle2, input2) {
           input2.onResponse?.(reported.data);
         const parsed = Response.parse(raw);
         const expected = JSON.parse(batch.body).questions;
-        parsed.answers = Object.fromEntries(Object.entries(parsed.answers).filter(([name]) => Object.hasOwn(expected, name)));
+        parsed.answers = Object.fromEntries(Object.entries(parsed.answers).filter(([name2]) => Object.hasOwn(expected, name2)));
         parsedBatches.push(parsed);
       } catch (error61) {
         if (input2.signal?.aborted)
@@ -46015,9 +46207,9 @@ function readGameHints(metadata) {
   const h = hints;
   const lines = [];
   if (h.moods && typeof h.moods === "object") {
-    for (const [name, mood] of Object.entries(h.moods).slice(0, 12)) {
+    for (const [name2, mood] of Object.entries(h.moods).slice(0, 12)) {
       if (typeof mood === "string" && mood.trim())
-        lines.push(`- ${name.slice(0, 80)}: ${mood.trim().slice(0, 160)}`);
+        lines.push(`- ${name2.slice(0, 80)}: ${mood.trim().slice(0, 160)}`);
     }
   }
   if (Array.isArray(h.notes)) {
@@ -46048,7 +46240,7 @@ function stableHash(source) {
   }
   return `${left.toString(16).padStart(8, "0")}${right.toString(16).padStart(8, "0")}`;
 }
-function id6(prefix, source) {
+function id8(prefix, source) {
   return `${prefix}-${stableHash(source)}`;
 }
 function isAttireReset(attire) {
@@ -46229,17 +46421,17 @@ var init_schemas3 = __esm(() => {
 
 // src/backend/runtime/story-dna-store.ts
 function phase1RollbackCopy(set2) {
-  const { loreEvents, loreHeads, hiddenLoreThreads, ...base } = set2;
-  const needsCopy = loreEvents || loreHeads || hiddenLoreThreads || base.thoughtCabinet?.some((entry) => entry.authored !== undefined) || Object.values(base.documents ?? {}).some((doc2) => doc2.appearances || doc2.sections.some((section) => section.sourceTurn) || doc2.observations?.some((observation) => observation.sourceTurn)) || Object.values(base.npcBeliefs ?? {}).some((entries) => entries.some((entry) => entry.knowledgeStatus !== undefined));
+  const { loreEvents, loreHeads, hiddenLoreThreads, worldClocks, ...base } = set2;
+  const needsCopy = loreEvents || loreHeads || hiddenLoreThreads || worldClocks || base.thoughtCabinet?.some((entry) => entry.authored !== undefined) || Object.values(base.documents ?? {}).some((doc2) => doc2.appearances || doc2.sections.some((section) => section.sourceTurn) || doc2.observations?.some((observation) => observation.sourceTurn)) || Object.values(base.npcBeliefs ?? {}).some((entries) => entries.some((entry) => entry.knowledgeStatus !== undefined));
   if (!needsCopy)
     return null;
   return {
     ...base,
     ...base.thoughtCabinet ? { thoughtCabinet: base.thoughtCabinet.map(({ authored, ...entry }) => entry) } : {},
     ...base.npcBeliefs ? { npcBeliefs: Object.fromEntries(Object.entries(base.npcBeliefs).map(([npc, entries]) => [npc, entries.map(({ knowledgeStatus, ...entry }) => entry)])) } : {},
-    ...base.documents ? { documents: Object.fromEntries(Object.entries(base.documents).map(([id7, doc2]) => {
+    ...base.documents ? { documents: Object.fromEntries(Object.entries(base.documents).map(([id9, doc2]) => {
       const { appearances, sections, observations, ...entry } = doc2;
-      return [id7, {
+      return [id9, {
         ...entry,
         sections: sections.filter((section) => !section.sourceTurn),
         ...observations ? { observations: observations.filter((observation) => !observation.sourceTurn) } : {}
@@ -46277,7 +46469,8 @@ async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mut
     if (expectedRevision !== undefined && expectedRevision !== (set2.revision ?? 0)) {
       throw new Error("Story DNA changed. Reload the latest data before saving.");
     }
-    await mutation(set2);
+    if (await mutation(set2) === false)
+      return set2;
     set2.revision = (set2.revision ?? 0) + 1;
     const candidate = StoryDNASetSchema.safeParse(set2);
     if (!candidate.success) {
@@ -46302,19 +46495,19 @@ async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mut
 async function saveLocationDNA(spindle2, chatId, loc, userId, revision) {
   const parsed = LocationDNASchema.parse(loc);
   return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
-    const id7 = parsed.id || createLocationId(parsed.name);
-    set2.locations[id7] = { ...parsed, id: id7, autoDiscovered: false, lastUpdated: Date.now() };
-    if (set2.deletedLocations?.[id7])
-      delete set2.deletedLocations[id7];
+    const id9 = parsed.id || createLocationId(parsed.name);
+    set2.locations[id9] = { ...parsed, id: id9, autoDiscovered: false, lastUpdated: Date.now() };
+    if (set2.deletedLocations?.[id9])
+      delete set2.deletedLocations[id9];
   });
 }
 async function saveItemDNA(spindle2, chatId, item, userId, revision) {
   const parsed = ItemDNASchema.parse(item);
   return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
-    const id7 = parsed.id || createItemId(parsed.name);
-    set2.items[id7] = { ...parsed, id: id7, autoDiscovered: false, lastUpdated: Date.now() };
-    if (set2.deletedItems?.[id7])
-      delete set2.deletedItems[id7];
+    const id9 = parsed.id || createItemId(parsed.name);
+    set2.items[id9] = { ...parsed, id: id9, autoDiscovered: false, lastUpdated: Date.now() };
+    if (set2.deletedItems?.[id9])
+      delete set2.deletedItems[id9];
   });
 }
 async function deleteLocationDNA(spindle2, chatId, locationId, userId, revision) {
@@ -46420,8 +46613,8 @@ async function mergeLocationDNA(spindle2, chatId, sourceId, targetId, userId, re
     set2.deletedLocations ??= {};
     set2.deletedLocations[sourceId] = source;
     delete set2.locations[sourceId];
-    for (const [id7, other] of Object.entries(set2.locations)) {
-      if (id7 === targetId || !other.connectedLocations?.length)
+    for (const [id9, other] of Object.entries(set2.locations)) {
+      if (id9 === targetId || !other.connectedLocations?.length)
         continue;
       if (other.connectedLocations.some((c) => c.trim().toLowerCase() === sourceNameLower || createLocationId(c) === sourceId)) {
         other.connectedLocations = dedupeStrings(other.connectedLocations.map((c) => c.trim().toLowerCase() === sourceNameLower || createLocationId(c) === sourceId ? target2.name : c), new Set([other.name.trim().toLowerCase()]), 24);
@@ -46488,7 +46681,7 @@ async function saveStoryThread(spindle2, chatId, thread, userId, revision) {
     const idx = existing.findIndex((t) => t.id === parsed.id);
     const nextEntry = { ...parsed, authored: true, updatedAt: Date.now() };
     if (set2.hiddenLoreThreads)
-      set2.hiddenLoreThreads = set2.hiddenLoreThreads.filter((id7) => id7 !== storyLoreThreadId(parsed.title));
+      set2.hiddenLoreThreads = set2.hiddenLoreThreads.filter((id9) => id9 !== storyLoreThreadId(parsed.title));
     if (idx >= 0) {
       existing[idx] = nextEntry;
     } else {
@@ -46950,7 +47143,7 @@ function normalizeCue(value) {
     ...typeof record3.templateReason === "string" ? { templateReason: record3.templateReason.trim().slice(0, 300) } : {},
     ...typeof record3.visualDescription === "string" ? { visualDescription: record3.visualDescription.trim().slice(0, 4000) } : {},
     ...typeof record3.visualFocus === "string" ? { visualFocus: record3.visualFocus.trim().slice(0, 1000) } : {},
-    ...Array.isArray(record3.visibleCharacters) ? { visibleCharacters: record3.visibleCharacters.filter((name) => typeof name === "string" && Boolean(name.trim())).slice(0, 16).map((name) => name.trim().slice(0, 256)) } : {},
+    ...Array.isArray(record3.visibleCharacters) ? { visibleCharacters: record3.visibleCharacters.filter((name2) => typeof name2 === "string" && Boolean(name2.trim())).slice(0, 16).map((name2) => name2.trim().slice(0, 256)) } : {},
     action: normalizeActionProp(record3.action),
     expression: typeof record3.expression === "string" ? record3.expression.trim() : null,
     character: typeof record3.character === "string" ? record3.character.trim() : null,
@@ -47006,13 +47199,13 @@ function normalizeCharacter(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return value;
   const record3 = value;
-  const name = typeof record3.name === "string" ? record3.name.trim() : "";
+  const name2 = typeof record3.name === "string" ? record3.name.trim() : "";
   const rawDesc = typeof record3.description === "string" && record3.description.trim() ? record3.description.trim() : typeof record3.appearance === "string" && record3.appearance.trim() ? record3.appearance.trim() : typeof record3.visualTags === "string" && record3.visualTags.trim() ? record3.visualTags.trim() : typeof record3.visual_tags === "string" && record3.visual_tags.trim() ? record3.visual_tags.trim() : typeof record3.prompt === "string" && record3.prompt.trim() ? record3.prompt.trim() : typeof record3.tags === "string" && record3.tags.trim() ? record3.tags.trim() : Array.isArray(record3.tags) ? record3.tags.filter((t) => typeof t === "string" && Boolean(t.trim())).join(", ") : "";
   const aliasSource = record3.aliases ?? record3.alias ?? record3.aka ?? record3.alsoKnownAs ?? record3.also_known_as ?? record3.otherNames ?? record3.other_names;
   const aliases = Array.isArray(aliasSource) ? aliasSource.filter((alias) => typeof alias === "string" && Boolean(alias.trim())).map((alias) => alias.trim()) : typeof aliasSource === "string" ? aliasSource.split(/[,;/|]+/).map((alias) => alias.trim()).filter(Boolean) : [];
   const subjectCategory = normalizeSubjectCategory(record3.subjectCategory ?? record3.subject_category ?? record3.gender ?? record3.sex ?? record3.presentation);
   return {
-    name,
+    name: name2,
     description: [
       rawDesc,
       typeof record3.species === "string" && record3.species.trim() ? `${record3.species.trim()} species` : "",
@@ -47121,12 +47314,12 @@ function normalizePlannerOutput(value, defaultLoc, trace = () => {}) {
   } else if (record3.character && typeof record3.character === "object" && !Array.isArray(record3.character)) {
     rawCharacters = [record3.character];
   } else if (record3.characters && typeof record3.characters === "object" && !Array.isArray(record3.characters)) {
-    rawCharacters = Object.entries(record3.characters).map(([name, val]) => {
+    rawCharacters = Object.entries(record3.characters).map(([name2, val]) => {
       if (typeof val === "string")
-        return { name, description: val };
+        return { name: name2, description: val };
       if (val && typeof val === "object" && !Array.isArray(val))
-        return { name, ...val };
-      return { name, description: "" };
+        return { name: name2, ...val };
+      return { name: name2, description: "" };
     });
   }
   const normalizedCues = routed.cues.map(normalizeCue);
@@ -47173,10 +47366,10 @@ function normalizePlannerOutput(value, defaultLoc, trace = () => {}) {
         return null;
       const item = entry;
       const paragraphIndex = typeof item.paragraphIndex === "number" ? item.paragraphIndex : typeof item.paragraphIndex === "string" ? Number.parseInt(item.paragraphIndex, 10) : NaN;
-      const name = typeof item.name === "string" ? item.name.trim() : typeof item.speaker === "string" ? item.speaker.trim() : "";
-      if (!Number.isInteger(paragraphIndex) || paragraphIndex < 0 || !name)
+      const name2 = typeof item.name === "string" ? item.name.trim() : typeof item.speaker === "string" ? item.speaker.trim() : "";
+      if (!Number.isInteger(paragraphIndex) || paragraphIndex < 0 || !name2)
         return null;
-      return { paragraphIndex, name };
+      return { paragraphIndex, name: name2 };
     }).filter((entry) => entry !== null) : []
   };
 }
@@ -47857,8 +48050,8 @@ function referenceCharacterName(input2, visualContext) {
   return normalizeCharacterName(sanitizeDisplayCharacterName(input2.message.name)) || "Protagonist";
 }
 function knownCharacterBlock(input2, visualContext, registry2 = {}) {
-  const name = referenceCharacterName(input2, visualContext);
-  if (!name)
+  const name2 = referenceCharacterName(input2, visualContext);
+  if (!name2)
     return "";
   const describe3 = (displayName2) => {
     const entry = resolveCharacterReference(registry2, { name: displayName2 });
@@ -47875,13 +48068,13 @@ function knownCharacterBlock(input2, visualContext, registry2 = {}) {
     const entry = resolveCharacterReference(registry2, { name: displayName2 });
     return entry?.tags ? toUsableTags(entry.name, splitTags(entry.tags)) : [];
   };
-  let tags = registryTags(name);
-  if (tags.length === 0 && isUsableIdentity(name, input2.singleCharacter.protagonist.tags)) {
-    tags = toUsableTags(name, input2.singleCharacter.protagonist.tags);
+  let tags = registryTags(name2);
+  if (tags.length === 0 && isUsableIdentity(name2, input2.singleCharacter.protagonist.tags)) {
+    tags = toUsableTags(name2, input2.singleCharacter.protagonist.tags);
   } else if (tags.length === 0) {
-    const key = appearanceMapKeyFor(input2.characterAppearance, name);
+    const key = appearanceMapKeyFor(input2.characterAppearance, name2);
     if (key)
-      tags = toUsableTags(name, splitTags(input2.characterAppearance[key] ?? ""));
+      tags = toUsableTags(name2, splitTags(input2.characterAppearance[key] ?? ""));
   }
   if (tags.length === 0) {
     const card = buildCardIdentity(visualContext);
@@ -47891,11 +48084,11 @@ function knownCharacterBlock(input2, visualContext, registry2 = {}) {
   const lines = [];
   const listed = new Set;
   if (tags.length > 0) {
-    lines.push(`${name}: ${tags.join(", ")}${describe3(name)}`);
-    listed.add(characterAppearanceKey(name));
+    lines.push(`${name2}: ${tags.join(", ")}${describe3(name2)}`);
+    listed.add(characterAppearanceKey(name2));
   }
   for (const [otherName, otherTags] of Object.entries(input2.characterAppearance)) {
-    if (name && characterAppearanceKey(otherName) === characterAppearanceKey(name))
+    if (name2 && characterAppearanceKey(otherName) === characterAppearanceKey(name2))
       continue;
     const stable = registryTags(otherName);
     const cleanTags = stable.length ? stable : toUsableTags(otherName, splitTags(otherTags));
@@ -47920,12 +48113,12 @@ function buildCardIdentity(visualContext) {
   const card = visualContext.characterIdentity;
   if (!card || visualContext.cardRole === "scenario")
     return null;
-  const name = normalizeCharacterName(card.name);
-  if (!name)
+  const name2 = normalizeCharacterName(card.name);
+  if (!name2)
     return null;
   const descriptionTags = distillVisualTags(card.description);
   const stableTags = distillVisualTags(card.tags.join(", "));
-  return buildCanonicalIdentity(name, [...descriptionTags, ...stableTags]);
+  return buildCanonicalIdentity(name2, [...descriptionTags, ...stableTags]);
 }
 function resolveSingleCharacter(input2, planner, visualContext, usedFallback) {
   const frozen = input2.singleCharacter;
@@ -47988,13 +48181,13 @@ function resolveSingleCharacter(input2, planner, visualContext, usedFallback) {
   const plannerIsPersona = Boolean(personaName) && characterAppearanceKey(plannerName) === characterAppearanceKey(personaName);
   const cardName = normalizeCharacterName(visualContext.cardRole === "scenario" ? "" : visualContext.characterIdentity?.name ?? "");
   const speakerName = normalizeCharacterName(sanitizeDisplayCharacterName(input2.message.name));
-  const name = frozenName || (plannerUsable && !plannerIsPersona ? plannerName : "") || cardName || plannerName || speakerName || "Protagonist";
+  const name2 = frozenName || (plannerUsable && !plannerIsPersona ? plannerName : "") || cardName || plannerName || speakerName || "Protagonist";
   if (!usedFallback) {
-    const globalKey = appearanceMapKeyFor(input2.characterAppearance, name);
+    const globalKey = appearanceMapKeyFor(input2.characterAppearance, name2);
     if (globalKey) {
-      const globalTags = toUsableTags(name, splitTags(input2.characterAppearance[globalKey] ?? ""));
-      if (isUsableIdentity(name, globalTags)) {
-        return { ...frozen, protagonist: { name, tags: globalTags }, environment: frozen.environment };
+      const globalTags = toUsableTags(name2, splitTags(input2.characterAppearance[globalKey] ?? ""));
+      if (isUsableIdentity(name2, globalTags)) {
+        return { ...frozen, protagonist: { name: name2, tags: globalTags }, environment: frozen.environment };
       }
     }
   }
@@ -48006,7 +48199,7 @@ function resolveSingleCharacter(input2, planner, visualContext, usedFallback) {
   }
   return {
     ...frozen,
-    protagonist: buildCanonicalIdentity(name, []),
+    protagonist: buildCanonicalIdentity(name2, []),
     environment: frozen.environment
   };
 }
@@ -48015,9 +48208,9 @@ function seedTurnRegistry(input2) {
   const frozen = input2.singleCharacter.protagonist;
   if (normalizeCharacterName(frozen.name) && !isScenarioTitle(frozen.name))
     declarations.push({ name: frozen.name, tags: frozen.tags });
-  for (const [name, tags] of Object.entries(input2.characterAppearance))
-    if (!isScenarioTitle(name))
-      declarations.push({ name, tags });
+  for (const [name2, tags] of Object.entries(input2.characterAppearance))
+    if (!isScenarioTitle(name2))
+      declarations.push({ name: name2, tags });
   return mergeCharacterDeclarations(input2.characterRegistry ?? {}, declarations).registry;
 }
 function plannerDeclarations(planner, isPersona) {
@@ -48034,19 +48227,19 @@ function turnOnlyDeclarations(planner, registry2, isPersona) {
   for (const reference of [...planner.scenes, ...planner.cues]) {
     if (!reference.characterId || !reference.character || isPersona(reference.character))
       continue;
-    const id7 = normalizeCharacterId(reference.characterId);
-    if (!id7 || !registry2[id7] || resolveCharacterReference(registry2, { name: reference.character }))
+    const id9 = normalizeCharacterId(reference.characterId);
+    if (!id9 || !registry2[id9] || resolveCharacterReference(registry2, { name: reference.character }))
       continue;
-    declarations.push({ name: reference.character, characterId: id7 });
+    declarations.push({ name: reference.character, characterId: id9 });
   }
   return declarations;
 }
 function canonicalizePlannerIdentities(planner, registry2) {
-  const canon = (name, characterId2) => {
-    if (!name && !characterId2)
-      return name;
-    const resolved = canonicalCharacterName(registry2, { name: name ?? "", characterId: characterId2 });
-    return resolved || name;
+  const canon = (name2, characterId2) => {
+    if (!name2 && !characterId2)
+      return name2;
+    const resolved = canonicalCharacterName(registry2, { name: name2 ?? "", characterId: characterId2 });
+    return resolved || name2;
   };
   return {
     ...planner,
@@ -48157,8 +48350,8 @@ Detected scene header: ${parts.join(" | ")}. Ensure your environment reflects th
       const inferredOutfits = inferredSceneOutfits(storyDNASet);
       if (inferredOutfits.size) {
         const library = await loadCharacterDNALibrary(spindle2, input2.chatId, input2.userId).catch(() => null);
-        const outfitHints = library ? [...inferredOutfits].filter(([name]) => {
-          const dna = findCharacterDNA(library.characters, name);
+        const outfitHints = library ? [...inferredOutfits].filter(([name2]) => {
+          const dna = findCharacterDNA(library.characters, name2);
           return !dna?.locked && !dna?.activeWardrobeKey && !(dna?.activeOutfit && !dna.autoDiscovered);
         }).slice(-8) : [];
         if (outfitHints.length)
@@ -48204,24 +48397,24 @@ ${codexLines.join(`
   const scenarioReferenceName = cardRole === "scenario" ? characterAppearanceKey(attachedCardName) : "";
   if (cardRole === "scenario") {
     const wrapper = characterAppearanceKey(attachedCardName);
-    const isWrapper = (name) => Boolean(wrapper) && characterAppearanceKey(name ?? "") === wrapper;
+    const isWrapper = (name2) => Boolean(wrapper) && characterAppearanceKey(name2 ?? "") === wrapper;
     const frozen = input2.singleCharacter;
     input2 = {
       ...input2,
       message: { ...input2.message, name: "" },
       singleCharacter: isWrapper(frozen.protagonist.name) ? { ...frozen, protagonist: { name: "", tags: [] } } : frozen,
-      characterAppearance: Object.fromEntries(Object.entries(input2.characterAppearance).filter(([name]) => !isWrapper(name))),
+      characterAppearance: Object.fromEntries(Object.entries(input2.characterAppearance).filter(([name2]) => !isWrapper(name2))),
       characterRegistry: Object.fromEntries(Object.entries(input2.characterRegistry ?? {}).filter(([, entry]) => !isWrapper(entry.name))),
-      previousScene: input2.previousScene && isWrapper(input2.previousScene.character) ? { ...input2.previousScene, character: null, identityPrompt: "", cast: input2.previousScene.cast.filter((name) => !isWrapper(name)) } : input2.previousScene
+      previousScene: input2.previousScene && isWrapper(input2.previousScene.character) ? { ...input2.previousScene, character: null, identityPrompt: "", cast: input2.previousScene.cast.filter((name2) => !isWrapper(name2)) } : input2.previousScene
     };
     visualContext.plannerContext += `
 Card role: scenario/world/narrator. The card title is a wrapper, not a drawable person or dialogue speaker. Select actual described on-screen people, or an environment template for scenery. Narration uses Narrator.`;
   }
   const personaName = visualContext.personaIdentity?.name;
-  const isPersona = (name) => {
-    if (!name)
+  const isPersona = (name2) => {
+    if (!name2)
       return false;
-    const n = name.trim().toLowerCase();
+    const n = name2.trim().toLowerCase();
     if (n === "user" || n === "player" || n === "persona" || n === "{{user}}")
       return true;
     if (personaName && n === personaName.trim().toLowerCase())
@@ -48241,7 +48434,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   const systemOnePromise = input2.config.systemOneMode === "off" ? Promise.resolve(null) : decidePresentation(spindle2, {
     paragraphs: promptParagraphs,
     previousScene: input2.previousScene,
-    names: [...Object.values(seedRegistry).map((entry) => entry.name), ...Object.values(seedRegistry).flatMap((entry) => entry.aliases), ...input2.previousScene?.cast ?? [], input2.message.name, input2.singleCharacter.protagonist.name].filter((name) => Boolean(name)),
+    names: [...Object.values(seedRegistry).map((entry) => entry.name), ...Object.values(seedRegistry).flatMap((entry) => entry.aliases), ...input2.previousScene?.cast ?? [], input2.message.name, input2.singleCharacter.protagonist.name].filter((name2) => Boolean(name2)),
     ...personaName ? { personaName } : {},
     config: input2.config,
     ...input2.usage ? { onDispatch: () => addSystemOneUsage(input2.usage, 1), onResponse: (tokens) => addPlannerTokens(input2.usage, { prompt_tokens: tokens.input_tokens, completion_tokens: tokens.output_tokens }) } : {},
@@ -48315,12 +48508,12 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
       const expressionAgreement = planner.cues.filter((cue) => cue.expression && systemOne.expressions.has(cue.paragraphIndex)).filter((cue) => systemOne.expressions.get(cue.paragraphIndex) === cue.expression).length;
       spindle2.log.info(`[VN] System One compare durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens} speakers=${speakerAgreement}/${systemOne.speakers.size} expressions=${expressionAgreement}/${systemOne.expressions.size} sceneChange=${systemOne.sceneChange} description=${systemOne.needsDescription} offered=[${formatSystemOneCoverage(systemOne.coverage)}]`);
     } else if (input2.config.systemOneMode === "on") {
-      for (const [paragraphIndex, name] of systemOne.speakers) {
+      for (const [paragraphIndex, name2] of systemOne.speakers) {
         const existing = planner.speakers.find((entry) => entry.paragraphIndex === paragraphIndex);
         if (existing)
-          existing.name = name;
+          existing.name = name2;
         else
-          planner.speakers.push({ paragraphIndex, name });
+          planner.speakers.push({ paragraphIndex, name: name2 });
       }
       for (const [paragraphIndex, expression] of systemOne.expressions) {
         const cue = planner.cues.find((entry) => entry.paragraphIndex === paragraphIndex);
@@ -48379,9 +48572,9 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     proposals.unshift(fallbackPlanner(input2, narrative.paragraphs.length).scenes[0]);
   const turnAppearances = { ...input2.characterAppearance };
   for (const state of [input2.singleCharacter, characterState]) {
-    const name = state.protagonist.name;
-    if (isUsableIdentity(name, state.protagonist.tags) && !isScenarioTitle(name) && !appearanceMapKeyFor(turnAppearances, name))
-      turnAppearances[name] = singleCharacterTagBlock(state);
+    const name2 = state.protagonist.name;
+    if (isUsableIdentity(name2, state.protagonist.tags) && !isScenarioTitle(name2) && !appearanceMapKeyFor(turnAppearances, name2))
+      turnAppearances[name2] = singleCharacterTagBlock(state);
   }
   const timeline = resolveCueTimeline({
     paragraphs: narrative.paragraphs.length,
@@ -48441,7 +48634,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     const envChanged = reusedScene !== null && !environmentsEqual(reusedScene.environment, mergedEnv);
     const sceneRevision = reusedScene ? envChanged ? reusedScene.revision + 1 : reusedScene.revision : (previous?.revision ?? 0) + 1;
     const basePrompt = reusedScene ? envChanged ? synthesizeBasePrompt(mergedEnv, proposal.basePrompt) : reusedScene.basePrompt : synthesizeBasePrompt(mergedEnv, proposal.basePrompt);
-    const sceneId = reusedScene ? reusedScene.sceneId : id6("scene", `${key.sourceFingerprint}:${proposal.startParagraph}:${proposal.environment.location}`);
+    const sceneId = reusedScene ? reusedScene.sceneId : id8("scene", `${key.sourceFingerprint}:${proposal.startParagraph}:${proposal.environment.location}`);
     const scene = SceneStateSchema.parse({
       sceneId,
       revision: sceneRevision,
@@ -48552,10 +48745,10 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     }
     const visible = cue.visibleCharacters ?? [...scene.cast, ...personaName ? [personaName] : []];
     const ensembleSubjects = [];
-    for (const name of visible) {
-      const person = resolveCharacterReference(registry2, { name });
-      const persona = isPersona(name);
-      const canonical = persona ? personaName : person?.name ?? normalizeCharacterName(name);
+    for (const name2 of visible) {
+      const person = resolveCharacterReference(registry2, { name: name2 });
+      const persona = isPersona(name2);
+      const canonical = persona ? personaName : person?.name ?? normalizeCharacterName(name2);
       if (!canonical || ensembleSubjects.some((item) => characterAppearanceKey(item.name) === characterAppearanceKey(canonical)))
         continue;
       const savedKey = appearanceMapKeyFor(input2.characterAppearance, canonical);
@@ -48566,7 +48759,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
       ensembleSubjects.push({ name: canonical, appearance: description.slice(0, 1200), ...outfit ? { attire: outfit.slice(0, 600) } : {}, ...persona ? { persona: true } : {} });
     }
     return VisualCueSchema.parse({
-      cueId: id6("cue", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
+      cueId: id8("cue", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
       paragraphIndex: cue.paragraphIndex,
       sceneId: scene.sceneId,
       sceneRevision: scene.revision,
@@ -48594,7 +48787,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
       ...cue.shotHint ? { shotHint: cue.shotHint } : {},
       ...effectMap.has(cue.paragraphIndex) ? { effect: effectMap.get(cue.paragraphIndex) } : {},
       promptDelta: "",
-      assetJobId: id6("asset", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
+      assetJobId: id8("asset", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
       ...cue.bgm ? { bgm: cue.bgm } : {},
       ...cue.sfx ? { sfx: cue.sfx } : {}
     });
@@ -48663,7 +48856,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   const choices = narrative.choices.length > 0 ? narrative.choices : (input2.config.mode === "cyoa" && input2.config.generateChoices ? planner.choices : []).map((choice, index) => {
     const gate = input2.config.rpgMode !== "off" ? evaluateChoiceGate(choice.requires, choice.lockedReason, rpgState ?? input2.previousRpgState) : { locked: false, lockedReason: null };
     return ChoiceSchema.parse({
-      id: id6("choice", `${sourceFingerprint}:${index}:${choice.label}`),
+      id: id8("choice", `${sourceFingerprint}:${index}:${choice.label}`),
       label: choice.label,
       submission: choice.submission,
       source: "generated",
@@ -48677,8 +48870,8 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   const cardDisplayName = (visualContext.characterIdentity?.name ?? "").trim();
   const personaDisplayName = (personaName ?? "").trim();
   const canonicalNames = new Map;
-  const addCanonical = (name) => {
-    const trimmed = (name ?? "").trim();
+  const addCanonical = (name2) => {
+    const trimmed = (name2 ?? "").trim();
     if (!trimmed)
       return;
     const key2 = trimmed.toLowerCase();
@@ -48699,15 +48892,15 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   }
   for (const cue of distinctCues)
     addCanonical(cue.character);
-  for (const name of Object.keys(input2.characterAppearance))
-    addCanonical(name);
+  for (const name2 of Object.keys(input2.characterAppearance))
+    addCanonical(name2);
   for (const entry of Object.values(registry2)) {
     addCanonical(entry.name);
     for (const alias of entry.aliases)
       addCanonical(alias);
   }
-  for (const name of Object.keys(continuity.characters))
-    addCanonical(name);
+  for (const name2 of Object.keys(continuity.characters))
+    addCanonical(name2);
   addCanonical(input2.singleCharacter.protagonist.name);
   addCanonical(protagonistName);
   if (cardRole !== "scenario")
@@ -49329,11 +49522,11 @@ var init_planner = __esm(() => {
 });
 
 // src/backend/runtime/context-providers/lumibooks.ts
-function normalizeLumiBooks(value, scope2, now) {
+function normalizeLumiBooks(value, scope3, now) {
   if (value === null)
     return sourceStatus("lumibooks", "cleared");
   const input2 = record3(value), files = record3(input2?.files), states = record3(input2?.fileStates);
-  if (!input2 || input2.chatId !== scope2.chatId || input2.userId !== scope2.userId || !files || !states || typeof input2.updatedAt !== "number" || !Number.isFinite(input2.updatedAt) || input2.updatedAt < 0 || input2.updatedAt > now + 60000)
+  if (!input2 || input2.chatId !== scope3.chatId || input2.userId !== scope3.userId || !files || !states || typeof input2.updatedAt !== "number" || !Number.isFinite(input2.updatedAt) || input2.updatedAt < 0 || input2.updatedAt > now + 60000)
     return sourceStatus("lumibooks", "invalid");
   const buckets = [];
   const ids = new Set;
@@ -49389,7 +49582,7 @@ function normalizeLumiBooks(value, scope2, now) {
       }
     }
   }
-  return proposalEvidence("lumibooks", { version: 1, ...scope2, updatedAt: input2.updatedAt, entities }, now);
+  return proposalEvidence("lumibooks", { version: 1, ...scope3, updatedAt: input2.updatedAt, entities }, now);
 }
 var record3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
 var init_lumibooks = __esm(() => {
@@ -49407,15 +49600,15 @@ function sourceStatus(provider, status) {
 function proposalEvidence(provider, proposal, now) {
   return { proposal, status: { provider, status: "available", recordCount: proposal.entities.length, publicFactCount: Math.min(128, proposal.entities.reduce((n, e) => n + e.facts.filter((f) => f.visibility === "observed").length, 0)), updatedAt: proposal.updatedAt, freshness: now - proposal.updatedAt > 300000 ? "stale" : "current_reference" } };
 }
-function normalizedScript(value, scope2, now) {
+function normalizedScript(value, scope3, now) {
   if (value === null)
     return sourceStatus("lumiscript", "cleared");
   const parsed = ContextProposalSchema.safeParse(value);
-  if (!parsed.success || parsed.data.chatId !== scope2.chatId || parsed.data.userId !== scope2.userId || parsed.data.updatedAt > now + 60000 || parsed.data.entities.reduce((n, e) => n + e.facts.length, 0) > 128 || new Set(parsed.data.entities.map((e) => e.id)).size !== parsed.data.entities.length)
+  if (!parsed.success || parsed.data.chatId !== scope3.chatId || parsed.data.userId !== scope3.userId || parsed.data.updatedAt > now + 60000 || parsed.data.entities.reduce((n, e) => n + e.facts.length, 0) > 128 || new Set(parsed.data.entities.map((e) => e.id)).size !== parsed.data.entities.length)
     return sourceStatus("lumiscript", "invalid");
   return proposalEvidence("lumiscript", parsed.data, now);
 }
-async function collectContextSources(read2, config2, scope2, signal, options2 = {}) {
+async function collectContextSources(read2, config2, scope3, signal, options2 = {}) {
   const now = options2.now ?? Date.now();
   const one = async (provider, endpoint) => {
     if (!endpoint)
@@ -49439,7 +49632,7 @@ async function collectContextSources(read2, config2, scope2, signal, options2 = 
       try {
         if (JSON.stringify(value)?.length > 256000)
           return sourceStatus(provider, "invalid");
-        return provider === "lumibooks" ? normalizeLumiBooks(value, scope2, now) : normalizedScript(value, scope2, now);
+        return provider === "lumibooks" ? normalizeLumiBooks(value, scope3, now) : normalizedScript(value, scope3, now);
       } catch {
         return sourceStatus(provider, "invalid");
       }
@@ -49452,7 +49645,7 @@ async function collectContextSources(read2, config2, scope2, signal, options2 = 
       signal.removeEventListener("abort", abort);
     }
   };
-  return Promise.all([one("lumibooks", config2.lumibooks ? `lumi_books.codex.${scope2.chatId}` : null), one("lumiscript", config2.lumiscriptEndpoint || null)]);
+  return Promise.all([one("lumibooks", config2.lumibooks ? `lumi_books.codex.${scope3.chatId}` : null), one("lumiscript", config2.lumiscriptEndpoint || null)]);
 }
 var init_context_providers = __esm(() => {
   init_context_sources();
@@ -49665,7 +49858,7 @@ async function proposeCharacterDna(spindle2, input2) {
         if (!fields2.includes(change.path) || seen.has(change.path))
           throw new Error("Unexpected or duplicate field");
         seen.add(change.path);
-        if (change.sourceRefs.some((id7) => !input2.evidence.evidence.some((e) => e.id === id7)))
+        if (change.sourceRefs.some((id9) => !input2.evidence.evidence.some((e) => e.id === id9)))
           throw new Error("Unknown evidence reference");
         if (change.classification !== "generated" && !change.sourceRefs.length)
           throw new Error("Evidence or inference needs a source");
@@ -50359,16 +50552,16 @@ function gatherReferenceCandidates(options2) {
     return candidates;
   }
   const chars = options2.characterDNALibrary ? "characters" in options2.characterDNALibrary ? options2.characterDNALibrary.characters : options2.characterDNALibrary : undefined;
-  const findPortraitFor = (name) => {
-    if (!options2.portraits || !name)
+  const findPortraitFor = (name2) => {
+    if (!options2.portraits || !name2)
       return;
-    const normalized = normalizeCharacterName(name);
+    const normalized = normalizeCharacterName(name2);
     return Object.entries(options2.portraits).find(([key, p]) => {
       if (!p)
         return false;
       const strippedKey = key.replace(/^card:/, "");
       const normalizedKey = normalizeCharacterName(strippedKey);
-      return normalizedKey === normalized || areNamesEquivalent(strippedKey, name);
+      return normalizedKey === normalized || areNamesEquivalent(strippedKey, name2);
     })?.[1];
   };
   if (options2.cue) {
@@ -50717,7 +50910,7 @@ function parseSubjectsFromBrief(brief, cue) {
     if (lines.length > 0) {
       return lines.map((line2) => {
         const colon = line2.indexOf(":");
-        const name2 = line2.slice(0, colon).trim();
+        const name3 = line2.slice(0, colon).trim();
         const rawRest = line2.slice(colon + 1).trim();
         const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
         const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
@@ -50733,7 +50926,7 @@ function parseSubjectsFromBrief(brief, cue) {
           }
         }
         return {
-          name: name2,
+          name: name3,
           appearance,
           attire: attire2
         };
@@ -50742,15 +50935,15 @@ function parseSubjectsFromBrief(brief, cue) {
     if (brief.subjects.trim()) {
       const names = brief.subjects.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
       if (names.length > 0) {
-        return names.map((name2) => ({
-          name: name2,
+        return names.map((name3) => ({
+          name: name3,
           appearance: "distinct physical features",
           attire: isNarrativeUndressed ? undefined : "scene-appropriate casual clothing"
         }));
       }
     }
   }
-  const name = brief.subjectPreparation?.name || cue?.character || "Subject";
+  const name2 = brief.subjectPreparation?.name || cue?.character || "Subject";
   const rawAppearance = brief.subjectPreparation?.identity || cue?.resolvedIdentity || brief.subjects;
   const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
   let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
@@ -50762,7 +50955,7 @@ function parseSubjectsFromBrief(brief, cue) {
   }
   const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
   return [{
-    name,
+    name: name2,
     appearance: sanitizedAppearance,
     attire,
     action: action ? sanitizeQuoteAndUnitNotation(action) : undefined
@@ -52540,8 +52733,8 @@ function extractIdeogramPalette(brief, styleDNA) {
           hexes.push(trimmed);
       } else {
         const lower = c.toLowerCase();
-        for (const [name, hex3] of Object.entries(COLOR_NAME_TO_HEX)) {
-          if (new RegExp(`\\b${name}\\b`).test(lower) && !hexes.includes(hex3)) {
+        for (const [name2, hex3] of Object.entries(COLOR_NAME_TO_HEX)) {
+          if (new RegExp(`\\b${name2}\\b`).test(lower) && !hexes.includes(hex3)) {
             hexes.push(hex3);
           }
         }
@@ -53160,9 +53353,9 @@ function lintCompiledPrompt(options2) {
     const lines = brief.subjects.split(`
 `).filter((line2) => line2.includes(":"));
     for (const line2 of lines) {
-      const name = line2.slice(0, line2.indexOf(":")).trim();
-      if (name && !prompt.toLowerCase().includes(name.toLowerCase())) {
-        warnings.push(`Ensemble character "${name}" was not found in the compiled prompt.`);
+      const name2 = line2.slice(0, line2.indexOf(":")).trim();
+      if (name2 && !prompt.toLowerCase().includes(name2.toLowerCase())) {
+        warnings.push(`Ensemble character "${name2}" was not found in the compiled prompt.`);
       }
     }
   }
@@ -53272,14 +53465,14 @@ function applyDeltaOnlySubjectBrief(brief, referencePlan) {
       const colonIdx = line2.indexOf(":");
       if (colonIdx <= 0)
         return line2;
-      const name = line2.slice(0, colonIdx).trim();
-      const matched = wiredIdentityRefs.find((r) => r.subject && r.subject.trim().toLowerCase() === name.toLowerCase());
+      const name2 = line2.slice(0, colonIdx).trim();
+      const matched = wiredIdentityRefs.find((r) => r.subject && r.subject.trim().toLowerCase() === name2.toLowerCase());
       if (!matched)
         return line2;
       const body2 = line2.slice(colonIdx + 1);
       const attireMatch = body2.match(/;\s*(?:wearing|attired in)\s+([^;\n]+)/i);
       const attireClause = attireMatch?.[1] ? `; wearing ${attireMatch[1].trim()}` : "";
-      return `${name}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
+      return `${name2}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
     });
     return { ...brief, subjects: lines.join(`
 `) };
@@ -53655,11 +53848,11 @@ function castAllocationCandidates(plan, config2, appearances) {
     if (!background) {
       let suffix = 0;
       const unique2 = (kind) => {
-        let id7 = `cast-${kind}-${sceneIndex}-${plan.key.revision}`;
-        while (usedIds.has(id7))
-          id7 = `cast-${kind}-${sceneIndex}-${plan.key.revision}-${++suffix}`;
-        usedIds.add(id7);
-        return id7;
+        let id9 = `cast-${kind}-${sceneIndex}-${plan.key.revision}`;
+        while (usedIds.has(id9))
+          id9 = `cast-${kind}-${sceneIndex}-${plan.key.revision}-${++suffix}`;
+        usedIds.add(id9);
+        return id9;
       };
       background = VisualCueSchema.parse({ cueId: unique2("background-cue"), assetJobId: unique2("background-job"), paragraphIndex: scene.startParagraph, sceneId: scene.sceneId, sceneRevision: scene.revision, kind: "background", action: null, expression: null, promptDelta: "", character: null, resolvedIdentity: "", resolvedAttire: null, imageTemplate: templateSnapshot(environment), imageTemplateReason: "Cast view: independent background", visualSources: [] });
     }
@@ -53681,38 +53874,38 @@ var init_cast_allocation = __esm(() => {
 });
 
 // src/shared/stage-assets.ts
-var id7, StageAssetRoleSchema, LocationArtVariantSchema, LocationArtRecordSchema, LocationArtLibrarySchema, LocationArtRequestSchema;
+var id9, StageAssetRoleSchema, LocationArtVariantSchema, LocationArtRecordSchema, LocationArtLibrarySchema, LocationArtRequestSchema;
 var init_stage_assets = __esm(() => {
   init_zod();
-  id7 = exports_external.string().trim().min(1).max(256);
+  id9 = exports_external.string().trim().min(1).max(256);
   StageAssetRoleSchema = exports_external.enum(["scene", "background", "portrait"]);
   LocationArtVariantSchema = exports_external.object({
-    id: id7,
-    imageId: id7,
-    requestFingerprint: id7,
-    environmentFingerprint: id7,
+    id: id9,
+    imageId: id9,
+    requestFingerprint: id9,
+    environmentFingerprint: id9,
     approved: exports_external.literal(true),
     createdAt: exports_external.string().max(64),
     lastUsedAt: exports_external.number().nonnegative().optional(),
     pinned: exports_external.boolean().optional()
   }).strict();
   LocationArtRecordSchema = exports_external.object({
-    entityId: id7,
-    name: id7,
+    entityId: id9,
+    name: id9,
     artRevision: exports_external.number().int().nonnegative(),
     description: exports_external.string().max(4000),
-    preferredVariantId: id7.nullable().default(null),
+    preferredVariantId: id9.nullable().default(null),
     variants: exports_external.array(LocationArtVariantSchema).max(8)
   }).strict();
   LocationArtLibrarySchema = exports_external.object({ version: exports_external.literal(1), locations: exports_external.array(LocationArtRecordSchema).max(128) }).strict();
   LocationArtRequestSchema = exports_external.object({
     type: exports_external.literal("vn_location_art"),
     version: exports_external.literal(1),
-    chatId: id7,
-    requestId: id7,
+    chatId: id9,
+    requestId: id9,
     action: exports_external.enum(["list", "select", "forget", "reset"]),
-    locationId: id7.optional(),
-    variantId: id7.optional()
+    locationId: id9.optional(),
+    variantId: id9.optional()
   }).strict().superRefine((value, ctx) => {
     if ((value.action === "select" || value.action === "forget") && !value.locationId)
       ctx.addIssue({ code: "custom", path: ["locationId"], message: "Choose a location." });
@@ -53730,7 +53923,7 @@ function runtime2(api2) {
   }
   return r;
 }
-function scope2(chat, user) {
+function scope3(chat, user) {
   return canonicalJson([user ?? null, chat]);
 }
 function path2(chat) {
@@ -53740,10 +53933,10 @@ function options2(userId) {
   return userId ? { userId } : undefined;
 }
 function locationArtToken(api2, chat, user) {
-  return runtime2(api2).epochs.get(scope2(chat, user)) ?? 0;
+  return runtime2(api2).epochs.get(scope3(chat, user)) ?? 0;
 }
 async function transaction2(api2, chat, user, work) {
-  const r = runtime2(api2), key = scope2(chat, user), previous = r.tails.get(key) ?? Promise.resolve();
+  const r = runtime2(api2), key = scope3(chat, user), previous = r.tails.get(key) ?? Promise.resolve();
   const current = previous.then(work, work), tail = current.then(() => {
     return;
   }, () => {
@@ -53852,7 +54045,7 @@ async function saveLocationArt(api2, chat, art, user, guard = {}) {
 async function manageLocationArt(api2, chat, action, user) {
   if (action.action === "list")
     return transaction2(api2, chat, user, () => loadLocationArt(api2, chat, user));
-  const r = runtime2(api2), key = scope2(chat, user);
+  const r = runtime2(api2), key = scope3(chat, user);
   r.epochs.set(key, locationArtToken(api2, chat, user) + 1);
   return transaction2(api2, chat, user, async () => {
     const library = await loadLocationArt(api2, chat, user);
@@ -53879,7 +54072,7 @@ async function manageLocationArt(api2, chat, action, user) {
     return library;
   });
 }
-var runtimes2, locationId = (name) => name.trim().toLowerCase();
+var runtimes2, locationId = (name2) => name2.trim().toLowerCase();
 var init_location_art = __esm(() => {
   init_stage_assets();
   init_scene_image_cache();
@@ -54053,14 +54246,14 @@ function promptProtection(prompt, metadata, compactSingle = false) {
   const rows = source.split(/\r?\n/).filter((row) => row.indexOf(":") > 0);
   const declarations = [];
   for (const row of rows) {
-    const name = row.slice(0, row.indexOf(":")).trim();
-    if (name.length > 160 || !canonical(name))
+    const name2 = row.slice(0, row.indexOf(":")).trim();
+    if (name2.length > 160 || !canonical(name2))
       continue;
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = name2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     for (const match of prompt.matchAll(new RegExp(escaped + "\\s*:", "giu"))) {
       if (match.index > 0 && /[\p{L}\p{N}]/u.test(prompt[match.index - 1]))
         continue;
-      declarations.push({ name, index: match.index, end: match.index + match[0].length });
+      declarations.push({ name: name2, index: match.index, end: match.index + match[0].length });
     }
   }
   declarations.sort((a, b) => a.index - b.index);
@@ -54068,10 +54261,10 @@ function promptProtection(prompt, metadata, compactSingle = false) {
     const colon = row.indexOf(":");
     if (colon < 1)
       continue;
-    const name = row.slice(0, colon).trim();
-    if (name.length > 160 || !canonical(name) || !containsTokenSequence(originalTokens, tokenize(name)))
+    const name2 = row.slice(0, colon).trim();
+    if (name2.length > 160 || !canonical(name2) || !containsTokenSequence(originalTokens, tokenize(name2)))
       continue;
-    const declared = declarations.find((d) => d.name === name);
+    const declared = declarations.find((d) => d.name === name2);
     const next = declared ? declarations.find((d) => d.index > declared.index) : undefined;
     const newline = declared ? prompt.indexOf(`
 `, declared.end) : -1;
@@ -54080,7 +54273,7 @@ function promptProtection(prompt, metadata, compactSingle = false) {
     const values = declared && !unchanged ? current : row.slice(colon + 1);
     const scopeTokens = declared ? tokenize(current) : originalTokens;
     const facts = [...new Set(values.split(/[,;\n]+/).map((value) => value.trim()).filter((value) => Boolean(canonical(value)) && containsTokenSequence(scopeTokens, tokenize(value))))];
-    subjects.push({ name, facts });
+    subjects.push({ name: name2, facts });
   }
   if (!subjects.length)
     return { ...empty, exact: prompt.includes(source) ? source : "", minimumCharacters: prompt.includes(source) ? source.length : 0 };
@@ -54427,11 +54620,11 @@ function ensureFluxKleinTags(promptText, brief) {
   const lines = brief.subjects.split(`
 `).filter((l) => l.includes(":"));
   const names = lines.length > 0 ? lines.map((l) => l.split(":")[0].trim()) : brief.subjects.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
-  names.forEach((name) => {
-    if (!name || name.length < 2 || isScenarioTitle(name))
+  names.forEach((name2) => {
+    if (!name2 || name2.length < 2 || isScenarioTitle(name2))
       return;
-    const tag = lines.length > 1 || names.length > 1 ? `<character_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}>` : `<subject_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}>`;
-    const regex = new RegExp(`(?<!<[^>]*)\\b(${name})\\b`, "i");
+    const tag = lines.length > 1 || names.length > 1 ? `<character_${name2.toLowerCase().replace(/[^a-z0-9]/g, "_")}>` : `<subject_${name2.toLowerCase().replace(/[^a-z0-9]/g, "_")}>`;
+    const regex = new RegExp(`(?<!<[^>]*)\\b(${name2})\\b`, "i");
     if (regex.test(result) && !result.includes(tag)) {
       result = result.replace(regex, `${tag} $1`);
     }
@@ -55150,11 +55343,11 @@ var init_prompt_adaptation = __esm(() => {
 });
 
 // src/shared/image-retries.ts
-var id8, QueueImageRetriesSchema;
+var id10, QueueImageRetriesSchema;
 var init_image_retries = __esm(() => {
   init_zod();
-  id8 = exports_external.string().trim().min(1).max(256);
-  QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id8, messageId: id8, sourceFingerprint: id8, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id8, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id8).min(1).max(24).optional(), priorityJobIds: exports_external.array(id8).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
+  id10 = exports_external.string().trim().min(1).max(256);
+  QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id10, messageId: id10, sourceFingerprint: id10, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id10, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id10).min(1).max(24).optional(), priorityJobIds: exports_external.array(id10).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
 });
 
 // src/shared/subject-correction.ts
@@ -55194,6 +55387,10 @@ function isFrontendRequest(value) {
     return exports_external.object({ type: exports_external.literal("vn_external_image_review"), chatId: exports_external.string().min(1).max(128), requestId: exports_external.string().min(1).max(128), reviewRequestId: exports_external.string().min(1).max(100), action: exports_external.enum(["generate", "skip"]), edits: exports_external.object({ prompt: exports_external.string().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict().optional() }).strict().safeParse(value).success;
   if (value.type === "vn_image_library")
     return ImageLibraryRequestSchema.safeParse(value).success;
+  if (value.type === "vn_branch_chronicle")
+    return BranchChronicleRequestSchema.safeParse(value).success;
+  if (value.type === "vn_rehearsal_preset")
+    return RehearsalRequestSchema.safeParse(value).success;
   if (value.type === "vn_cast_gallery")
     return CastGalleryRequestSchema.safeParse(value).success;
   if (value.type === "vn_cast_art")
@@ -55234,6 +55431,8 @@ var init_protocol = __esm(() => {
   init_presentation_rules();
   init_cast_art();
   init_image_library();
+  init_branch_chronicle();
+  init_rehearsal_presets();
   init_zod();
   init_card_role();
   init_subject_correction();
@@ -55295,11 +55494,11 @@ function resolveCharacterAssetImageId(character2, assetName) {
   const nameWithoutExt = normalized.replace(/\.[a-zA-Z0-9]+$/, "");
   const risuMap = character2.extensions["risu_asset_map"];
   if (risuMap && typeof risuMap === "object") {
-    for (const [key, id9] of Object.entries(risuMap)) {
-      if (typeof id9 !== "string" || !id9)
+    for (const [key, id11] of Object.entries(risuMap)) {
+      if (typeof id11 !== "string" || !id11)
         continue;
       if (matchesAssetName(key, normalized, nameWithoutExt)) {
-        return id9;
+        return id11;
       }
     }
   }
@@ -55326,11 +55525,11 @@ function resolveCharacterAssetImageId(character2, assetName) {
   if (expressions && typeof expressions === "object") {
     const mappings = expressions["mappings"];
     if (mappings && typeof mappings === "object") {
-      for (const [key, id9] of Object.entries(mappings)) {
-        if (typeof id9 !== "string" || !id9)
+      for (const [key, id11] of Object.entries(mappings)) {
+        if (typeof id11 !== "string" || !id11)
           continue;
         if (matchesAssetName(key, normalized, nameWithoutExt)) {
-          return id9;
+          return id11;
         }
       }
     }
@@ -55355,7 +55554,7 @@ function resolveCharacterFallbackImageId(character2) {
   }
   const risuMap = character2.extensions?.["risu_asset_map"];
   if (risuMap && typeof risuMap === "object") {
-    const firstId = Object.values(risuMap).find((id9) => typeof id9 === "string" && id9.length > 0);
+    const firstId = Object.values(risuMap).find((id11) => typeof id11 === "string" && id11.length > 0);
     if (firstId)
       return firstId;
   }
@@ -55393,13 +55592,13 @@ async function resolveNativeCardJobs(params) {
   }
   if (!character2)
     return [];
-  async function getImage(id9) {
+  async function getImage(id11) {
     try {
-      const found = await spindle2.images.get(id9, userId);
+      const found = await spindle2.images.get(id11, userId);
       if (found?.url)
         return found;
     } catch {}
-    return { id: id9, url: `/api/v1/images/${id9}` };
+    return { id: id11, url: `/api/v1/images/${id11}` };
   }
   const jobs = [];
   const inlineImages = extractInlineCardImagesWithParagraphs(content2, plan.paragraphs);
@@ -55460,29 +55659,29 @@ var init_native_assets = __esm(() => {
 });
 
 // src/backend/runtime/reference-source.ts
-function stripExtension(name) {
-  return name.replace(/\.[a-zA-Z0-9]{1,5}$/, "");
+function stripExtension(name2) {
+  return name2.replace(/\.[a-zA-Z0-9]{1,5}$/, "");
 }
 function normalizeAssetText(value) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 function assetNameMatches(assetName, candidateName) {
   const asset = normalizeAssetText(stripExtension(assetName));
-  const name = normalizeAssetText(candidateName);
-  if (!asset || !name || !asset.startsWith(name))
+  const name2 = normalizeAssetText(candidateName);
+  if (!asset || !name2 || !asset.startsWith(name2))
     return false;
-  const rest = asset.slice(name.length).replace(/^[0-9]+/, "");
+  const rest = asset.slice(name2.length).replace(/^[0-9]+/, "");
   return rest === "" || rest.startsWith(" ");
 }
 function chooseCardAssetName(matches, candidateName) {
   if (matches.length === 0)
     return null;
-  const name = normalizeAssetText(candidateName);
+  const name2 = normalizeAssetText(candidateName);
   const scored = matches.map((original) => {
     const norm = normalizeAssetText(stripExtension(original));
-    const bareExact = norm === name;
-    const bareNumbered = !bareExact && norm.replace(/[0-9]+$/, "") === name && /[0-9]$/.test(norm);
-    const rest = norm.slice(name.length);
+    const bareExact = norm === name2;
+    const bareNumbered = !bareExact && norm.replace(/[0-9]+$/, "") === name2 && /[0-9]$/.test(norm);
+    const rest = norm.slice(name2.length);
     const neutral = NEUTRAL_VARIANT.test(rest);
     const rank = bareExact ? 0 : bareNumbered ? 1 : neutral ? 2 : 3;
     return { original, norm, rank };
@@ -55503,8 +55702,8 @@ function collectCardAssetNames(character2) {
   const extensions = character2.extensions ?? {};
   const risuMap = extensions["risu_asset_map"];
   if (risuMap && typeof risuMap === "object" && !Array.isArray(risuMap)) {
-    for (const [key, id9] of Object.entries(risuMap)) {
-      if (typeof id9 === "string" && id9)
+    for (const [key, id11] of Object.entries(risuMap)) {
+      if (typeof id11 === "string" && id11)
         push(key);
     }
   }
@@ -55522,8 +55721,8 @@ function collectCardAssetNames(character2) {
   if (expressions && typeof expressions === "object") {
     const mappings = expressions["mappings"];
     if (mappings && typeof mappings === "object" && !Array.isArray(mappings)) {
-      for (const [key, id9] of Object.entries(mappings)) {
-        if (typeof id9 === "string" && id9)
+      for (const [key, id11] of Object.entries(mappings)) {
+        if (typeof id11 === "string" && id11)
           push(key);
       }
     }
@@ -55534,13 +55733,13 @@ function matchesFor(assetNames, candidateName) {
   return assetNames.filter((assetName) => assetNameMatches(assetName, candidateName));
 }
 function matchCardAssetForNames(assetNames, names) {
-  for (const name of names) {
-    const chosen2 = chooseCardAssetName(matchesFor(assetNames, name), name);
+  for (const name2 of names) {
+    const chosen2 = chooseCardAssetName(matchesFor(assetNames, name2), name2);
     if (chosen2)
       return chosen2;
   }
-  for (const name of names) {
-    const words2 = normalizeAssetText(name).split(" ").filter((word2) => word2.length >= 2);
+  for (const name2 of names) {
+    const words2 = normalizeAssetText(name2).split(" ").filter((word2) => word2.length >= 2);
     if (words2.length < 2)
       continue;
     const ordered = [words2[words2.length - 1], words2[0], ...words2.slice(1, -1)];
@@ -55557,36 +55756,36 @@ function planCharacters(plan) {
   const seen = new Set;
   for (const cue of plan.visualCues) {
     const scene = plan.scenes.find((candidate) => candidate.sceneId === cue.sceneId && candidate.revision === cue.sceneRevision);
-    const name = normalizeCharacterName(cue.character || scene?.character || scene?.cast[0] || "");
-    const key = characterAppearanceKey(name);
+    const name2 = normalizeCharacterName(cue.character || scene?.character || scene?.cast[0] || "");
+    const key = characterAppearanceKey(name2);
     if (!key || seen.has(key))
       continue;
     seen.add(key);
-    characters.push({ name, key });
+    characters.push({ name: name2, key });
   }
   return characters;
 }
-function candidateNamesFor(registry2, name) {
+function candidateNamesFor(registry2, name2) {
   const names = [];
   const push = (value) => {
     const clean2 = normalizeCharacterName(value);
     if (clean2 && !names.some((existing) => characterAppearanceKey(existing) === characterAppearanceKey(clean2)))
       names.push(clean2);
   };
-  const entry = findRegistryEntryByName(registry2, name);
+  const entry = findRegistryEntryByName(registry2, name2);
   if (entry) {
     push(entry.name);
     for (const alias of entry.aliases)
       push(alias);
   }
-  push(name);
+  push(name2);
   return names;
 }
-function tagMatchesCandidate(tag, registry2, name) {
-  return candidateNamesFor(registry2, name).some((candidate) => assetNameMatches(tag, candidate) || normalizeAssetText(candidate).split(" ").some((word2) => word2.length >= 2 && assetNameMatches(tag, word2)));
+function tagMatchesCandidate(tag, registry2, name2) {
+  return candidateNamesFor(registry2, name2).some((candidate) => assetNameMatches(tag, candidate) || normalizeAssetText(candidate).split(" ").some((word2) => word2.length >= 2 && assetNameMatches(tag, word2)));
 }
 function assetMatchesAnyName(assetName, names) {
-  return names.some((name) => assetNameMatches(assetName, name) || normalizeAssetText(name).split(" ").some((word2) => word2.length >= 2 && assetNameMatches(assetName, word2)));
+  return names.some((name2) => assetNameMatches(assetName, name2) || normalizeAssetText(name2).split(" ").some((word2) => word2.length >= 2 && assetNameMatches(assetName, word2)));
 }
 function resolveCardAssetsForPlan(input2) {
   const { plan, character: character2, content: content2, registry: registry2 } = input2;
@@ -55607,13 +55806,13 @@ function resolveCardAssetsForPlan(input2) {
     const charactersByParagraph = new Map;
     for (const cue of plan.visualCues) {
       const scene = plan.scenes.find((candidate) => candidate.sceneId === cue.sceneId && candidate.revision === cue.sceneRevision);
-      const name = normalizeCharacterName(cue.character || scene?.character || scene?.cast[0] || "");
-      const key = characterAppearanceKey(name);
+      const name2 = normalizeCharacterName(cue.character || scene?.character || scene?.cast[0] || "");
+      const key = characterAppearanceKey(name2);
       if (!key)
         continue;
       const list = charactersByParagraph.get(cue.paragraphIndex) ?? [];
       if (!list.some((existing) => existing.key === key))
-        list.push({ name, key });
+        list.push({ name: name2, key });
       charactersByParagraph.set(cue.paragraphIndex, list);
     }
     const assign = (key, assetName) => {
@@ -55632,7 +55831,7 @@ function resolveCardAssetsForPlan(input2) {
         continue;
       }
       for (const tag of tags) {
-        const owners = present.filter((candidate) => candidateNamesFor(registry2, candidate.name).some((name) => assetNameMatches(tag, name) || normalizeAssetText(name).split(" ").some((word2) => word2.length >= 2 && assetNameMatches(tag, word2))));
+        const owners = present.filter((candidate) => candidateNamesFor(registry2, candidate.name).some((name2) => assetNameMatches(tag, name2) || normalizeAssetText(name2).split(" ").some((word2) => word2.length >= 2 && assetNameMatches(tag, word2))));
         if (owners.length === 1)
           assign(owners[0].key, tag);
       }
@@ -55648,7 +55847,7 @@ function resolveCardAssetsForPlan(input2) {
     hasPrefixMatch.set(candidate.key, chosen2 !== null);
     let single = false;
     if (chosen2) {
-      single = !names.some((name) => chooseCardAssetName(matchesFor(assetNames, name), name) === chosen2);
+      single = !names.some((name2) => chooseCardAssetName(matchesFor(assetNames, name2), name2) === chosen2);
       singleWordMatch.set(candidate.key, single);
     }
     if (chosen2 && !resolutions.has(candidate.key)) {
@@ -55710,7 +55909,7 @@ function resolveCardAssetsForPlan(input2) {
   for (const candidate of characters) {
     if (resolutions.has(candidate.key) || !character2.image_id)
       continue;
-    const namesOwnCard = candidateNamesFor(registry2, candidate.name).some((name) => characterAppearanceKey(name) === cardNameKey);
+    const namesOwnCard = candidateNamesFor(registry2, candidate.name).some((name2) => characterAppearanceKey(name2) === cardNameKey);
     if (!namesOwnCard)
       continue;
     const othersMatch = characters.some((other) => other.key !== candidate.key && hasPrefixMatch.get(other.key));
@@ -55886,10 +56085,10 @@ function sceneForCue(plan, cue) {
     throw new Error(`No scene owns visual cue ${cue.cueId}.`);
   return scene;
 }
-function portraitIdentityFingerprint(name, identity2, config2, provider) {
+function portraitIdentityFingerprint(name2, identity2, config2, provider) {
   if (!identity2.trim())
     return "";
-  return hash2(JSON.stringify(["identity-v2", characterAppearanceKey(name), identity2.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean).sort(), provider, config2.imageConnectionId, config2.imageModel]));
+  return hash2(JSON.stringify(["identity-v2", characterAppearanceKey(name2), identity2.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean).sort(), provider, config2.imageConnectionId, config2.imageModel]));
 }
 function compatiblePortrait(portrait, fingerprint) {
   if (portrait?.source === "card")
@@ -55932,7 +56131,7 @@ function resolveCueCharacterVisualState(scene, cue, characterAppearance) {
     if (mapKey && characterAppearance?.[mapKey]) {
       baseIdentity = characterAppearance[mapKey].trim();
     } else if (scene.continuity?.characters) {
-      const match = Object.entries(scene.continuity.characters).find(([name]) => characterAppearanceKey(name) === characterKey);
+      const match = Object.entries(scene.continuity.characters).find(([name2]) => characterAppearanceKey(name2) === characterKey);
       if (match && match[1]?.appearance) {
         baseIdentity = Object.values(match[1].appearance).filter(Boolean).join(", ");
       }
@@ -56270,8 +56469,8 @@ function defaultSceneImageVerifier(spindle2, userId) {
     return Boolean(await api2.get(imageId, userId));
   };
 }
-function retainPlanEpisodes(cache, scope3, plan) {
-  return cache.retainEpisodes(scope3, plan.scenes.map((scene) => sceneEpisodeOf(scene, cache.generation(scope3))));
+function retainPlanEpisodes(cache, scope4, plan) {
+  return cache.retainEpisodes(scope4, plan.scenes.map((scene) => sceneEpisodeOf(scene, cache.generation(scope4))));
 }
 function cacheEligibleCue(cue) {
   if (cue.imageTemplate?.subjectMode === "ensemble")
@@ -56287,7 +56486,7 @@ async function resolveCacheCues(spindle2, plan, config2, characterAppearance, ex
   const candidates = options3.includeBudgeted || plan.classifierVisuals && config2.systemOneMode === "on" ? [...plan.visualCues, ...plan.cacheCues ?? []] : plan.cacheCues ?? [];
   if (candidates.length === 0)
     return [];
-  const scope3 = sceneImageScope(userId, plan.key.chatId);
+  const scope4 = sceneImageScope(userId, plan.key.chatId);
   const haveJob = new Set(existingJobs.map((job) => job.jobId));
   const pending = candidates.filter((cue) => !haveJob.has(cue.assetJobId));
   if (pending.length === 0)
@@ -56380,13 +56579,13 @@ async function resolveCacheCues(spindle2, plan, config2, characterAppearance, ex
         continue;
       }
     }
-    const episode = sceneEpisodeOf(scene, cache.generation(scope3));
-    const found = cache.lookup(scope3, key, episode, keyDigest);
+    const episode = sceneEpisodeOf(scene, cache.generation(scope4));
+    const found = cache.lookup(scope4, key, episode, keyDigest);
     if (found.status === "miss") {
       log(`scene-cache candidate p${cue.paragraphIndex} miss reason=${found.reason} key=${shortSceneKey(key)} (no job, no request)`);
       continue;
     }
-    const verdict = await verifyEntry(cache, scope3, key, found.entry, verify);
+    const verdict = await verifyEntry(cache, scope4, key, found.entry, verify);
     if (verdict !== "ok") {
       log(`scene-cache candidate p${cue.paragraphIndex} miss reason=${verdict} image=${found.entry.imageId} (no job, no request)`);
       continue;
@@ -56416,7 +56615,7 @@ async function resolveCacheCues(spindle2, plan, config2, characterAppearance, ex
   }
   return resolved;
 }
-async function verifyEntry(cache, scope3, key, entry, verify) {
+async function verifyEntry(cache, scope4, key, entry, verify) {
   let reason;
   try {
     if (await verify(entry.imageId))
@@ -56426,7 +56625,7 @@ async function verifyEntry(cache, scope3, key, entry, verify) {
     reason = "asset_unverifiable";
   }
   cache.revokeHit();
-  cache.invalidate(scope3, key, reason);
+  cache.invalidate(scope4, key, reason);
   cache.recordMiss(reason);
   return reason;
 }
@@ -56631,8 +56830,8 @@ async function prepareAssetJobs(spindle2, plan, config2, characterAppearance, ca
   }
   if (!plan.classifierVisuals || config2.systemOneMode !== "on")
     return candidates;
-  const scope3 = sceneImageScope(userId, plan.key.chatId);
-  retainPlanEpisodes(cache, scope3, plan);
+  const scope4 = sceneImageScope(userId, plan.key.chatId);
+  retainPlanEpisodes(cache, scope4, plan);
   const profile = await resolveImageProfile(spindle2, config2, userId);
   const provider = profile.provider;
   if (provider === "novelai")
@@ -56662,7 +56861,7 @@ async function prepareAssetJobs(spindle2, plan, config2, characterAppearance, ca
     }
     const cue = plan.visualCues.find((cue2) => cue2.assetJobId === job.jobId);
     const scene = sceneForCue(plan, cue);
-    const key = cacheEligibleCue(cue) ? `${sceneEpisodeOf(scene, cache.generation(scope3))}:${sceneImageCacheKey(sceneImageIdentityFor(config2, scene, cue, characterAppearance, provider, undefined, profile.cacheProfile))}` : job.jobId;
+    const key = cacheEligibleCue(cue) ? `${sceneEpisodeOf(scene, cache.generation(scope4))}:${sceneImageCacheKey(sceneImageIdentityFor(config2, scene, cue, characterAppearance, provider, undefined, profile.cacheProfile))}` : job.jobId;
     if (missingKeys.has(key) || missingKeys.size >= limit)
       continue;
     missingKeys.add(key);
@@ -56958,8 +57157,8 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
     cardFetchPromises.set(characterKey, pending);
     return pending;
   };
-  const scope3 = sceneImageScope(userId, plan.key.chatId);
-  const admission = cache ? cacheOptions.admission ?? cache.admission(scope3) : null;
+  const scope4 = sceneImageScope(userId, plan.key.chatId);
+  const admission = cache ? cacheOptions.admission ?? cache.admission(scope4) : null;
   const bypass = new Set(cacheOptions.bypassJobIds ?? []);
   const verify = cacheOptions.verifyImage ?? defaultSceneImageVerifier(spindle2, userId);
   const cacheLog = (line2) => {
@@ -56974,10 +57173,10 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
     return `~${Math.round(mean)}ms, estimate = mean of ${observedGenerationMs.length} provider call(s) in this batch`;
   };
   if (cache) {
-    const retired = retainPlanEpisodes(cache, scope3, plan);
+    const retired = retainPlanEpisodes(cache, scope4, plan);
     if (retired > 0)
-      cacheLog(`scene-cache retired ${retired} entr${retired === 1 ? "y" : "ies"} from earlier physical scenes (episodes now ${plan.scenes.map((scene) => sceneEpisodeOf(scene, cache.generation(scope3))).join(",")})`);
-    cacheLog(`scene-cache batch admitted scope=${scope3} epoch=${admission.epoch} entries=${cache.size} bypass=${bypass.size}`);
+      cacheLog(`scene-cache retired ${retired} entr${retired === 1 ? "y" : "ies"} from earlier physical scenes (episodes now ${plan.scenes.map((scene) => sceneEpisodeOf(scene, cache.generation(scope4))).join(",")})`);
+    cacheLog(`scene-cache batch admitted scope=${scope4} epoch=${admission.epoch} entries=${cache.size} bypass=${bypass.size}`);
   }
   const provenanceFor = (jobId, promptFingerprint) => {
     const { connectionId, workflowId } = splitConnectionSelection(config2.imageConnectionId);
@@ -57111,7 +57310,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               const cacheIdentity = sceneImageIdentityFor(config2, scene, cue, characterAppearance, provider, cardSource ? cardReferenceForCache(cardPortrait, portrait) : cue.imageTemplate ? portrait ? { source: "captured", imageId: portrait.imageId } : { source: "none" } : undefined, profile.cacheProfile, characterDNALibrary, storyDNASet);
               cacheKey = sceneImageCacheKey(cacheIdentity);
               cacheDigest = sceneIdentityDigest(cacheIdentity);
-              episode = sceneEpisodeOf(scene, cache.generation(scope3));
+              episode = sceneEpisodeOf(scene, cache.generation(scope4));
               if (bypass.has(scheduledJob.jobId)) {
                 cache.recordMiss("bypass");
                 cacheLog(`scene-cache p${cue.paragraphIndex} miss reason=bypass (forced regeneration) key=${shortSceneKey(cacheKey)} -> generating`);
@@ -57124,9 +57323,9 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
                     throw abortError3(signal);
                   if (jobSignal.aborted)
                     throw abortError3(jobSignal);
-                  const found = cache.lookup(scope3, cacheKey, episode, cacheDigest);
+                  const found = cache.lookup(scope4, cacheKey, episode, cacheDigest);
                   if (found.status === "hit") {
-                    const verdict = await verifyEntry(cache, scope3, cacheKey, found.entry, verify);
+                    const verdict = await verifyEntry(cache, scope4, cacheKey, found.entry, verify);
                     if (verdict === "ok") {
                       cacheLog(`scene-cache p${cue.paragraphIndex} hit key=${shortSceneKey(cacheKey)} image=${found.entry.imageId} from message=${found.entry.provenance.assistantMessageId} job=${found.entry.provenance.jobId} -> generation avoided (saved: ${estimateSavedMs()})`);
                       activity(scheduledJob, "cache-reuse");
@@ -57136,7 +57335,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
                   } else {
                     cacheLog(`scene-cache p${cue.paragraphIndex} miss reason=${found.reason} key=${shortSceneKey(cacheKey)}`);
                   }
-                  const claim2 = cache.claim(scope3, cacheKey, jobSignal);
+                  const claim2 = cache.claim(scope4, cacheKey, jobSignal);
                   if (claim2.role === "owner") {
                     settle = claim2.settle;
                     cacheLog(`scene-cache p${cue.paragraphIndex} owns generation key=${shortSceneKey(cacheKey)}`);
@@ -57574,7 +57773,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               } catch {}
             }
             if (cache && admission && cacheKey) {
-              const stored = cache.store(scope3, cacheKey, {
+              const stored = cache.store(scope4, cacheKey, {
                 imageId: result.imageId,
                 imageUrl,
                 episode,
@@ -57893,9 +58092,9 @@ class ImageUsageLedger {
     if (scope.seen.size > 2048)
       scope.seen.delete(scope.seen.values().next().value);
     if (scope.attempts.size > 1024)
-      for (const [id3, state] of scope.attempts) {
+      for (const [id4, state] of scope.attempts) {
         if (state !== "pending") {
-          scope.attempts.delete(id3);
+          scope.attempts.delete(id4);
           break;
         }
       }
@@ -58011,12 +58210,12 @@ function activeBranchSwipeTags(messages) {
   if (!Array.isArray(messages))
     return tags;
   for (const m of messages) {
-    const id7 = m?.id ?? m?.message_id;
-    if (!id7)
+    const id9 = m?.id ?? m?.message_id;
+    if (!id9)
       continue;
     const rawSwipe = m?.swipe_id;
     const swipeId = typeof rawSwipe === "number" && Number.isFinite(rawSwipe) ? rawSwipe : typeof rawSwipe === "string" && /^\d+$/.test(rawSwipe) ? Number(rawSwipe) : 0;
-    tags.add(swipeTurnTag(String(id7), swipeId));
+    tags.add(swipeTurnTag(String(id9), swipeId));
   }
   return tags;
 }
@@ -58038,9 +58237,9 @@ function filterLibraryForActiveBranch(library, activeTags) {
   if (!activeTags || activeTags.size === 0)
     return library;
   const filtered = Object.create(null);
-  for (const [id7, dna] of Object.entries(library.characters)) {
+  for (const [id9, dna] of Object.entries(library.characters)) {
     if (isCharacterActiveOnBranch(dna, activeTags))
-      filtered[id7] = dna;
+      filtered[id9] = dna;
   }
   return { ...library, characters: filtered };
 }
@@ -58086,18 +58285,18 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
     map2 = new Map;
     sessions.set(spindle2, map2);
   }
-  const scope2 = JSON.stringify([userId, request.chatId]);
+  const scope3 = JSON.stringify([userId, request.chatId]);
   for (const [key, state] of map2)
     if (Date.now() - (state.created ?? 0) > 300000) {
       state.abort?.abort();
       map2.delete(key);
     }
-  if (map2.size >= 64 && !map2.has(scope2)) {
+  if (map2.size >= 64 && !map2.has(scope3)) {
     const oldest = map2.keys().next().value;
     map2.get(oldest)?.abort?.abort();
     map2.delete(oldest);
   }
-  const previous = map2.get(scope2);
+  const previous = map2.get(scope3);
   const reply = async (proposal) => {
     const msgs = typeof spindle2.chat?.getMessages === "function" ? await spindle2.chat.getMessages(request.chatId).catch(() => []) : [];
     const tags = activeBranchSwipeTags(msgs);
@@ -58204,13 +58403,13 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
     }
     if (request.action === "cancel") {
       previous?.abort?.abort();
-      map2.delete(scope2);
+      map2.delete(scope3);
       return;
     }
     if (["propose", "autofill", "harvest"].includes(request.action) && "characterName" in request) {
       previous?.abort?.abort();
       const state = { abort: new AbortController, created: Date.now() };
-      map2.set(scope2, state);
+      map2.set(scope3, state);
       const library = await loadCharacterDNALibrary(spindle2, request.chatId, userId);
       const active = findCharacterDNA(library.characters, request.characterId ?? request.characterName);
       if (!active && findCharacterDNA(library.deleted ?? {}, request.characterId ?? request.characterName))
@@ -58223,7 +58422,7 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
       const evidence = await collectCharacterDnaEvidence(spindle2, input2);
       state.contextKey = evidence.contextKey ?? "null";
       const proposal = await proposeCharacterDna(spindle2, { ...input2, evidence, revision: library.revision ?? 0, ...request.fields ? { fields: request.fields } : {} });
-      if (map2.get(scope2) !== state || state.abort.signal.aborted)
+      if (map2.get(scope3) !== state || state.abort.signal.aborted)
         return;
       state.proposal = proposal;
       state.target = target2;
@@ -58249,8 +58448,8 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
         const next = applyDnaChanges(target2, selected);
         next.fieldSources = { ...target2.fieldSources };
         for (const c of selected)
-          next.fieldSources[c.path] = { classification: c.classification, sources: c.sourceRefs.map((id7) => {
-            const e = p.evidence.find((e2) => e2.id === id7);
+          next.fieldSources[c.path] = { classification: c.classification, sources: c.sourceRefs.map((id9) => {
+            const e = p.evidence.find((e2) => e2.id === id9);
             return `${e.source}: ${e.text}`.slice(0, 1000);
           }) };
         if (target2.autoDiscovered)
@@ -58258,12 +58457,12 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
         next.lastUpdated = Date.now();
         l.characters[p.characterId] = next;
       });
-      map2.delete(scope2);
+      map2.delete(scope3);
       await reply();
       return;
     }
     previous?.abort?.abort();
-    map2.delete(scope2);
+    map2.delete(scope3);
     if (request.action === "save") {
       await saveCharacterDNA(spindle2, request.chatId, request.dna, userId, request.revision);
       await reply();
@@ -58422,15 +58621,15 @@ async function reviewStoryAutofill(spindle2, request, userId, readScope) {
       const records = locations ? set2.locations : set2.items;
       const existing = request.targetId ? Object.hasOwn(records, request.targetId) ? records[request.targetId] : undefined : locations ? findMatchingLocation(set2.locations, request.name) : findMatchingItem(set2.items, request.name);
       const candidateId = locations ? createLocationId(request.name) : createItemId(request.name);
-      const id8 = existing?.id ?? request.targetId ?? candidateId;
+      const id10 = existing?.id ?? request.targetId ?? candidateId;
       const deleted = locations ? set2.deletedLocations : set2.deletedItems;
-      if (!existing && request.targetId && id8 !== candidateId || deleted && Object.hasOwn(deleted, id8)) {
+      if (!existing && request.targetId && id10 !== candidateId || deleted && Object.hasOwn(deleted, id10)) {
         throw new Error("This entry changed or was deleted. Reopen it before running autofill.");
       }
       if (existing?.locked)
         throw new Error("Unlock this entry before running autofill.");
-      const name2 = existing?.name ?? request.name;
-      const evidence = [...new Set(paragraphs.flatMap((text3) => targetDnaPassages(text3, [name2, ...existing?.aliases ?? []])))].slice(-8);
+      const name3 = existing?.name ?? request.name;
+      const evidence = [...new Set(paragraphs.flatMap((text3) => targetDnaPassages(text3, [name3, ...existing?.aliases ?? []])))].slice(-8);
       if (!evidence.length)
         throw new Error("No revealed passage mentions this entry yet.");
       const params = {
@@ -58439,19 +58638,19 @@ async function reviewStoryAutofill(spindle2, request, userId, readScope) {
         revealedEvidence: evidence,
         set: {
           revision: set2.revision,
-          locations: locations && existing ? { [id8]: existing } : {},
-          items: !locations && existing ? { [id8]: existing } : {}
+          locations: locations && existing ? { [id10]: existing } : {},
+          items: !locations && existing ? { [id10]: existing } : {}
         }
       };
-      const changes = locations ? changesFor(existing, await autofillLocationDNA(spindle2, { ...params, locationId: id8, locationName: name2 }), LOCATION_AUTOFILL_FIELDS) : changesFor(existing, await autofillItemDNA(spindle2, { ...params, itemId: id8, itemName: name2 }), ITEM_AUTOFILL_FIELDS);
+      const changes = locations ? changesFor(existing, await autofillLocationDNA(spindle2, { ...params, locationId: id10, locationName: name3 }), LOCATION_AUTOFILL_FIELDS) : changesFor(existing, await autofillItemDNA(spindle2, { ...params, itemId: id10, itemName: name3 }), ITEM_AUTOFILL_FIELDS);
       if (reviews.get(key) !== review2)
         throw new Error("A newer autofill review replaced this request.");
       await readScope(position);
       if (reviews.get(key) !== review2)
         throw new Error("A newer autofill review replaced this request.");
-      const proposal = { id: request.requestId, name: name2, paragraphIndex: position.paragraphIndex, evidence, changes };
+      const proposal = { id: request.requestId, name: name3, paragraphIndex: position.paragraphIndex, evidence, changes };
       review2.proposal = proposal;
-      review2.target = { kind: request.kind, id: id8, base: existing };
+      review2.target = { kind: request.kind, id: id10, base: existing };
       return proposal;
     } catch (error61) {
       if (reviews.get(key) === review2)
@@ -58471,8 +58670,8 @@ async function reviewStoryAutofill(spindle2, request, userId, readScope) {
   const selected = review.proposal.changes.filter((change) => request.fields.includes(change.field));
   if (selected.length !== request.fields.length)
     throw new Error("Choose fields from this autofill review.");
-  const { kind, id: id7, base } = review.target;
-  const name = review.proposal.name;
+  const { kind, id: id9, base } = review.target;
+  const name2 = review.proposal.name;
   review.pending = true;
   try {
     await mutateStoryDNASet(spindle2, chatId, userId, undefined, async (set2) => {
@@ -58484,8 +58683,8 @@ async function reviewStoryAutofill(spindle2, request, userId, readScope) {
       const places = kind === "place";
       const records = places ? set2.locations : set2.items;
       const deleted = places ? set2.deletedLocations : set2.deletedItems;
-      const current = Object.hasOwn(records, id7) ? records[id7] : undefined;
-      if (!base && current || base && (!current || current.name !== base.name || current.locked) || deleted && Object.hasOwn(deleted, id7)) {
+      const current = Object.hasOwn(records, id9) ? records[id9] : undefined;
+      if (!base && current || base && (!current || current.name !== base.name || current.locked) || deleted && Object.hasOwn(deleted, id9)) {
         throw new Error("This entry changed, was locked, or was removed. Your selections are still open.");
       }
       for (const change of selected) {
@@ -58496,18 +58695,18 @@ async function reviewStoryAutofill(spindle2, request, userId, readScope) {
       }
       const updates = Object.fromEntries(selected.map((change) => [change.field, change.after]));
       const merged = {
-        id: id7,
-        name,
-        ...places ? {} : { description: name },
+        id: id9,
+        name: name2,
+        ...places ? {} : { description: name2 },
         ...current,
         ...updates,
         autoDiscovered: false,
         lastUpdated: Date.now()
       };
       if (places)
-        set2.locations[id7] = LocationDNASchema.parse(merged);
+        set2.locations[id9] = LocationDNASchema.parse(merged);
       else
-        set2.items[id7] = ItemDNASchema.parse(merged);
+        set2.items[id9] = ItemDNASchema.parse(merged);
     });
     if (reviews.get(key) === review)
       reviews.delete(key);
@@ -58560,7 +58759,7 @@ function runtime3(api2) {
   }
   return r;
 }
-function scope3(chatId, userId) {
+function scope4(chatId, userId) {
   return canonicalJson([userId ?? null, chatId]);
 }
 function storagePath(chatId) {
@@ -58571,7 +58770,7 @@ function storageOptions(userId) {
 }
 async function transaction3(api2, chatId, userId, work) {
   const r = runtime3(api2);
-  const key = scope3(chatId, userId);
+  const key = scope4(chatId, userId);
   const previous = r.tails.get(key) ?? Promise.resolve();
   const current = previous.then(work, work);
   const tail = current.then(() => {
@@ -59043,6 +59242,92 @@ async function generateItemPropArtwork(params) {
 // src/backend/runtime/story-dna-workflow.ts
 init_storage();
 init_story_dna_projection();
+
+// src/backend/runtime/world-clock-workflow.ts
+init_character_dna();
+init_world_clocks();
+init_planner();
+init_story_dna_projection();
+init_story_dna_store();
+init_storage();
+function clockFingerprints(messages) {
+  const sources = new Map;
+  for (const message of messages) {
+    if (message.is_user || message.role === "system")
+      continue;
+    sources.set(swipeTurnTag(message.id, message.swipe_id), fingerprintForMessage(message));
+  }
+  return sources;
+}
+async function applyWorldClock(spindle2, request, userId) {
+  const { chatId, command, requestId, readingPosition: position } = request;
+  if (!await spindle2.chats.get(chatId, userId))
+    throw new Error("This chat is unavailable.");
+  return mutateStoryDNASet(spindle2, chatId, userId, undefined, async (set2) => {
+    const ledger = set2.worldClocks ?? { clocks: [], events: [] };
+    if (command.kind === "create") {
+      if (ledger.clocks.some((clock2) => clock2.id === requestId))
+        return false;
+      if (ledger.clocks.length >= 24)
+        throw new Error("This chat has reached its 24-clock limit.");
+      ledger.clocks.push({ id: requestId, ...command.clock, paused: false });
+      set2.worldClocks = ledger;
+      return;
+    }
+    const clock = ledger.clocks.find((entry) => entry.id === command.clockId);
+    if (!clock)
+      throw new Error("This clock is unavailable.");
+    if (command.kind === "pause") {
+      if (clock.paused === command.paused)
+        return false;
+      clock.paused = command.paused;
+      return;
+    }
+    if (ledger.events.some((event) => event.id === requestId))
+      return false;
+    if (command.kind === "advance" && clock.paused)
+      throw new Error("Resume this clock before recording progress.");
+    if (command.kind === "correct" && command.value > clock.steps)
+      throw new Error("Enter progress within this clock\u2019s range.");
+    if (!position || position.key.chatId !== chatId)
+      throw new Error("Open a prepared passage before updating progress.");
+    const [state, savedPosition] = await Promise.all([
+      loadChatState(spindle2, chatId, userId),
+      loadReadingPosition(spindle2, chatId, userId)
+    ]);
+    const record4 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
+    if (!savedPosition || !sameLoreSource(savedPosition.key, position.key) || savedPosition.paragraphIndex !== position.paragraphIndex || record4?.status !== "ready" || !sameLoreSource(record4.plan.key, position.key) || position.paragraphIndex >= record4.plan.paragraphs.length) {
+      throw new Error("The passage changed. Reopen it before updating progress.");
+    }
+    const messages = await spindle2.chat.getMessages(chatId);
+    const fingerprints = clockFingerprints(messages);
+    const tag = swipeTurnTag(position.key.assistantMessageId, Number(position.key.swipeId ?? 0));
+    const rawFingerprint = fingerprints.get(tag);
+    if (!rawFingerprint || rawFingerprint !== (record4.source?.rawFingerprint ?? record4.plan.key.sourceFingerprint)) {
+      throw new Error("The source reply changed. Reopen the current passage.");
+    }
+    if (command.kind === "advance" && ledger.events.some((event) => event.kind === "advance" && event.clockId === clock.id && event.position.key.assistantMessageId === position.key.assistantMessageId && event.rawFingerprint === rawFingerprint && event.position.paragraphIndex === position.paragraphIndex)) {
+      throw new Error("This passage already contributed to this clock. Use Correct progress to adjust it.");
+    }
+    const visible = filterStoryDnaForActiveBranch(set2, activeBranchSwipeTags(messages), position, fingerprints).worldClocks;
+    if (command.kind === "advance" && visible && visibleClockProgress(visible, clock.id) >= clock.steps) {
+      throw new Error("This clock is complete. Use Correct progress to reopen it.");
+    }
+    if (ledger.events.length >= 512)
+      throw new Error("This chat has reached its clock history limit. Existing progress was preserved.");
+    ledger.events.push({
+      id: requestId,
+      clockId: clock.id,
+      position,
+      rawFingerprint,
+      kind: command.kind,
+      value: command.kind === "advance" ? 1 : command.value,
+      note: command.note
+    });
+  });
+}
+
+// src/backend/runtime/story-dna-workflow.ts
 init_story_dna_harvester();
 async function handleStoryDnaRequest(spindle2, rawRequest, userId, readAutofillScope) {
   const request = StoryDnaRequestSchema.parse(rawRequest);
@@ -59056,7 +59341,7 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId, readAutofillS
       if (!record4 || !sameLoreSource(record4.plan.key, key))
         branch.clear();
     }
-    const filtered = filterStoryDnaForActiveBranch(storyDna, branch, position ?? undefined);
+    const filtered = filterStoryDnaForActiveBranch(storyDna, branch, position ?? undefined, storyDna.worldClocks ? clockFingerprints(msgs) : undefined);
     spindle2.sendToFrontend({
       type: "vn_story_dna",
       chatId: request.chatId,
@@ -59065,6 +59350,10 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId, readAutofillS
     }, userId);
   };
   try {
+    if (request.action === "world_clock") {
+      await reply(await applyWorldClock(spindle2, request, userId));
+      return;
+    }
     if (request.action === "review_autofill" || request.action === "apply_autofill") {
       if (!readAutofillScope)
         throw new Error("Open a prepared reply before running autofill.");
@@ -59260,7 +59549,7 @@ class ImageRetryQueue {
   enqueue(requestId, jobIds, priorityJobIds) {
     if (this.cancelled || this.requests.has(requestId))
       return;
-    const additions = [...new Set(jobIds)].filter((id9) => id9 !== this.active && !this.jobs.includes(id9));
+    const additions = [...new Set(jobIds)].filter((id11) => id11 !== this.active && !this.jobs.includes(id11));
     if (additions.length === 0)
       return;
     if (this.jobs.length + additions.length + (this.active ? 1 : 0) > 24)
@@ -59268,9 +59557,9 @@ class ImageRetryQueue {
     if (this.requests.size >= 128)
       throw new Error("This retry session has reached its request limit. Reopen the reader.");
     this.requests.add(requestId);
-    const priorityMap = new Map((priorityJobIds ?? []).map((id9, idx) => [id9, idx]));
-    for (const id9 of additions) {
-      this.jobPriority.set(id9, priorityMap.has(id9) ? priorityMap.get(id9) : 1e6 + ++this.seq);
+    const priorityMap = new Map((priorityJobIds ?? []).map((id11, idx) => [id11, idx]));
+    for (const id11 of additions) {
+      this.jobPriority.set(id11, priorityMap.has(id11) ? priorityMap.get(id11) : 1e6 + ++this.seq);
     }
     this.jobs.push(...additions);
     this.jobs.sort((a, b) => (this.jobPriority.get(a) ?? Number.MAX_SAFE_INTEGER) - (this.jobPriority.get(b) ?? Number.MAX_SAFE_INTEGER));
@@ -59431,17 +59720,17 @@ function isSafePureSubtree(token) {
   if (names.length === 0)
     return false;
   let hasPureVolatile = false;
-  for (const name of names) {
-    if (PURE_VOLATILE.has(name))
+  for (const name2 of names) {
+    if (PURE_VOLATILE.has(name2))
       hasPureVolatile = true;
-    else if (!PURE_TRANSFORMS.has(name))
+    else if (!PURE_TRANSFORMS.has(name2))
       return false;
   }
   return hasPureVolatile;
 }
 function hasStatefulMacros(text3) {
   const names = extractMacroNames(text3);
-  return names.some((name) => STATEFUL_MACROS.has(name));
+  return names.some((name2) => STATEFUL_MACROS.has(name2));
 }
 function maskVolatileMacros(text3) {
   if (hasStatefulMacros(text3)) {
@@ -59472,7 +59761,7 @@ function maskVolatileMacros(text3) {
   }
   const template = output3 + source.slice(cursor);
   const remainingNames = extractMacroNames(template);
-  const unmaskedVolatile = remainingNames.some((name) => ALL_VOLATILE_MACROS.has(name));
+  const unmaskedVolatile = remainingNames.some((name2) => ALL_VOLATILE_MACROS.has(name2));
   return { template, tokens, stableSelection: !unmaskedVolatile };
 }
 function fillMasks(text3, values) {
@@ -59930,23 +60219,23 @@ async function scanCastContext(api2, chatId, userId, characterId2) {
   const target2 = characterId2 ? library.characters.find((record4) => record4.entityId === characterId2) : undefined;
   if (characterId2 && !target2)
     throw new Error("This character is no longer saved. Refresh the cast list.");
-  const targetNames = target2 ? new Set([target2.name, ...target2.setup?.aliases ?? []].map((name) => normalizeCharacterName(name).toLowerCase())) : null;
+  const targetNames = target2 ? new Set([target2.name, ...target2.setup?.aliases ?? []].map((name2) => normalizeCharacterName(name2).toLowerCase())) : null;
   const candidates = [], seen = new Set;
   let omitted = false;
   let referenceNotice = "";
   let referenceScope;
-  const add = (name, appearance, aliases, attire, source, setup, allowNameOnly = false) => {
-    name = normalizeCharacterName(name);
-    if (!name || name.length > 160 || !allowNameOnly && !isUsableIdentity(name, splitTags(appearance)))
+  const add = (name2, appearance, aliases, attire, source, setup, allowNameOnly = false) => {
+    name2 = normalizeCharacterName(name2);
+    if (!name2 || name2.length > 160 || !allowNameOnly && !isUsableIdentity(name2, splitTags(appearance)))
       return;
-    if (targetNames && !targetNames.has(name.toLowerCase()) && !aliases.some((alias) => targetNames.has(normalizeCharacterName(alias).toLowerCase())))
+    if (targetNames && !targetNames.has(name2.toLowerCase()) && !aliases.some((alias) => targetNames.has(normalizeCharacterName(alias).toLowerCase())))
       return;
     const raw = setup ?? { appearance: appearance.slice(0, 2000), aliases: aliases.filter((a) => a.length <= 160).slice(0, 16), outfits: attire ? [{ id: "scanned-outfit", name: "Current outfit", description: attire.slice(0, 1000) }] : [], defaultOutfitId: attire ? "scanned-outfit" : null };
-    const draft = CastContextScanSchema.safeParse({ candidates: [{ name, source: source.slice(0, 256), setup: raw }], notice: "" });
+    const draft = CastContextScanSchema.safeParse({ candidates: [{ name: name2, source: source.slice(0, 256), setup: raw }], notice: "" });
     const input2 = allowNameOnly ? draft.success ? { success: true, data: draft.data.candidates[0].setup } : { success: false } : CastSetupInputSchema.safeParse(raw);
     if (!input2.success)
       return;
-    const key = JSON.stringify([name.toLowerCase(), input2.data]);
+    const key = JSON.stringify([name2.toLowerCase(), input2.data]);
     if (seen.has(key))
       return;
     if (candidates.length >= 32) {
@@ -59954,7 +60243,7 @@ async function scanCastContext(api2, chatId, userId, characterId2) {
       return;
     }
     seen.add(key);
-    candidates.push({ name, source: source.slice(0, 256), setup: input2.data });
+    candidates.push({ name: name2, source: source.slice(0, 256), setup: input2.data });
   };
   const tracker = config2.includeSimTrackerContext && latest ? scanTrackerCastHistory(messages, latest.id, config2.simTrackerMappings) : [];
   const trackedNames = new Set;
@@ -60011,7 +60300,7 @@ async function scanCastContext(api2, chatId, userId, characterId2) {
   for (const record4 of library.characters)
     if (record4.setup) {
       const s = record4.setup;
-      add(record4.name, s.appearance, s.aliases, "", "Saved setup", { appearance: s.appearance, aliases: s.aliases, outfits: s.outfits.map(({ id: id9, name, description }) => ({ id: id9, name, description })), defaultOutfitId: s.defaultOutfitId });
+      add(record4.name, s.appearance, s.aliases, "", "Saved setup", { appearance: s.appearance, aliases: s.aliases, outfits: s.outfits.map(({ id: id11, name: name2, description }) => ({ id: id11, name: name2, description })), defaultOutfitId: s.defaultOutfitId });
     }
   if (referenceScope) {
     const fresh = await loadTurnRecord(api2, referenceScope.path, userId).catch(() => null), currentPosition = await loadReadingPosition(api2, chatId, userId).catch(() => null);
@@ -60083,10 +60372,10 @@ function correctVisualSubject(cue, subject, registry2, templates) {
     return { ...rest, character: null, resolvedIdentity: "", subjectCategory: "unknown", imageTemplate: templateSnapshot(template) };
   }
   const entry = resolveCharacterReference(registry2, { name: subject.name });
-  const name = entry?.name ?? subject.name;
+  const name2 = entry?.name ?? subject.name;
   const tags = distillVisualTags(subject.appearance?.trim() || entry?.tags || "");
-  if (tags.length < 2 || !isUsableIdentity(name, tags)) {
-    throw new Error(`Enter concrete appearance details for "${name}" (for example hair, eyes, skin, clothing or species). No other character's appearance will be used.`);
+  if (tags.length < 2 || !isUsableIdentity(name2, tags)) {
+    throw new Error(`Enter concrete appearance details for "${name2}" (for example hair, eyes, skin, clothing or species). No other character's appearance will be used.`);
   }
   if (cue.imageTemplate?.subjectMode === "none")
     throw new Error("Choose a character template before preparing this subject.");
@@ -60096,8 +60385,8 @@ function correctVisualSubject(cue, subject, registry2, templates) {
   const explicitCategory = subject.appearance?.trim() ? subjectCategoryFromTags(identity2) : "unknown";
   return {
     ...clean2,
-    character: name,
-    characterId: entry?.id ?? characterIdFor(name),
+    character: name2,
+    characterId: entry?.id ?? characterIdFor(name2),
     resolvedIdentity: identity2,
     subjectCategory: explicitCategory !== "unknown" ? explicitCategory : entry?.subjectCategory ?? subjectCategoryFromTags(identity2)
   };
@@ -60205,26 +60494,26 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         emit({ ...value, status: "error", error: "Invalid scene image request; appearance and pose overrides are not supported." }, userId);
       return;
     }
-    const scope4 = key(r.chatId, userId), completedKey = JSON.stringify([scope4, r.requestId]);
-    for (const [id9, entry] of completed)
+    const scope5 = key(r.chatId, userId), completedKey = JSON.stringify([scope5, r.requestId]);
+    for (const [id11, entry] of completed)
       if (Date.now() - entry.at > 300000)
-        completed.delete(id9);
+        completed.delete(id11);
     const done = completed.get(completedKey);
     if (done) {
       emit(done.result, userId);
       return;
     }
-    const existing = active.get(scope4);
+    const existing = active.get(scope5);
     if (existing?.request.requestId === r.requestId) {
       emit({ ...identity2(r), status: "accepted" }, userId);
       return;
     }
     existing?.controller.abort("Replaced by a newer date image.");
     const controller = new AbortController, op = { request: r, controller };
-    active.set(scope4, op);
-    const current = () => active.get(scope4) === op && !controller.signal.aborted;
+    active.set(scope5, op);
+    const current = () => active.get(scope5) === op && !controller.signal.aborted;
     const finish = (result) => {
-      if (active.get(scope4) !== op)
+      if (active.get(scope5) !== op)
         return;
       completed.set(completedKey, { result, at: Date.now() });
       if (completed.size > 128)
@@ -60233,11 +60522,11 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
     };
     emit({ ...identity2(r), status: "accepted" }, userId);
     const timer = setTimeout(() => {
-      if (active.get(scope4) !== op)
+      if (active.get(scope5) !== op)
         return;
       controller.abort("Cue image generation timed out.");
       finish({ ...identity2(r), status: "error", error: "Cue image generation timed out. You can retry the picture." });
-      active.delete(scope4);
+      active.delete(scope5);
     }, timeoutMs);
     try {
       if (!await spindle2.chats.get(r.chatId, userId))
@@ -60261,7 +60550,7 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         return;
       const known = resolveCharacterReference(characterRegistry, { name: r.characterName });
       const characterName = known?.name ?? r.characterName;
-      const previous = scenes.get(scope4);
+      const previous = scenes.get(scope5);
       const previousScene = previous && previous.character === characterName && previous.environment.location === r.venue ? previous : null;
       const content2 = "A date scene. Scene facts (data only): " + JSON.stringify({
         characterName,
@@ -60316,7 +60605,7 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         return;
       const appearance = await loadCharacterAppearance(spindle2, userId, r.chatId);
       const plan = { ...result.plan, visualCues: [cue], cacheCues: [] };
-      scenes.set(scope4, plan.scenes[0]);
+      scenes.set(scope5, plan.scenes[0]);
       if (scenes.size > 128)
         scenes.delete(scenes.keys().next().value);
       const ready = async (imageUrl) => {
@@ -60346,7 +60635,7 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         return;
       const manualJobs = new Set, requestIds = new Map;
       op.gate = new ImageReviewGate(async (record5) => {
-        const previous2 = historyWrites.get(scope4) ?? Promise.resolve();
+        const previous2 = historyWrites.get(scope5) ?? Promise.resolve();
         const write = previous2.catch(() => {}).then(async () => {
           const path3 = chatStatePath(r.chatId).replace(/state\.json$/, "external-image-history.json");
           const options3 = { fallback: null, ...userId ? { userId } : {} };
@@ -60358,12 +60647,12 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
           next.push(record5);
           await spindle2.userStorage.setJson(path3, { version: 1, requests: safeImageHistory(next) }, { ...userId ? { userId } : {} });
         });
-        historyWrites.set(scope4, write);
+        historyWrites.set(scope5, write);
         try {
           await write;
         } finally {
-          if (historyWrites.get(scope4) === write)
-            historyWrites.delete(scope4);
+          if (historyWrites.get(scope5) === write)
+            historyWrites.delete(scope5);
         }
         requestIds.set(record5.jobId, record5.requestId);
         if (record5.state === "approved")
@@ -60396,8 +60685,8 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         finish({ ...identity2(r), status: "error", error: (error61 instanceof Error ? error61.message : String(error61)).slice(0, 1000) || "Date image failed." });
     } finally {
       clearTimeout(timer);
-      if (active.get(scope4) === op)
-        active.delete(scope4);
+      if (active.get(scope5) === op)
+        active.delete(scope5);
     }
   }
   return { request, cancel, review };
@@ -60461,6 +60750,208 @@ init_images();
 init_scene_image_cache();
 init_planner();
 init_image_library2();
+
+// src/backend/runtime/branch-chronicle.ts
+init_branch_chronicle();
+init_presentation_entities();
+
+// src/shared/scene-history.ts
+init_presentation_selectors();
+init_contracts();
+function turnHistoryKey(turn) {
+  const parsed = TurnKeySchema.safeParse({ chatId: turn.chatId, assistantMessageId: turn.messageId, swipeId: turn.swipeId, sourceFingerprint: turn.sourceFingerprint, revision: turn.revision });
+  return parsed.success ? parsed.data : null;
+}
+function sceneHistoryFor(turn, through) {
+  const key = turnHistoryKey(turn);
+  if (!key || !Number.isInteger(through))
+    return null;
+  const end = Math.min(through, turn.paragraphs.length - 1, 9999), model = { key, through: end, events: [], unavailable: true, truncated: through > 9999 };
+  if (end < 0)
+    return model;
+  const projection = parseReaderPresentation(turn.presentation, key, turn.paragraphs.length);
+  const locations = (turn.sceneLocations ?? []).slice(0, 1e4).filter((entry) => Number.isInteger(entry.paragraphIndex) && entry.paragraphIndex >= 0 && entry.paragraphIndex <= end && typeof entry.location === "string").sort((a, b) => a.paragraphIndex - b.paragraphIndex);
+  const previousPresence = new Map;
+  let previousLocation, locationIndex = 0, recordedLocation = turn.sceneLocations ? null : turn.location?.trim() || null, changeIndex = 0;
+  const state = projection?.version === 2 ? Object.fromEntries(Object.entries(projection.baseline).map(([id11, value]) => [id11, { ...value }])) : Object.create(null);
+  model.unavailable = !projection && !locations.length && !recordedLocation;
+  if (projection?.version === 2 && projection.availableThrough < end)
+    model.truncated = true;
+  const add = (event) => {
+    if (model.events.length >= 256) {
+      model.truncated = true;
+      return false;
+    }
+    model.events.push({ key: { ...key }, ...event });
+    return true;
+  };
+  for (let index = 0;index <= end; index++) {
+    while (locationIndex < locations.length && locations[locationIndex].paragraphIndex <= index)
+      recordedLocation = locations[locationIndex++].location.trim().slice(0, 256) || null;
+    const snapshot = projection?.version === 1 ? projection.snapshots[index] : undefined;
+    if (projection?.version === 2)
+      while (changeIndex < projection.changes.length && projection.changes[changeIndex].paragraphIndex <= index) {
+        const change = projection.changes[changeIndex++], target2 = state[change.entityId] ?? (state[change.entityId] = {});
+        for (const [field, value] of Object.entries(change.changes)) {
+          if (value === null)
+            delete target2[field];
+          else if (value !== undefined)
+            target2[field] = value;
+        }
+      }
+    const covered = projection?.version === 2 ? index <= projection.availableThrough : Boolean(snapshot);
+    const entities = covered ? (snapshot?.entities ?? (projection?.version === 2 ? projection.entities : [])).filter((entity) => entity.firstParagraph <= index) : [];
+    const byId = new Map(entities.map((entity) => [entity.id, entity])), states = snapshot?.stateByEntity ?? state;
+    const placeName = (id11) => {
+      const place = id11 ? byId.get(id11) : undefined;
+      return place?.kind === "place" ? place.name : null;
+    };
+    const locationId2 = snapshot?.locationId ?? (projection?.version === 2 && covered ? projection.beats[index]?.locationId : null), location = placeName(locationId2) ?? recordedLocation;
+    if (location !== previousLocation) {
+      if (location || previousLocation !== undefined) {
+        if (!add({ paragraphIndex: index, kind: "location", label: location ? `Location: ${location}` : "Location not established", location }))
+          break;
+      }
+      previousLocation = location;
+    }
+    for (const entity of entities) {
+      if (entity.kind !== "npc")
+        continue;
+      const current = states[entity.id], presence = current?.presence ?? (snapshot?.presentEntityIds.includes(entity.id) ? "present" : undefined);
+      if (!presence)
+        continue;
+      const personLocation = presence === "present" ? placeName(current?.location) : null, signature = JSON.stringify([presence, personLocation]);
+      if (previousPresence.get(entity.id) === signature)
+        continue;
+      previousPresence.set(entity.id, signature);
+      if (!add({ paragraphIndex: index, kind: "presence", subject: entity.name, presence, location: personLocation, label: `${entity.name} \u2014 ${presence === "present" ? "Present" : "Off scene"}${personLocation ? ` \xB7 ${personLocation}` : ""}` }))
+        break;
+    }
+    if (model.truncated && model.events.length >= 256)
+      break;
+  }
+  return model;
+}
+
+// src/backend/runtime/branch-chronicle.ts
+init_planner();
+init_storage();
+function sameStoredTurn(stored, expected) {
+  return String(stored.swipeId ?? 0) === String(expected.swipeId ?? 0) && samePresentationTurn({ ...stored, swipeId: expected.swipeId }, expected);
+}
+function chronicleSource(position, record5, messages, bookmarkedTimestamp) {
+  const { key, paragraphIndex } = position;
+  const replyIndex = messages.findIndex((message2) => message2.id === key.assistantMessageId);
+  const message = messages[replyIndex];
+  if (!message || !record5)
+    return { status: "missing" };
+  if (!sameStoredTurn(record5.plan.key, key) || record5.status !== "ready" || paragraphIndex >= record5.plan.paragraphs.length)
+    return { status: "changed" };
+  const swipeId = Number(key.swipeId ?? 0);
+  if (!Number.isSafeInteger(swipeId) || swipeId < 0)
+    return { status: "changed" };
+  const content2 = swipeId === message.swipe_id ? message.content : message.swipes?.[swipeId];
+  if (typeof content2 !== "string")
+    return { status: "missing" };
+  const timestamp = message.swipe_dates?.[swipeId];
+  const swipeTimestamp = typeof timestamp === "number" && Number.isSafeInteger(timestamp) && timestamp >= 0 ? timestamp : undefined;
+  if (bookmarkedTimestamp !== undefined && swipeTimestamp !== undefined && swipeTimestamp !== bookmarkedTimestamp) {
+    return { status: "changed" };
+  }
+  const fingerprint = fingerprintForMessage({ id: message.id, swipe_id: swipeId, content: content2 });
+  if (fingerprint !== (record5.source?.rawFingerprint ?? key.sourceFingerprint))
+    return { status: "changed" };
+  return { status: "ready", record: record5, replyNumber: replyIndex + 1, ...swipeTimestamp === undefined ? {} : { swipeTimestamp } };
+}
+function snapshot(source, position, viewFor, showChoices) {
+  if (source.status !== "ready")
+    return { status: source.status };
+  const { record: record5 } = source;
+  const through = position.paragraphIndex;
+  const view = viewFor(record5);
+  const history = sceneHistoryFor(view, through);
+  const pictures = record5.jobs.flatMap((job) => job.paragraphIndex <= through && job.imageId && (job.status === "browser_ready" || job.status === "generated") && sameStoredTurn(job.ownerTurnKey, position.key) ? [{ passage: job.paragraphIndex + 1, provider: job.provider.slice(0, 256), imageId: job.imageId.slice(0, 256) }] : []);
+  return {
+    status: "ready",
+    passage: (view.paragraphs[through] ?? "").slice(0, 4000),
+    facts: [...new Set(history?.events.map((event) => event.label.slice(0, 1000)) ?? [])],
+    completeFacts: Boolean(history && !history.unavailable && !history.truncated),
+    choices: showChoices && through === view.paragraphs.length - 1 ? view.choices.slice(0, 32).map((choice) => ({ label: choice.label.slice(0, 512), locked: Boolean(choice.disabled) })) : [],
+    pictures: pictures.slice(0, 128),
+    morePictures: pictures.length > 128
+  };
+}
+async function readBranchChronicle(api2, input2, userId, viewFor) {
+  const request = BranchChronicleRequestSchema.parse(input2);
+  const { chatId } = request;
+  if (!await api2.chats.get(chatId, userId))
+    throw new Error("This chat is unavailable.");
+  const readRecord = ({ key }) => loadTurnRecord(api2, turnPath(chatId, key.assistantMessageId, key.swipeId), userId);
+  const readMessages = async () => (await api2.chat.getMessages(chatId)).filter((message) => !message.is_user && message.role !== "system");
+  switch (request.action) {
+    case "list":
+      return { bookmarks: (await loadChronicle(api2, chatId, userId)).bookmarks };
+    case "remove": {
+      const saved = await updateChronicle(api2, chatId, userId, (document) => {
+        const bookmarks = document.bookmarks.filter((bookmark) => bookmark.id !== request.bookmarkId);
+        return bookmarks.length === document.bookmarks.length ? document : { ...document, bookmarks };
+      });
+      return { bookmarks: saved.bookmarks };
+    }
+    case "bookmark": {
+      const { position } = request;
+      const current = await loadReadingPosition(api2, chatId, userId);
+      if (position.key.chatId !== chatId || !current || !samePresentationTurn(current.key, position.key) || current.paragraphIndex !== position.paragraphIndex) {
+        throw new Error("The reading position changed. Reopen History from the passage and try again.");
+      }
+      const record5 = await readRecord(position);
+      const messages = await readMessages();
+      const source = chronicleSource(position, record5, messages);
+      if (source.status !== "ready" || messages[source.replyNumber - 1]?.swipe_id !== Number(position.key.swipeId ?? 0)) {
+        throw new Error("This passage no longer matches the active reply.");
+      }
+      const saved = await updateChronicle(api2, chatId, userId, (document) => {
+        if (document.bookmarks.some((bookmark2) => bookmark2.id === request.requestId || samePresentationTurn(bookmark2.position.key, position.key) && bookmark2.position.paragraphIndex === position.paragraphIndex)) {
+          return document;
+        }
+        if (document.bookmarks.length >= 100)
+          throw new Error("This chat has 100 bookmarks. Remove one to add another.");
+        const bookmark = {
+          id: request.requestId,
+          position,
+          replyNumber: source.replyNumber,
+          ...source.swipeTimestamp === undefined ? {} : { swipeTimestamp: source.swipeTimestamp }
+        };
+        return { ...document, bookmarks: [bookmark, ...document.bookmarks] };
+      });
+      return { bookmarks: saved.bookmarks };
+    }
+    case "compare": {
+      const { bookmarks } = await loadChronicle(api2, chatId, userId);
+      const first2 = bookmarks.find((bookmark) => bookmark.id === request.firstId);
+      const second = bookmarks.find((bookmark) => bookmark.id === request.secondId);
+      if (!first2 || !second || first2 === second)
+        throw new Error("Choose two distinct saved bookmarks.");
+      const [firstRecord, secondRecord, config2] = await Promise.all([
+        readRecord(first2.position),
+        readRecord(second.position),
+        loadConfig(api2, userId)
+      ]);
+      const messages = await readMessages();
+      const showChoices = config2.mode === "cyoa";
+      return BranchChronicleResultSchema.parse({
+        bookmarks,
+        comparison: [
+          snapshot(chronicleSource(first2.position, firstRecord, messages, first2.swipeTimestamp), first2.position, viewFor, showChoices),
+          snapshot(chronicleSource(second.position, secondRecord, messages, second.swipeTimestamp), second.position, viewFor, showChoices)
+        ]
+      });
+    }
+  }
+}
+
+// src/backend/runtime/controller.ts
+init_reader_preferences();
 init_system_one();
 init_audio_catalog();
 init_storage();
@@ -60635,7 +61126,7 @@ function scheduleSplitHorizonLore(spindle2, params) {
         notice
       }, params.userId);
       if (config2.debugLogging) {
-        spindle2.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name, status]) => `${name}=${status}`).join(", ")}`);
+        spindle2.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name2, status]) => `${name2}=${status}`).join(", ")}`);
       }
       if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && lore.suppressedDocumentNouns.length === 0)
         return;
@@ -60778,14 +61269,14 @@ var activeTurnKeys = new Map;
 var sceneCache = new SceneImageCache;
 var activeChatByUser = new Map;
 function releaseSceneCacheAdmission(spindle2, userId, chatId, reason) {
-  const scope4 = sceneImageScope(userId, chatId);
-  const epoch = sceneCache.bumpEpoch(scope4, reason);
-  dbg(spindle2, userId, `scene-cache admission released scope=${scope4} epoch=${epoch} reason=${reason}`);
+  const scope5 = sceneImageScope(userId, chatId);
+  const epoch = sceneCache.bumpEpoch(scope5, reason);
+  dbg(spindle2, userId, `scene-cache admission released scope=${scope5} epoch=${epoch} reason=${reason}`);
 }
 function releaseSceneCacheScope(spindle2, userId, chatId, reason) {
-  const scope4 = sceneImageScope(userId, chatId);
-  const dropped = sceneCache.invalidateScope(scope4, reason);
-  dbg(spindle2, userId, `scene-cache scope released scope=${scope4} reason=${reason} dropped=${dropped} generation=${sceneCache.generation(scope4)}`);
+  const scope5 = sceneImageScope(userId, chatId);
+  const dropped = sceneCache.invalidateScope(scope5, reason);
+  dbg(spindle2, userId, `scene-cache scope released scope=${scope5} reason=${reason} dropped=${dropped} generation=${sceneCache.generation(scope5)}`);
 }
 function noteActiveChat(spindle2, userId, chatId) {
   const userKey = userId ?? "owner";
@@ -61118,9 +61609,9 @@ function turnView(record5) {
         }
       }
       for (const s of record5.plan.scenes ?? []) {
-        for (const name of s.cast ?? []) {
-          if (name && !isScenarioTitle(name) && !candMap.has(name.toLowerCase())) {
-            candMap.set(name.toLowerCase(), { name, appearance: "" });
+        for (const name2 of s.cast ?? []) {
+          if (name2 && !isScenarioTitle(name2) && !candMap.has(name2.toLowerCase())) {
+            candMap.set(name2.toLowerCase(), { name: name2, appearance: "" });
           }
         }
       }
@@ -61371,8 +61862,8 @@ async function startAssets(spindle2, record5, path3, userId, options3 = {}) {
     return;
   }
   releaseSceneCacheAdmission(spindle2, userId, record5.plan.key.chatId, "batch_start");
-  const scope4 = sceneImageScope(userId, record5.plan.key.chatId);
-  const admission = sceneCache.admission(scope4);
+  const scope5 = sceneImageScope(userId, record5.plan.key.chatId);
+  const admission = sceneCache.admission(scope5);
   const ownsBatch = () => assetControllers.get(key) === controller && compareTurnKeys(activeTurnKeys.get(key) ?? null, record5.plan.key).accepted;
   if (JSON.stringify(current.jobs) !== JSON.stringify(record5.jobs)) {
     const revision = operations.revision, view = await turnViewWithAudio(spindle2, current, userId);
@@ -61876,8 +62367,8 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     } else if (config2.generateImages) {
       jobs = await prepareAssetJobs(spindle2, result.plan, config2, characterAppearance, sceneCache, userId, sourceTextOption({ resolvedSourceText: resolved }));
       if (result.plan.cacheCues?.length) {
-        const scope4 = sceneImageScope(userId, chatId);
-        retainPlanEpisodes(sceneCache, scope4, result.plan);
+        const scope5 = sceneImageScope(userId, chatId);
+        retainPlanEpisodes(sceneCache, scope5, result.plan);
         const extra = await resolveCacheCues(spindle2, result.plan, config2, characterAppearance, jobs, sceneCache, userId, {
           log: (line2) => dbg(spindle2, userId, line2),
           ...sourceTextOption({ resolvedSourceText: resolved })
@@ -62053,16 +62544,16 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
               }
             }
             for (const rawName of turnCastNames) {
-              const name = rawName.trim();
-              if (!name || isScenarioTitle(name))
+              const name2 = rawName.trim();
+              if (!name2 || isScenarioTitle(name2))
                 continue;
-              if (userSpeaker !== "You" && name.toLowerCase() === userSpeaker.toLowerCase())
+              if (userSpeaker !== "You" && name2.toLowerCase() === userSpeaker.toLowerCase())
                 continue;
-              if (l.deleted?.[name] || findCharacterDNA(l.deleted ?? {}, name))
+              if (l.deleted?.[name2] || findCharacterDNA(l.deleted ?? {}, name2))
                 continue;
-              const existingChar = findCharacterDNA(l.characters, name);
+              const existingChar = findCharacterDNA(l.characters, name2);
               if (!existingChar) {
-                const dna = createEmptyCharacterDNA(name);
+                const dna = createEmptyCharacterDNA(name2);
                 dna.autoDiscovered = true;
                 dna.seenInSwipes = [swipeTag];
                 l.characters[dna.id] = dna;
@@ -62150,10 +62641,10 @@ function submit(spindle2, request, userId) {
 }
 var pendingChoiceScopes = new Set;
 async function submitScopedChoice(spindle2, request, userId) {
-  const scope4 = request.choiceScope;
-  if (scope4.key.chatId !== request.chatId)
+  const scope5 = request.choiceScope;
+  if (scope5.key.chatId !== request.chatId)
     throw new Error("This choice belongs to another chat.");
-  const turnScope = JSON.stringify([scope4.key.assistantMessageId, String(scope4.key.swipeId ?? 0), scope4.key.sourceFingerprint]);
+  const turnScope = JSON.stringify([scope5.key.assistantMessageId, String(scope5.key.swipeId ?? 0), scope5.key.sourceFingerprint]);
   const owner = JSON.stringify([userId, request.chatId, turnScope]);
   if (pendingChoiceScopes.has(owner))
     throw new Error("A choice for this reply is already saving.");
@@ -62173,11 +62664,11 @@ async function submitScopedChoice(spindle2, request, userId) {
     const record5 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
     const latest = messages.at(-1);
     const intake = latest && !latest.is_user ? await resolveMessageIntake(spindle2, request.chatId, latest.content, userId) : undefined;
-    if (!record5 || record5.status !== "ready" || !latest || !intake?.resolved || config2.mode !== "cyoa" || !views.isOpen(userId, request.chatId) || epoch !== (intakeEpochs.get(runtime4) ?? 0) || !sameLoreSource(record5.plan.key, scope4.key) || relateRecord(record5, latest, intake) !== "current") {
+    if (!record5 || record5.status !== "ready" || !latest || !intake?.resolved || config2.mode !== "cyoa" || !views.isOpen(userId, request.chatId) || epoch !== (intakeEpochs.get(runtime4) ?? 0) || !sameLoreSource(record5.plan.key, scope5.key) || relateRecord(record5, latest, intake) !== "current") {
       throw new Error("This choice is no longer available in the current reply.");
     }
-    const choice = record5.plan.choices.find((item) => item.id === scope4.choiceId);
-    if (!choice || choice.disabled || choice.source === "generated" && !config2.generateChoices || scope4.paragraphIndex < choice.unlocksAfterParagraph || scope4.paragraphIndex >= record5.plan.paragraphs.length) {
+    const choice = record5.plan.choices.find((item) => item.id === scope5.choiceId);
+    if (!choice || choice.disabled || choice.source === "generated" && !config2.generateChoices || scope5.paragraphIndex < choice.unlocksAfterParagraph || scope5.paragraphIndex >= record5.plan.paragraphs.length) {
       throw new Error("This choice is locked or has been disabled.");
     }
     try {
@@ -62236,9 +62727,9 @@ async function submitOnce(spindle2, request, userId) {
   }
 }
 async function markAssetReady(spindle2, request, userId) {
-  const scope4 = runtimeKey(userId, request.chatId);
-  const epoch = intakeEpochs.get(scope4) ?? 0;
-  const isCurrent = () => (intakeEpochs.get(scope4) ?? 0) === epoch;
+  const scope5 = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(scope5) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(scope5) ?? 0) === epoch;
   const chatState = await loadChatState(spindle2, request.chatId, userId);
   if (!chatState.activeTurnPath || !isCurrent())
     return;
@@ -62261,8 +62752,8 @@ async function markAssetReady(spindle2, request, userId) {
     dbg(spindle2, userId, `asset ${readyJob2.jobId} p${readyJob2.paragraphIndex} -> browser_ready (decoded in browser)`);
     const jobs = record5.jobs.map((candidate, candidateIndex) => candidateIndex === index ? readyJob2 : candidate);
     const readyRecord = { ...record5, jobs, updatedAt: readyAt };
-    const batch = assetBatchOperations.get(scope4);
-    if (batch?.overrides.has(readyJob2.jobId) && assetControllers.get(scope4) === batch.owner)
+    const batch = assetBatchOperations.get(scope5);
+    if (batch?.overrides.has(readyJob2.jobId) && assetControllers.get(scope5) === batch.owner)
       batch.applyRestore(readyRecord, readyJob2);
     return readyRecord;
   }, isCurrent);
@@ -62280,9 +62771,9 @@ async function markAssetReady(spindle2, request, userId) {
   }, userId);
 }
 async function restorePreviousImage(spindle2, request, userId) {
-  const scope4 = runtimeKey(userId, request.chatId);
-  const epoch = intakeEpochs.get(scope4) ?? 0;
-  const isCurrent = () => (intakeEpochs.get(scope4) ?? 0) === epoch && views.isOpen(userId, request.chatId);
+  const scope5 = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(scope5) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(scope5) ?? 0) === epoch && views.isOpen(userId, request.chatId);
   const chatState = await loadChatState(spindle2, request.chatId, userId);
   if (!chatState.activeTurnPath || !isCurrent())
     return;
@@ -62322,7 +62813,7 @@ async function restorePreviousImage(spindle2, request, userId) {
       const jobs = record5.jobs.map((c, i) => i === index ? restoredJob2 : c);
       const restoreCue = (cue) => cue.assetJobId === job.jobId ? version2.cue : cue;
       const restored = { ...record5, plan: { ...record5.plan, visualCues: record5.plan.visualCues.map(restoreCue), ...record5.plan.cacheCues ? { cacheCues: record5.plan.cacheCues.map(restoreCue) } : {} }, jobs, previousVersions, imageRequests: [...(record5.imageRequests ?? []).filter((entry) => entry.requestId !== version2.request.requestId).map((entry) => entry.jobId === job.jobId && ["review", "prepared"].includes(entry.state) ? { ...entry, state: "cancelled" } : entry), version2.request], updatedAt: restoredAt };
-      const batch = assetBatchOperations.get(scope4);
+      const batch = assetBatchOperations.get(scope5);
       if (batch && turnKeyEquals(batch.key, record5.plan.key)) {
         batch.revision++;
         batch.pendingRestores++;
@@ -62337,7 +62828,7 @@ async function restorePreviousImage(spindle2, request, userId) {
       return restored;
     }, isCurrent);
     if (next && isCurrent()) {
-      const batch = assetBatchOperations.get(scope4), restored = next.jobs.find((job) => job.jobId === request.jobId);
+      const batch = assetBatchOperations.get(scope5), restored = next.jobs.find((job) => job.jobId === request.jobId);
       if (batch && turnKeyEquals(batch.key, next.plan.key)) {
         batch.applyRestore(next, restored);
         batch.cancelJob?.(restored.jobId);
@@ -62455,8 +62946,8 @@ async function retryTurn(spindle2, chatId, message, userId) {
     imageOutputAspectRatio: config2.imageOutputAspectRatio
   };
   if (config2.generateImages && !config2.useNativeCardImages && (existing.plan.cacheCues?.length || existing.plan.classifierVisuals)) {
-    const scope4 = sceneImageScope(userId, chatId);
-    retainPlanEpisodes(sceneCache, scope4, existing.plan);
+    const scope5 = sceneImageScope(userId, chatId);
+    retainPlanEpisodes(sceneCache, scope5, existing.plan);
     const extra = await resolveCacheCues(spindle2, existing.plan, config2, characterAppearance, updatedJobs, sceneCache, userId, {
       log: (line2) => dbg(spindle2, userId, line2),
       ...sourceTextOption(existing)
@@ -62762,11 +63253,11 @@ async function queueImageRetries(spindle2, raw, userId) {
   const state = await loadChatState(spindle2, action.chatId, userId), record5 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
   if (!record5 || record5.plan.key.chatId !== action.chatId || record5.plan.key.assistantMessageId !== action.messageId || record5.plan.key.sourceFingerprint !== action.sourceFingerprint || record5.plan.key.revision !== action.revision || Number(record5.plan.key.swipeId ?? 0) !== action.swipeId)
     throw new Error("This queue belongs to an older reply.");
-  const scope4 = JSON.stringify(record5.plan.key);
+  const scope5 = JSON.stringify(record5.plan.key);
   let entry = imageRetryQueues.get(key);
   if (action.action === "clear") {
     imageRetryEpochs.set(key, (imageRetryEpochs.get(key) ?? 0) + 1);
-    if (entry?.scope === scope4) {
+    if (entry?.scope === scope5) {
       entry.approvedJobIds.clear();
       entry.queue.clearPending();
     } else
@@ -62780,10 +63271,10 @@ async function queueImageRetries(spindle2, raw, userId) {
     throw new Error("This reply changed while queuing pictures.");
   if ((imageRetryEpochs.get(key) ?? 0) !== retryEpoch)
     return;
-  if (action.jobIds.some((id9) => !record5.jobs.some((j) => j.jobId === id9 && j.provider !== CACHE_JOB_PROVIDER)))
+  if (action.jobIds.some((id11) => !record5.jobs.some((j) => j.jobId === id11 && j.provider !== CACHE_JOB_PROVIDER)))
     throw new Error("Choose generated picture slots from this reply.");
   entry = imageRetryQueues.get(key);
-  if (entry && entry.scope !== scope4) {
+  if (entry && entry.scope !== scope5) {
     entry.queue.cancel();
     imageRetryQueues.delete(key);
     entry = undefined;
@@ -62796,18 +63287,18 @@ async function queueImageRetries(spindle2, raw, userId) {
         return;
       spindle2.sendToFrontend({ type: "vn_image_retry_queue", queue: { chatId: action.chatId, messageId: action.messageId, sourceFingerprint: action.sourceFingerprint, swipeId: action.swipeId, revision: action.revision, ...queue.snapshot() } }, userId);
     }, (_jobId, error61) => spindle2.sendToFrontend({ type: "vn_error", chatId: action.chatId, operation: "queue_image_retry", error: errorText2(error61) }, userId));
-    entry = { scope: scope4, queue, approvedJobIds: new Set };
+    entry = { scope: scope5, queue, approvedJobIds: new Set };
     imageRetryQueues.set(key, entry);
   }
   if (entry.queue.hasRequest(action.requestId))
     return;
   const currentQueue = () => views.isOpen(userId, action.chatId) && (intakeEpochs.get(key) ?? 0) === epoch && (imageRetryEpochs.get(key) ?? 0) === retryEpoch && imageRetryQueues.get(key) === entry;
   const ids = [];
-  for (const id9 of action.jobIds) {
+  for (const id11 of action.jobIds) {
     if (!currentQueue())
       return;
-    const job = record5.jobs.find((j) => j.jobId === id9);
-    const held = record5.imageRequests?.filter((r) => r.jobId === id9 && r.state === "review").at(-1);
+    const job = record5.jobs.find((j) => j.jobId === id11);
+    const held = record5.imageRequests?.filter((r) => r.jobId === id11 && r.state === "review").at(-1);
     if (held) {
       try {
         if (imageReviewGates.get(key)?.decide(held.requestId, "generate", {}))
@@ -62817,15 +63308,15 @@ async function queueImageRetries(spindle2, raw, userId) {
         continue;
       }
     }
-    const paused = record5.imageRequests?.filter((r) => r.jobId === id9 && r.state === "prepared").at(-1);
+    const paused = record5.imageRequests?.filter((r) => r.jobId === id11 && r.state === "prepared").at(-1);
     if (paused && await assetBatchOperations.get(key)?.approveHeld?.(paused.requestId))
       continue;
     if (assetControllers.has(key) && ["queued", "generating"].includes(job.status)) {
-      if (!record5.imageRequests?.some((r) => r.jobId === id9 && r.state === "approved"))
-        entry.approvedJobIds.add(id9);
+      if (!record5.imageRequests?.some((r) => r.jobId === id11 && r.state === "approved"))
+        entry.approvedJobIds.add(id11);
       continue;
     }
-    ids.push(id9);
+    ids.push(id11);
   }
   if (currentQueue()) {
     if (ids.length > 0)
@@ -62857,6 +63348,25 @@ async function handleFrontendMessage(spindle2, request, userId) {
     case "vn_image_library": {
       const page = await readImageLibraryPage(spindle2, request, userId);
       spindle2.sendToFrontend({ type: "vn_image_library", chatId: request.chatId, requestId: request.requestId, page }, userId);
+      return;
+    }
+    case "vn_branch_chronicle": {
+      const result = await readBranchChronicle(spindle2, request, userId, turnView);
+      spindle2.sendToFrontend({ type: "vn_branch_chronicle", chatId: request.chatId, requestId: request.requestId, result }, userId);
+      return;
+    }
+    case "vn_rehearsal_preset": {
+      if (!await spindle2.chats.get(request.chatId, userId))
+        throw new Error("This chat is unavailable.");
+      const config2 = await updateConfig(spindle2, (current) => ({
+        readerPreferences: changeRehearsalPreset(current.readerPreferences, request.command)
+      }), userId);
+      spindle2.sendToFrontend({
+        type: "vn_rehearsal_preset",
+        chatId: request.chatId,
+        requestId: request.requestId,
+        preferences: config2.readerPreferences
+      }, userId);
       return;
     }
     case "vn_replan_turn":
@@ -63052,14 +63562,14 @@ async function handleFrontendMessage(spindle2, request, userId) {
     case "vn_story_dna": {
       await handleStoryDnaRequest(spindle2, request, userId, async ({ key: source, paragraphIndex }) => {
         const chatId = request.chatId;
-        const scope4 = runtimeKey(userId, chatId);
-        const epoch = intakeEpochs.get(scope4) ?? 0;
+        const scope5 = runtimeKey(userId, chatId);
+        const epoch = intakeEpochs.get(scope5) ?? 0;
         const state = await loadChatState(spindle2, chatId, userId);
         const record5 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
         const messages = await spindle2.chat.getMessages(chatId);
         const latest = [...messages].reverse().find((message) => !message.is_user && Boolean(message.content.trim()));
         const intake = latest ? await resolveMessageIntake(spindle2, chatId, latest.content, userId) : undefined;
-        if (!record5 || !latest || !intake?.resolved || !views.isOpen(userId, chatId) || epoch !== (intakeEpochs.get(scope4) ?? 0) || !sameLoreSource(record5.plan.key, source) || relateRecord(record5, latest, intake) !== "current" || paragraphIndex >= record5.plan.paragraphs.length) {
+        if (!record5 || !latest || !intake?.resolved || !views.isOpen(userId, chatId) || epoch !== (intakeEpochs.get(scope5) ?? 0) || !sameLoreSource(record5.plan.key, source) || relateRecord(record5, latest, intake) !== "current" || paragraphIndex >= record5.plan.paragraphs.length) {
           throw new Error("The reply changed. Reopen this passage before running autofill.");
         }
         return record5.plan.paragraphs.slice(Math.max(0, paragraphIndex - 32), paragraphIndex + 1).map((paragraph) => paragraph.text);

@@ -1,5 +1,6 @@
 ﻿import {SceneScrubber} from '../stage/scene-scrubber.js';
 import {RelationshipTracker} from '../stage/relationship-tracker.js';
+import {BranchChronicle} from '../image-library/branch-chronicle.js';
 import {sceneHistoryFor,turnHistoryKey} from '../../shared/scene-history.js';
 import {progressForCursor} from '../speech/read-along.js';
 import {musicTrackForPosition,locationForPosition,atmosphereForPosition} from '../../shared/scene-atmosphere.js';
@@ -24,6 +25,8 @@ import type { AssetView, BackendResponse, ConnectionCatalogOption, FrontendReque
 import { AudioEngine, VnStage, isAmbientEffect, isStageEffect } from "../stage/index.js";
 import { QuickTunerDrawer } from "../stage/quick-tuner.js";
 import { QuickDirectorPopover } from "../stage/quick-director.js";
+import { RehearsalRequestSchema } from "../../shared/rehearsal-presets.js";
+import type { ReaderPreferences } from "../../shared/reader-preferences.js";
 import type { AmbientEffect, StageEffect } from "../store/index.js";
 import { VisualNovelSettingsPanel } from "../settings/panel.js";
 import { ImageStudio } from "../image-review/studio.js";
@@ -563,6 +566,15 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     timer: ReturnType<typeof setTimeout>;
   }>();
   const pendingStoryDnaWrites = new Set<string>();
+  const clockRequests = new Map<string, { finish: (error?: string) => void; timer: ReturnType<typeof setTimeout> }>();
+  function finishClockRequest(requestId: string, error?: string): boolean {
+    const pending = clockRequests.get(requestId);
+    if (!pending) return false;
+    clockRequests.delete(requestId);
+    clearTimeout(pending.timer);
+    pending.finish(error);
+    return true;
+  }
   function saveCursor(paragraphIndex: number, immediate = false): void {
     if (stage.isReadingUserParagraph()) return;
     const position = loadedReadingCursor.position(paragraphIndex);
@@ -803,6 +815,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   let directorDnaChat: string | null = null;
   let directorScope: { token: string; paragraphIndex: number; jobId: string; imageId: string } | null = null;
+  let rehearsalWrite: {
+    id: string; chatId: string; apply: boolean; timer: ReturnType<typeof setTimeout>;
+    finish: (preferences?: ReaderPreferences, error?: string) => void;
+  } | null = null;
   const directorAssets = (source: TurnView, index: number) => source.assets.filter(asset => asset.paragraphIndex === index);
   const directorSubject = (source: TurnView, jobId: string) => {
     const brief = source.imageRequests?.filter(request => request.jobId === jobId && (request.state === "approved" || request.state === "prepared")).at(-1)?.imagePromptMetadata?.brief;
@@ -811,6 +827,26 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const directorOutfits = (source: TurnView, jobId: string) => directorDnaChat === source.chatId
     ? stage.getDirectorOutfits(directorSubject(source, jobId)) : [];
   quickDirector = new QuickDirectorPopover({
+    onRehearsalPreset: (command, finish) => {
+      if (rehearsalWrite) { finish(undefined, 'A preset save is still in progress.'); return; }
+      const checked = RehearsalRequestSchema.safeParse({
+        type: 'vn_rehearsal_preset', chatId: chatId(), requestId: createUiId(), command,
+      });
+      if (!checked.success) { finish(undefined, 'Enter a valid presentation preset name.'); return; }
+      const request = checked.data;
+      const timer = setTimeout(() => {
+        if (rehearsalWrite?.id !== request.requestId) return;
+        rehearsalWrite = null;
+        finish(undefined, 'Preset save timed out. Refresh the reader before trying again.');
+      }, 15_000);
+      rehearsalWrite = { id: request.requestId, chatId: request.chatId, apply: command.action === 'apply', timer, finish };
+      try { ctx.sendToBackend(request); }
+      catch {
+        clearTimeout(timer);
+        rehearsalWrite = null;
+        finish(undefined, 'The preset request could not be sent.');
+      }
+    },
     mount: stage.panelMount,
     onOpenArtwork: () => {
       const candidates = turn ? directorAssets(turn, stage.getState().currentParagraphIndex) : [];
@@ -886,6 +922,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       });
       quickDirector.setOutfits([]);
     }
+    quickDirector.setRehearsalScene(stage.sceneForRehearsal(), configRef.current?.readerPreferences);
     quickDirector.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-director", onQuickDirectorEvent);
@@ -951,13 +988,38 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
   });
   imageLibrary.useHistoryEntry();
+  const chronicle = new BranchChronicle(
+    request => ctx.sendToBackend(request),
+    () => {
+      if (stage.isReadingUserParagraph() || stage.getState().isUserTurn) return null;
+      const index = stage.getState().currentParagraphIndex;
+      const position = loadedReadingCursor.position(index);
+      return position?.key.chatId === chatId() && index <= stage.getRevealedThrough() ? position : null;
+    },
+    position => seekHistory(position.key, position.paragraphIndex),
+  );
   const readingHistory=document.createElement('div');readingHistory.dataset.currentReadingHistory='';readingHistory.style.cssText='padding:12px;border:1px solid var(--vn-shell-border,#456);border-radius:12px;overflow-wrap:anywhere';
   const sceneScrubber=new SceneScrubber(seekHistory),relationshipTracker=new RelationshipTracker(seekHistory);
   const readingStyle=document.createElement('style');readingStyle.textContent='[data-current-reading-history] button{min-height:44px;font:inherit;max-width:100%;white-space:normal;overflow-wrap:anywhere}[data-current-reading-history]{min-width:0;overflow-wrap:anywhere}[data-current-reading-history] h3{font-size:1rem;margin:12px 0}[data-current-reading-history] article{border-top:1px solid var(--vn-shell-border,#456);padding:10px 0}[data-current-reading-history] small{display:block}[data-relationship-tracker][hidden]{display:none}';readingHistory.append(readingStyle,sceneScrubber.element,relationshipTracker.element);imageLibrary.setReadingHistorySurface(readingHistory);
+  readingStyle.textContent += `
+    [data-branch-chronicle]{margin-block:8px;padding:8px 12px;border-radius:10px;border:1px solid var(--vn-shell-border,#456);background:var(--vn-shell-field,rgba(0,0,0,.18))}
+    [data-branch-chronicle]>summary{min-height:44px;align-content:center;font-weight:650;color:var(--vn-shell-accent,#85d9fa);cursor:pointer}
+    [data-chronicle-pair]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-block:8px}
+    [data-chronicle-pair] label{display:grid;gap:4px;min-width:0}
+    [data-chronicle-pair] select{min-width:0;min-height:44px;max-width:100%}
+    [data-chronicle-actions]{display:flex;gap:6px;flex-wrap:wrap}
+    [data-chronicle-results]:empty{display:none}
+    [data-chronicle-results] h4{margin:0 0 6px}
+    [data-chronicle-results] article{min-width:0}
+    [data-chronicle-prose]{font:1em/1.65 Georgia,serif;white-space:pre-wrap}
+    @media(max-width:620px){[data-chronicle-pair]{grid-template-columns:1fr}}
+  `;
+  readingHistory.prepend(chronicle.element);
   function syncReadingHistory():void{const source=loadedReadingCursor.turn;if(!source||source.chatId!==chatId()||stage.getState().isUserTurn){sceneScrubber.clear();relationshipTracker.disable();return;}const index=stage.getState().currentParagraphIndex,model=sceneHistoryFor(source,stage.getRevealedThrough());sceneScrubber.setModel(model,index);relationshipTracker.setContext(source,index,configRef.current?.relationshipTrackerEnabled??false,model?.events??[]);}
   function seekHistory(key:import('../../shared/contracts.js').TurnKey,index:number):boolean{const source=loadedReadingCursor.turn,current=source?turnHistoryKey(source):null;if(!current||!samePresentationTurn(current,key)||!Number.isInteger(index)||index<0||index>stage.getRevealedThrough()||stage.getState().isUserTurn)return false;stage.toggleAutoPlay(false);stage.toggleSkip(false);speech.stop("history-seek");speech.setCursor(speechCursorFor(source!,index),{autoplay:false});imageLibrary.close();stage.jumpToParagraph(index);stage.focus();return stage.getState().currentParagraphIndex===index;}
   function seekLoadedHistory(index:number):void{const source=loadedReadingCursor.turn,key=source?turnHistoryKey(source):null;if(key)seekHistory(key,index);}
-  imageLibrary.onReadingHistoryRefresh=syncReadingHistory;
+  imageLibrary.onReadingHistoryRefresh=()=>{syncReadingHistory();chronicle.setScope(chatId()??null);};
+  imageLibrary.onReadingHistoryHidden=()=>chronicle.setScope(null);
 
   stage.workspace.onMusicSelection=track=>{manualMusicTrack=track;if(turn&&active)syncAudioForParagraph(turn,stage.getState().currentParagraphIndex,false);};
   stage.historyOpener=opener=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>seekLoadedHistory(idx));imageLibrary.open('story',opener);};
@@ -991,12 +1053,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       ? result : { error: "The reading position changed. Run autofill again." });
     return true;
   }
-  const sendStoryDna: StoryDnaRequester = (body, onReview) => {
+  const sendStoryDna: StoryDnaRequester = (body, onReview, onClockResult) => {
     const owner = chatId();
     const isAutofill = body.action === "review_autofill" || body.action === "apply_autofill";
-    const position = isAutofill && active ? loadedReadingCursor.position(stage.getState().currentParagraphIndex) : null;
-    if (!owner || (isAutofill && !position)) {
+    const clockNeedsPassage = body.action === 'world_clock' && (body.command.kind === 'advance' || body.command.kind === 'correct');
+    const needsPassage = isAutofill || clockNeedsPassage;
+    const position = needsPassage && active && (!clockNeedsPassage || !stage.isReadingUserParagraph())
+      ? loadedReadingCursor.position(stage.getState().currentParagraphIndex) : null;
+    if (!owner || (needsPassage && !position)) {
       onReview?.({ error: "Open a prepared passage first." });
+      onClockResult?.("Open a prepared passage first.");
       return;
     }
     const requestId = createUiId();
@@ -1004,7 +1070,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       ...(position ? { readingPosition: position } : {}) });
     if (!checked.success) {
       const error = checked.error.issues[0]?.message ?? 'Invalid location or item DNA field.';
-      if (onReview) onReview({ error });
+      if (onClockResult) onClockResult(error);
+      else if (onReview) onReview({ error });
       else stage.setStoryDnaError(error);
       return;
     }
@@ -1014,15 +1081,22 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         : "Autofill timed out. Run it again to retry.";
       const timer = setTimeout(() => finishStoryAutofill(requestId, { error: timeoutMessage }), 60_000);
       storyAutofillRequests.set(requestId, { position, finish: onReview, timer });
+    } else if (body.action === 'world_clock' && onClockResult) {
+      const timer = setTimeout(() => {
+        if (finishClockRequest(requestId, 'The save did not respond. Check the clock before retrying.')) refreshStoryLore();
+      }, 15_000);
+      clockRequests.set(requestId, { timer, finish: onClockResult });
     } else if (body.action === 'list') latestStoryDnaRequestId = requestId;
     else pendingStoryDnaWrites.add(requestId);
     try {
       ctx.sendToBackend(checked.data);
     } catch (error) {
-      if (!finishStoryAutofill(requestId, { error: error instanceof Error ? error.message : String(error) })) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!finishClockRequest(requestId, message) && !finishStoryAutofill(requestId, { error: message })) throw error;
     }
   };
   function clearStoryLore(): void {
+    for (const id of clockRequests.keys()) finishClockRequest(id, 'The reading context changed. Check the clock before retrying.');
     settingsPanel?.setSidecarStatus("");
     for (const [requestId, pending] of storyAutofillRequests) {
       clearTimeout(pending.timer);
@@ -1600,6 +1674,25 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if(message.type==='vn_image_library'){imageLibrary.receive(message.chatId,message.requestId,message.page);return;}
     if(message.type==='vn_error'&&message.operation==='vn_image_library'){imageLibrary.error(message.chatId??'',message.requestId,message.error);return;}
+    if(message.type==='vn_branch_chronicle'){chronicle.receive(message.chatId,message.requestId,message.result);return;}
+    if(message.type==='vn_error'&&message.operation==='vn_branch_chronicle'){chronicle.error(message.chatId??'',message.requestId,message.error);return;}
+    if (message.type === 'vn_rehearsal_preset' || (message.type === 'vn_error' && message.operation === 'vn_rehearsal_preset')) {
+      const pending = rehearsalWrite;
+      if (!pending || pending.id !== message.requestId || pending.chatId !== message.chatId) return;
+      clearTimeout(pending.timer);
+      rehearsalWrite = null;
+      if (pending.chatId !== chatId()) return;
+      if (message.type === 'vn_error') { pending.finish(undefined, message.error); return; }
+      const current = configRef.current;
+      if (current) {
+        configRef.current = { ...current, readerPreferences: message.preferences };
+        if (pending.apply) stage.setReaderPreferences(message.preferences);
+        quickTuner.setConfig(configRef.current);
+        settingsPanel?.setConfig(configRef.current);
+      }
+      pending.finish(message.preferences);
+      return;
+    }
     if (message.type === "vn_external_image") {
       if (message.result.status !== "accepted") externalReview.result(message.result.chatId, message.result.requestId);
       imageBridge.result(message.result); return;
@@ -1657,10 +1750,12 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (type === 'vn_story_dna' && message.type === 'vn_story_dna') {
       if (message.chatId !== chatId() || !message.requestId) return;
       if (message.requestId === latestStoryDnaRequestId) stage.setStoryDna(message.storyDna);
+      else if (finishClockRequest(message.requestId)) refreshStoryLore();
       else if (pendingStoryDnaWrites.delete(message.requestId)) refreshStoryLore();
       return;
     }
     if (type === 'vn_error' && message.type === 'vn_error' && message.operation === 'vn_story_dna') {
+      if (message.requestId && message.chatId === chatId() && finishClockRequest(message.requestId, message.error)) return;
       if (message.requestId && message.chatId === chatId() && finishStoryAutofill(message.requestId, { error: message.error })) return;
       const accepted = !message.requestId || message.requestId === latestStoryDnaRequestId || pendingStoryDnaWrites.delete(message.requestId);
       if (accepted && (!message.chatId || message.chatId === chatId())) stage.setStoryDnaError(message.error);
@@ -2037,6 +2132,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     deactivate();
     stage.workspace.destroy();
     destroyed = true;
+    if (rehearsalWrite) clearTimeout(rehearsalWrite.timer);
+    rehearsalWrite = null;
     unbindFrontendUuidProvider();
     unsubBackend();
     unsubAction();

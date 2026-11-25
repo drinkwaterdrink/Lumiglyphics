@@ -19,8 +19,8 @@ const pathFor = (chatId: string) => `chats/${encodeURIComponent(chatId).replace(
 const queues = new WeakMap<object, Map<string, Promise<unknown>>>();
 
 function phase1RollbackCopy(set: StoryDNASet): StoryDNASet | null {
-  const { loreEvents, loreHeads, hiddenLoreThreads, ...base } = set;
-  const needsCopy = loreEvents || loreHeads || hiddenLoreThreads ||
+  const { loreEvents, loreHeads, hiddenLoreThreads, worldClocks, ...base } = set;
+  const needsCopy = loreEvents || loreHeads || hiddenLoreThreads || worldClocks ||
     base.thoughtCabinet?.some(entry => entry.authored !== undefined) ||
     Object.values(base.documents ?? {}).some(doc => doc.appearances || doc.sections.some(section => section.sourceTurn) ||
       doc.observations?.some(observation => observation.sourceTurn)) ||
@@ -62,7 +62,7 @@ export async function mutateStoryDNASet(
   chatId: string,
   userId: string | undefined,
   expectedRevision: number | undefined,
-  mutation: (set: StoryDNASet) => void | Promise<void>
+  mutation: (set: StoryDNASet) => void | false | Promise<void | false>
 ): Promise<StoryDNASet> {
   if (!spindle.userStorage) throw new Error('Story DNA storage is unavailable. Your changes have not been saved.');
   let scopes = queues.get(spindle);
@@ -77,7 +77,7 @@ export async function mutateStoryDNASet(
     if (expectedRevision !== undefined && expectedRevision !== (set.revision ?? 0)) {
       throw new Error('Story DNA changed. Reload the latest data before saving.');
     }
-    await mutation(set);
+    if (await mutation(set) === false) return set;
     set.revision = (set.revision ?? 0) + 1;
     const candidate = StoryDNASetSchema.safeParse(set);
     if (!candidate.success) {

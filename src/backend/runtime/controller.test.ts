@@ -8,6 +8,12 @@ import { markAssetReady, registerVisualNovelBackend, sendState, turnView, turnVi
 import { chatStatePath, singleCharacterStatePath, turnPath, saveTurnRecord, saveChatState, type StoredChatState, type StoredTurnRecord } from "./storage.js";
 import { seedSingleCharacter } from "../core/visual-state.js";
 import { SINGLE_CHARACTER_SCHEMA_VERSION } from "../../shared/character.js";
+import { readBranchChronicle } from "./branch-chronicle.js";
+import { fingerprintForMessage } from "./planner.js";
+import { loadConfig, saveReadingPosition, updateConfig } from "./storage.js";
+import { handleStoryDnaRequest } from "./story-dna-workflow.js";
+import { visibleClockProgress, type WorldClockCommand, type WorldClockLedger } from "../../shared/world-clocks.js";
+import { changeRehearsalPreset, sceneLook } from "../../shared/reader-preferences.js";
 
 const now = new Date().toISOString();
 const key = {
@@ -1481,6 +1487,207 @@ test('P1 #39: vn_get_turn_snapshot inspects historical turns read-only without p
   expect(snap.turn?.messageId).toBe('older-msg');
   expect(snap.turn?.swipeId).toBe(1);
   expect(f.sent.some((m: any) => m.type === 'vn_planning')).toBe(false);
+});
+
+test('Branch Chronicle compares only authorized, previously bookmarked swipe passages', async () => {
+  const storage = new Map<string, unknown>();
+  let writes = 0;
+  const message = {
+    id: 'message', is_user: false, swipe_id: 0, content: 'First version.',
+    swipes: ['First version.', 'Second version.'], swipe_dates: [1, 2],
+  };
+  const spindle = {
+    chats: { get: async (chat: string) => chat === 'chat' ? { id: chat } : null },
+    chat: { getMessages: async () => [message] },
+    userStorage: {
+      getJson: async (path: string, { userId, fallback }: { userId: string; fallback: unknown }) =>
+        structuredClone(storage.get(`${userId}/${path}`) ?? fallback),
+      setJson: async (path: string, data: unknown, { userId }: { userId: string }) => {
+        writes++;
+        storage.set(`${userId}/${path}`, structuredClone(data));
+      },
+    },
+  } as unknown as SpindleAPI;
+  const common = { type: 'vn_branch_chronicle', chatId: 'chat' } as const;
+  const choice = { id: 'late-choice', label: 'Open the observatory', submission: 'Open it', source: 'generated', unlocksAfterParagraph: 1 } as const;
+  for (const swipeId of [0, 1]) {
+    const content = message.swipes[swipeId]!;
+    message.swipe_id = swipeId;
+    message.content = content;
+    const turnKey = { ...key, swipeId, sourceFingerprint: fingerprintForMessage({ id: message.id, swipe_id: swipeId, content }) };
+    const savedPlan = TurnPlanSchema.parse({
+      ...plan, key: { ...turnKey, swipeId: swipeId === 0 ? null : String(swipeId) },
+      paragraphs: [{ index: 0, sourceIndex: 0, text: content }, { index: 1, sourceIndex: 1, text: 'Future passage.' }],
+      scenes: [plan.scenes[0], {
+        ...plan.scenes[0], sceneId: 'late', startParagraph: 1, priorSceneId: plan.scenes[0]!.sceneId,
+        environment: { ...plan.scenes[0]!.environment, location: 'Secret observatory' },
+      }],
+      choices: [choice],
+    });
+    const record: StoredTurnRecord = {
+      schemaVersion: 1, speaker: 'Mira', status: 'ready', plan: savedPlan,
+      jobs: [0, 1].map(paragraphIndex => ({ ...generatedJob(), ownerTurnKey: savedPlan.key, paragraphIndex, imageId: `image-${paragraphIndex}` })),
+      updatedAt: now,
+    };
+    storage.set(`reader/${turnPath('chat', message.id, swipeId)}`, record);
+    const position = { version: 1, key: turnKey, paragraphIndex: swipeId } as const;
+    await saveReadingPosition(spindle, position, 'reader');
+    await expect(readBranchChronicle(spindle, {
+      ...common, action: 'bookmark', requestId: 'unread', position: { ...position, paragraphIndex: 1 - swipeId },
+    }, 'reader', turnView)).rejects.toThrow('reading position changed');
+    const bookmark = { ...common, action: 'bookmark', requestId: `bookmark-${swipeId}`, position } as const;
+    await readBranchChronicle(spindle, bookmark, 'reader', turnView);
+    const writesBeforeRetry = writes;
+    const retried = await readBranchChronicle(spindle, bookmark, 'reader', turnView);
+    expect(retried.bookmarks).toHaveLength(swipeId + 1);
+    expect(writes).toBe(writesBeforeRetry);
+  }
+
+  const compare = { ...common, action: 'compare', requestId: 'comparison', firstId: 'bookmark-0', secondId: 'bookmark-1' } as const;
+  const before = writes;
+  const result = await readBranchChronicle(spindle, compare, 'reader', turnView);
+  expect(writes).toBe(before);
+  expect(result.comparison?.[0]).toMatchObject({
+    status: 'ready', passage: 'First version.', choices: [],
+    pictures: [{ passage: 1, imageId: 'image-0' }],
+  });
+  expect(result.comparison?.[1]).toMatchObject({
+    status: 'ready', passage: 'Future passage.',
+    choices: [], pictures: [{ passage: 1 }, { passage: 2 }],
+  });
+  expect(result.comparison?.map(side => side.status === 'ready' ? side.facts.filter(fact => fact.startsWith('Location:')) : []))
+    .toEqual([['Location: Library'], ['Location: Library', 'Location: Secret observatory']]);
+  storage.set('reader/config.json', { mode: 'cyoa' });
+  expect((await readBranchChronicle(spindle, compare, 'reader', turnView)).comparison?.[1])
+    .toMatchObject({ choices: [{ label: 'Open the observatory', locked: false }] });
+  expect(await readBranchChronicle(spindle, { ...common, action: 'list', requestId: 'other-user' }, 'other', turnView))
+    .toEqual({ bookmarks: [] });
+  await expect(readBranchChronicle(spindle, { ...compare, chatId: 'another-chat' }, 'reader', turnView)).rejects.toThrow('unavailable');
+
+  message.swipe_dates[0] = 3;
+  expect((await readBranchChronicle(spindle, compare, 'reader', turnView)).comparison?.[0]).toEqual({ status: 'changed' });
+  message.swipe_dates[0] = 1;
+  message.swipes[0] = 'An edited opening.';
+  expect((await readBranchChronicle(spindle, compare, 'reader', turnView)).comparison?.[0]).toEqual({ status: 'changed' });
+  message.swipes = [];
+  expect((await readBranchChronicle(spindle, compare, 'reader', turnView)).comparison?.[0]).toEqual({ status: 'missing' });
+  expect((await readBranchChronicle(spindle, {
+    ...common, action: 'remove', requestId: 'remove', bookmarkId: 'bookmark-0',
+  }, 'reader', turnView)).bookmarks.map(bookmark => bookmark.id)).toEqual(['bookmark-1']);
+});
+
+test('Living World clocks persist accepted beats and project through the current branch and reveal boundary', async () => {
+  const store = new Map<string, unknown>();
+  const messages: Record<string, string>[] = [];
+  let writes = 0;
+  let reply = { id: 'message', is_user: false, swipe_id: 0, content: 'Mira takes the ferry.' };
+  const spindle = {
+    chats: { get: async (chatId: string, userId: string) => chatId === 'chat' && userId === 'reader' ? { id: chatId } : null },
+    chat: { getMessages: async () => [reply] },
+    userStorage: {
+      getJson: async (path: string, { userId, fallback }: { userId: string; fallback: unknown }) =>
+        structuredClone(store.get(`${userId}/${path}`) ?? fallback),
+      setJson: async (path: string, value: unknown, { userId }: { userId: string }) => {
+        writes++;
+        store.set(`${userId}/${path}`, structuredClone(value));
+      },
+    },
+    sendToFrontend: (message: Record<string, string>) => messages.push(message),
+  } as unknown as SpindleAPI;
+  const recordPassage = async (paragraphIndex: number) => {
+    const turnKey = { ...key, swipeId: reply.swipe_id, sourceFingerprint: fingerprintForMessage(reply) };
+    const path = turnPath('chat', reply.id, reply.swipe_id);
+    store.set(`reader/${path}`, {
+      schemaVersion: 1, status: 'ready', speaker: 'Mira', jobs: [], updatedAt: now,
+      plan: { ...plan, key: turnKey, paragraphs: [plan.paragraphs[0], { index: 1, sourceIndex: 1, text: reply.content }] },
+    });
+    await saveChatState(spindle, 'chat', {
+      schemaVersion: 1, activeTurnPath: path, latestScene: null, terminalContinuity: plan.terminalContinuity, updatedAt: now,
+    }, 'reader');
+    const position = { version: 1, key: turnKey, paragraphIndex } as const;
+    await saveReadingPosition(spindle, position, 'reader');
+    return position;
+  };
+  let position = await recordPassage(0);
+  const send = (requestId: string, command?: WorldClockCommand, userId = 'reader') =>
+    handleStoryDnaRequest(spindle, {
+      type: 'vn_story_dna', chatId: 'chat', requestId, readingPosition: position,
+      ...(command ? { action: 'world_clock', command } : { action: 'list' }),
+    }, userId);
+  const progress = () => {
+    const view = messages.at(-1) as unknown as { storyDna: { worldClocks: WorldClockLedger } };
+    return visibleClockProgress(view.storyDna.worldClocks, 'ferry');
+  };
+  const disabledWrites = writes;
+  await send('before');
+  expect(messages.at(-1)).toMatchObject({ storyDna: { revision: 0 } });
+  expect(writes).toBe(disabledWrites);
+  await send('forbidden', { kind: 'create', clock: { title: 'Ferry', kind: 'deadline', steps: 2 } }, 'other');
+  expect(messages.at(-1)).toMatchObject({ type: 'vn_error', error: 'This chat is unavailable.' });
+  await send('ferry', { kind: 'create', clock: { title: 'Catch the ferry', kind: 'deadline', steps: 2 } });
+  expect(progress()).toBe(0);
+  const advance = { kind: 'advance', clockId: 'ferry', note: 'Mira reaches the pier.' } as const;
+  await send('first', advance);
+  expect(progress()).toBe(1);
+  const afterFirst = writes;
+  await send('first', advance);
+  expect(progress()).toBe(1);
+  expect(writes).toBe(afterFirst);
+  await send('revisit', advance);
+  expect(messages.at(-1)?.error).toMatch(/already contributed/);
+  position = await recordPassage(1);
+  await send('pause', { kind: 'pause', clockId: 'ferry', paused: true });
+  await send('paused-advance', advance);
+  expect(messages.at(-1)?.error).toMatch(/Resume this clock/);
+  await send('resume', { kind: 'pause', clockId: 'ferry', paused: false });
+  await send('second', { ...advance, note: 'Mira boards the ferry.' });
+  expect(progress()).toBe(2);
+  await send('correction', { kind: 'correct', clockId: 'ferry', value: 1, note: 'Her ticket still needs checking.' });
+  expect(progress()).toBe(1);
+  position = await recordPassage(0);
+  await send('rewind');
+  expect(progress()).toBe(1);
+  expect(JSON.stringify(messages.at(-1))).not.toContain('ticket');
+  reply = { ...reply, swipe_id: 1, content: 'Mira stays at the inn.' };
+  position = await recordPassage(1);
+  await send('alternate');
+  expect(progress()).toBe(0);
+  await send('alternate-step', { ...advance, note: 'Mira books tomorrow’s crossing.' });
+  expect(progress()).toBe(1);
+  reply.content = 'An edited alternate.';
+  await send('edited');
+  expect(progress()).toBe(0);
+});
+
+test('Scene Rehearsal saves named looks independently of the live reader and applies them explicitly', async () => {
+  const values = new Map<string, unknown>();
+  const spindle = {
+    userStorage: {
+      getJson: async (path: string, { fallback }: { fallback: unknown }) => structuredClone(values.get(path) ?? fallback),
+      setJson: async (path: string, value: unknown) => { values.set(path, structuredClone(value)); },
+    },
+  } as unknown as SpindleAPI;
+  const original = await loadConfig(spindle, 'reader');
+  const preview = { name: 'Night watch', camera: 'gentle', lighting: false, captionOpacity: 0.7 } as const;
+  const change = (command: Parameters<typeof changeRehearsalPreset>[1]) => updateConfig(spindle, current => ({
+    readerPreferences: changeRehearsalPreset(current.readerPreferences, command),
+  }), 'reader');
+  await Promise.all([
+    change({ action: 'save', preset: preview }),
+    change({ action: 'save', preset: { ...preview, name: 'Study', camera: 'off' } }),
+    updateConfig(spindle, { generateImages: false }, 'reader'),
+  ]);
+  const saved = await loadConfig(spindle, 'reader');
+  expect(sceneLook(saved.readerPreferences)).toEqual(sceneLook(original.readerPreferences));
+  expect(saved.readerPreferences.rehearsalPresets?.map(preset => preset.name)).toEqual(['Study', 'Night watch']);
+  expect(saved.generateImages).toBe(false);
+  await change({ action: 'apply', name: 'Night watch' });
+  const applied = await loadConfig(spindle, 'reader');
+  expect(sceneLook(applied.readerPreferences)).toEqual({ camera: 'gentle', lighting: false, captionOpacity: 0.7 });
+  expect(applied.readerPreferences.layout).toBe(original.readerPreferences.layout);
+  await change({ action: 'remove', name: 'Night watch' });
+  await expect(change({ action: 'apply', name: 'Night watch' })).rejects.toThrow(/unavailable/);
+  expect(sceneLook((await loadConfig(spindle, 'reader')).readerPreferences)).toEqual(sceneLook(applied.readerPreferences));
 });
 
 test('P1 rollback: deleting the active turn restores chatState to the surviving prior assistant turn', async () => {

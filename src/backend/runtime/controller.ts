@@ -83,6 +83,8 @@ import { CACHE_JOB_PROVIDER, createAssetJobs, prepareAssetJobs, generateAssets, 
 import { SceneImageCache, sceneImageScope } from "../core/scene-image-cache.js";
 import { extractTurnLoreAsync, fingerprintForMessage, gameHintsForTurn, planTurn, prepareEarlyNarrativeParagraphs } from "./planner.js";
 import {readImageLibraryPage} from './image-library.js';
+import {readBranchChronicle} from './branch-chronicle.js';
+import {changeRehearsalPreset} from '../../shared/reader-preferences.js';
 import {
   isUnselectedGreeting,
   needsResolution,
@@ -2548,6 +2550,21 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     case 'vn_image_library': {
       const page=await readImageLibraryPage(spindle,request,userId);
       spindle.sendToFrontend({type:'vn_image_library',chatId:request.chatId,requestId:request.requestId,page},userId);
+      return;
+    }
+    case 'vn_branch_chronicle': {
+      const result = await readBranchChronicle(spindle, request, userId, turnView);
+      spindle.sendToFrontend({ type: 'vn_branch_chronicle', chatId: request.chatId, requestId: request.requestId, result }, userId);
+      return;
+    }
+    case 'vn_rehearsal_preset': {
+      if (!await spindle.chats.get(request.chatId, userId)) throw new Error('This chat is unavailable.');
+      const config = await updateConfig(spindle, current => ({
+        readerPreferences: changeRehearsalPreset(current.readerPreferences, request.command),
+      }), userId);
+      spindle.sendToFrontend({
+        type: 'vn_rehearsal_preset', chatId: request.chatId, requestId: request.requestId, preferences: config.readerPreferences,
+      }, userId);
       return;
     }
     case 'vn_replan_turn':

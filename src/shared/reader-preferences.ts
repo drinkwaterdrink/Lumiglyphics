@@ -1,3 +1,5 @@
+import { REHEARSAL_PRESET_LIMIT, RehearsalPresetSchema, type RehearsalCommand, type RehearsalLook, type RehearsalPreset } from './rehearsal-presets.js';
+
 export const READER_DIALOGUE_STYLES = [
   "preset",
   "glass-card",
@@ -32,6 +34,7 @@ export type ReaderPreferences = {
   cameraMotionIntensity?: ("gentle" | "full") | undefined;
   confidantCutInsEnabled?: boolean | undefined;
   adaptiveTint?: boolean | undefined;
+  rehearsalPresets?: RehearsalPreset[] | undefined;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false,
@@ -49,6 +52,10 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
 };
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const savedLooks = Array.isArray(input.rehearsalPresets) ? input.rehearsalPresets.slice(0, REHEARSAL_PRESET_LIMIT).flatMap(value => {
+    const parsed = RehearsalPresetSchema.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  }) : [];
   return {
     adjustableSheetEnabled: input.adjustableSheetEnabled === true,
     layout: input.layout === "image-first" ? "image-first" : "overlay",
@@ -75,7 +82,39 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     virtualCameraEnabled: input.virtualCameraEnabled !== undefined ? input.virtualCameraEnabled === true : (DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true),
     confidantCutInsEnabled: input.confidantCutInsEnabled !== undefined ? input.confidantCutInsEnabled === true : (DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true),
     adaptiveTint: input.adaptiveTint !== undefined ? input.adaptiveTint === true : (DEFAULT_READER_PREFERENCES.adaptiveTint ?? true),
+    ...(savedLooks.length ? { rehearsalPresets: savedLooks } : {}),
   };
+}
+
+export function sceneLook(preferences: ReaderPreferences): RehearsalLook {
+  return {
+    camera: preferences.virtualCameraEnabled === false ? 'off' : preferences.cameraMotionIntensity ?? 'full',
+    lighting: preferences.atmosphericLighting !== false,
+    captionOpacity: preferences.backgroundOpacity,
+  };
+}
+
+export function changeRehearsalPreset(preferences: ReaderPreferences, command: RehearsalCommand): ReaderPreferences {
+  const presets = preferences.rehearsalPresets ?? [];
+  const name = (command.action === 'save' ? command.preset.name : command.name).toLowerCase();
+  const saved = presets.find(preset => preset.name.toLowerCase() === name);
+  const other = presets.filter(preset => preset.name.toLowerCase() !== name);
+  switch (command.action) {
+    case 'save':
+      if (other.length >= REHEARSAL_PRESET_LIMIT) throw new Error('Remove a saved preset to make room for a new one.');
+      return { ...preferences, rehearsalPresets: [command.preset, ...other] };
+    case 'remove':
+      return { ...preferences, rehearsalPresets: other };
+    case 'apply':
+      if (!saved) throw new Error('That presentation preset is unavailable.');
+      return {
+        ...preferences,
+        virtualCameraEnabled: saved.camera !== 'off',
+        ...(saved.camera !== 'off' ? { cameraMotionIntensity: saved.camera } : {}),
+        atmosphericLighting: saved.lighting,
+        backgroundOpacity: saved.captionOpacity,
+      };
+  }
 }
 export const MOBILE_SHEET_DETENTS = { compact: 48, reading: 142, expandedRatio: 0.65 } as const;
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;

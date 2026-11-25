@@ -44,6 +44,7 @@ export class ImageLibrary{
  private pageLimit:number|undefined;
  private appendPending=false;
  onReadingHistoryRefresh:(()=>void)|undefined;
+ onReadingHistoryHidden:(()=>void)|undefined;
  private readonly readingHistorySlot=document.createElement("div");
  private currentSceneEntries:ReadonlyArray<{speaker?:string|undefined;text:string;paragraphIndex?:number|undefined}>=[];
  private onJumpToParagraph:((index:number)=>void)|null=null;
@@ -218,7 +219,7 @@ export class ImageLibrary{
  setDocked():void{this.el('section').removeAttribute('aria-modal');}
  private cancel(cancelSearch=true){clearTimeout(this.timer);if(cancelSearch)clearTimeout(this.searchTimer);this.pending='';this.appendPending=false;}
  open(mode: 'story'|'images' = 'images', opener?:HTMLElement){if(!this.context)return;this.mode=mode;this.opener=opener??null;this.opener?.setAttribute('aria-expanded','true');this.pages=['0:0'];this.pageIndex=0;if(!this.context)return;this.opened=true;this.host.dataset.open='true';this.el<HTMLElement>('section').hidden=false;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','true');this.onOpen(true);this.load();this.el<HTMLButtonElement>('[data-library-close]').focus();}
- close(){this.flushPendingDelete();this.opener?.setAttribute('aria-expanded','false');delete this.host.dataset.open;this.cancel();this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('section').hidden=true;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','false');if(this.opened){this.opened=false;this.onOpen(false);(this.opener??this.el<HTMLButtonElement>('[data-library-launch]')).focus();}}
+ close(){this.flushPendingDelete();this.opener?.setAttribute('aria-expanded','false');delete this.host.dataset.open;this.cancel();this.onReadingHistoryHidden?.();this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('section').hidden=true;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','false');if(this.opened){this.opened=false;this.onOpen(false);(this.opener??this.el<HTMLButtonElement>('[data-library-launch]')).focus();}}
  private buildRequest(cursor:string|undefined):ImageLibraryRequest{
   const req:ImageLibraryRequest={type:'vn_image_library',mode:this.mode,chatId:this.context!.chatId,requestId:createUiId(),anchor:{messageId:this.context!.messageId,swipeId:this.context!.swipeId,sourceFingerprint:this.context!.sourceFingerprint,paragraphIndex:this.cursor},range:this.el<HTMLSelectElement>('[data-range]').value as 'read'|'all',versions:this.el<HTMLSelectElement>('[data-versions]').value as 'active'|'all',includeReplaced:this.el<HTMLInputElement>('[data-replaced]').checked,order:this.el<HTMLSelectElement>('[data-order]').value as 'newest'|'oldest',role:this.el<HTMLSelectElement>('[data-role]').value as 'all'|'scene'|'background'|'portrait',templateQuery:this.el<HTMLInputElement>('[data-template-query]').value.trim(),...(this.pageLimit?{limit:this.pageLimit}:{}),...(cursor&&cursor!=='0:0'?{cursor}:{})};
   return req;
@@ -233,6 +234,7 @@ export class ImageLibrary{
    : 'Pictures saved in this chat. Open one to see its source and recorded prompt.';
   this.readingHistorySlot.hidden=this.mode!=='story'||this.pageIndex!==0;
   if(!this.readingHistorySlot.hidden)this.onReadingHistoryRefresh?.();
+  else this.onReadingHistoryHidden?.();
   if(!this.context||!this.opened)return;this.cancel();this.page=null;this.back(false);this.el<HTMLElement>('[data-grid]').replaceChildren();this.el<HTMLButtonElement>('[data-load-more]').hidden=true;this.status(this.mode==='story'?'Loading story history…':'Loading saved pictures…');this.el<HTMLElement>('[data-retry]').hidden=true;
   const request=this.buildRequest(this.pages[this.pageIndex]);this.pending=request.requestId;
   this.timer=setTimeout(()=>this.error(this.context?.chatId??'',request.requestId,'Loading timed out. You can retry.'),15000);this.updatePaging();
