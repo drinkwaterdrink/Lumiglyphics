@@ -11,4 +11,9 @@ const page={entries:[{key:{chatId:'chat',assistantMessageId:'m1',swipeId:0,sourc
 (window as any).imageLibraryFixture={library,actions,page,get held(){return held;},image};
 
 const history=document.createElement('button');history.textContent='History';history.style.cssText='position:fixed;bottom:0;left:0;z-index:1;height:44px';history.onclick=()=>{library.getElement().hidden=false;library.open('story',history);};document.body.append(history);
+const browse=document.createElement('button');
+browse.textContent='Browse saved artwork';
+browse.style.cssText='position:fixed;bottom:0;right:0;height:44px';
+browse.onclick=()=>{library.getElement().hidden=false;library.open('images',browse);};
+document.body.append(browse);
 (window as any).imageLibraryFixture.mount=mount;

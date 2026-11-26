@@ -19,7 +19,7 @@ test('Wave 5: adaptImagePrompt reads promptProfileV2.hardMaxCharacters before V1
       prompt,
       model: 'flux3-klein',
       parameters: {},
-      promptProfile: { version: 1, family: 'generic', format: 'description', maxCharacters: 3000, negativeMode: 'dual', source: 'catalogue', guidance: '' },
+      promptProfile: { version: 1, family: 'generic', format: 'description', maxCharacters: 3000, negativeMode: 'supported-or-unknown', source: 'catalogue', guidance: '' },
       promptProfileV2: { ...v2Profile, hardMaxCharacters: 4000, negativePolicy: 'positive-only' },
     },
     undefined,
@@ -119,7 +119,7 @@ test('Wave 5: buildV2ImageRequest consumes Wave 4 preferredAspectRatio, preferre
     shadow: { prompt: '' },
     referenceSummary: 'none',
   });
-  expect(builtOn.request.styleSnapshot?.medium.toLowerCase()).toContain('noir');
+  expect(builtOn.request.styleSnapshot?.medium?.toLowerCase()).toContain('noir');
 });
 
 test('Wave 5: turnViewWithAudio populates replyCost only when showReplyCost is enabled', async () => {

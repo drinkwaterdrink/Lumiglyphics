@@ -43,6 +43,8 @@ import {
 } from "../../shared/identity.js";
 
 export type StoredTurnRecord = {
+  /** Tracks scans created by this build, so reopening legacy replies stays read-only. */
+  sidecarState?: 'pending' | 'settled';
   /** Additive bounded image occurrence history; future formats are preserved. */
   imageLibrary?: unknown;
   /** Versioned projection; unsupported future data is preserved, not reset. */
@@ -845,6 +847,7 @@ export async function loadTurnRecord(
   const status = raw.status === "planning" || raw.status === "failed" || raw.status === "cancelled" ? raw.status : "ready";
   return {
     schemaVersion: 1,
+    ...(raw.sidecarState === 'pending' || raw.sidecarState === 'settled' ? { sidecarState: raw.sidecarState } : {}),
     ...(raw.presentation !== undefined ? {presentation:raw.presentation} : {}),
     ...(raw.referenceLineage !== undefined ? {referenceLineage:raw.referenceLineage} : {}),
     ...(raw.imageLibrary!==undefined?{imageLibrary:raw.imageLibrary}:{}),
@@ -881,7 +884,7 @@ export async function saveTurnRecord(
   userId?: string
 ): Promise<void> {
   await serializedWrite(scopedKey(userId, path), async () => {
-    const next=await recordWithImageLibrary(spindle,path,record,userId);
+    const next=await recordWithRetainedHistory(spindle,path,record,userId);
     await spindle.userStorage.setJson(path, recordWithPresentation(next), {indent:2,...(userOptions(userId)??{})});
   });
 }
@@ -1309,7 +1312,7 @@ export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string,
   let saved = false;
   await serializedWrite(scopedKey(userId, path), async () => {
     if (!isCurrent()) return;
-    const next=await recordWithImageLibrary(spindle,path,record,userId);
+    const next=await recordWithRetainedHistory(spindle,path,record,userId);
     if(!isCurrent())return;
     await spindle.userStorage.setJson(path, recordWithPresentation(next), { indent: 2, ...(userOptions(userId)??{}) });
     saved = isCurrent();
@@ -1317,7 +1320,7 @@ export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string,
   return saved;
 }
 
-async function recordWithImageLibrary(spindle:SpindleAPI,path:string,record:StoredTurnRecord,userId?:string):Promise<StoredTurnRecord>{
+async function recordWithRetainedHistory(spindle:SpindleAPI,path:string,record:StoredTurnRecord,userId?:string):Promise<StoredTurnRecord>{
  let previous:StoredTurnRecord|null=null;
  try{previous=await spindle.userStorage.getJson<StoredTurnRecord|null>(path,{fallback:null,...(userOptions(userId)??{})});}
  catch{
@@ -1325,7 +1328,23 @@ async function recordWithImageLibrary(spindle:SpindleAPI,path:string,record:Stor
   const imageLibrary=mergeImageLibrary(undefined,record);
   return {...record,imageLibrary:imageLibrary&&typeof imageLibrary==='object'&&(imageLibrary as {version?:unknown}).version===1?{...imageLibrary,incomplete:true}:imageLibrary};
  }
- return {...record,imageLibrary:mergeImageLibrary(previous??undefined,record)};
+ const imageLibrary = mergeImageLibrary(previous ?? undefined, record);
+ // A reuse or artwork write might have loaded its snapshot before the
+ // background scan committed. Keep the completed scan for the exact reply.
+ if (record.sidecarState === 'pending' && previous?.sidecarState === 'settled' &&
+     previous.plan?.key && samePresentationTurn(previous.plan.key, record.plan.key) &&
+     previous.plan.createdAt === record.plan.createdAt) {
+   const { storyReferences, storyDocuments } = previous.plan;
+   return {
+     ...record, sidecarState: 'settled', imageLibrary,
+     plan: {
+       ...record.plan,
+       ...(storyReferences !== undefined ? { storyReferences } : {}),
+       ...(storyDocuments !== undefined ? { storyDocuments } : {}),
+     },
+   };
+ }
+ return { ...record, imageLibrary };
 }
 
 /**

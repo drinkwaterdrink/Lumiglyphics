@@ -114,7 +114,7 @@ test('handleStoryDnaRequest > lists, saves location/item, and deletes', async ()
       },
     },
     sendToFrontend(message: any, userId?: string) {
-      messages.push({ message, userId });
+      messages.push({ message, ...(userId !== undefined ? { userId } : {}) });
     },
   } as unknown as SpindleAPI;
 
@@ -125,9 +125,9 @@ test('handleStoryDnaRequest > lists, saves location/item, and deletes', async ()
     'u1'
   );
   expect(messages.length).toBe(1);
-  expect(messages[0].message.type).toBe('vn_story_dna');
-  expect(messages[0].message.storyDna.locations).toEqual({});
-  expect(messages[0].message.storyDna.items).toEqual({});
+  expect(messages[0]!.message.type).toBe('vn_story_dna');
+  expect(messages[0]!.message.storyDna.locations).toEqual({});
+  expect(messages[0]!.message.storyDna.items).toEqual({});
 
   // 2. Save Location DNA
   await handleStoryDnaRequest(
@@ -148,7 +148,7 @@ test('handleStoryDnaRequest > lists, saves location/item, and deletes', async ()
     'u1'
   );
   expect(messages.length).toBe(2);
-  const dnaAfterLoc = messages[1].message.storyDna;
+  const dnaAfterLoc = messages[1]!.message.storyDna;
   expect(dnaAfterLoc.locations['cedar-loft']).toBeDefined();
   expect(dnaAfterLoc.locations['cedar-loft'].name).toBe('Cedar Loft');
 
@@ -172,7 +172,7 @@ test('handleStoryDnaRequest > lists, saves location/item, and deletes', async ()
     'u1'
   );
   expect(messages.length).toBe(3);
-  const dnaAfterItem = messages[2].message.storyDna;
+  const dnaAfterItem = messages[2]!.message.storyDna;
   expect(dnaAfterItem.items['yew-staff']).toBeDefined();
   expect(dnaAfterItem.items['yew-staff'].name).toBe('Carved Yew Staff');
 
@@ -189,7 +189,7 @@ test('handleStoryDnaRequest > lists, saves location/item, and deletes', async ()
     'u1'
   );
   expect(messages.length).toBe(4);
-  const dnaAfterDel = messages[3].message.storyDna;
+  const dnaAfterDel = messages[3]!.message.storyDna;
   expect(dnaAfterDel.locations['cedar-loft']).toBeUndefined();
   expect(dnaAfterDel.deletedLocations?.['cedar-loft']).toBeDefined();
 });
@@ -202,7 +202,7 @@ test('isSignificantStoryItem filters mundane props and harvestTurnStoryDNA harve
   expect(isSignificantStoryItem('ancient silver heirloom locket', 'passed down for centuries')).toBe(true);
   expect(isSignificantStoryItem('Carved Yew Staff')).toBe(true);
 
-  const set: StoryDNASet = { version: 1, locations: {}, items: {} };
+  const set: StoryDNASet = { revision: 0, locations: {}, items: {} };
   const plan = {
     scenes: [
       {
@@ -491,7 +491,7 @@ test('Wave 2 > handleStoryDnaRequest supports route toggle, merge, restore, thre
       },
     },
     sendToFrontend(message: any, userId?: string) {
-      messages.push({ message, userId });
+      messages.push({ message, ...(userId !== undefined ? { userId } : {}) });
     },
   } as unknown as SpindleAPI;
 

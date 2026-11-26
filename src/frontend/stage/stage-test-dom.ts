@@ -7,6 +7,8 @@
 type Listener = (event: FakeEvent) => void;
 
 export class FakeEvent {
+  bubbles = true;
+  cancelable = true;
   defaultPrevented = false;
   propagationStopped = false;
   target: FakeNode | null = null;
@@ -18,7 +20,7 @@ export class FakeEvent {
   constructor(public type: string, init: Partial<FakeEvent> = {}) {
     Object.assign(this, init);
   }
-  preventDefault(): void { this.defaultPrevented = true; }
+  preventDefault(): void { if (this.cancelable) this.defaultPrevented = true; }
   stopPropagation(): void { this.propagationStopped = true; }
 }
 
@@ -186,7 +188,7 @@ export class FakeNode {
       const onevent = (node as unknown as Record<string, unknown>)["on" + event.type];
       if (typeof onevent === "function") (onevent as Listener).call(node, event);
       for (const l of node.listeners.get(event.type) ?? []) l(event);
-      node = node.parentNode;
+      node = event.bubbles ? node.parentNode : null;
     }
     return !event.defaultPrevented;
   }

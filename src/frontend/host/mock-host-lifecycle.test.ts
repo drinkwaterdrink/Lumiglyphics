@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { installFakeDocument } from "../stage/stage-test-dom.js";
 import { DialogueSheet } from "../stage/dialogue-sheet.js";
+import { AssetJobSchema } from "../../shared/contracts.js";
 import { AssetScheduler } from "../../backend/core/asset-scheduler.js";
 import { buildRpgTurnSnapshot, reduceRpgState } from "../../shared/rpg-state.js";
 import { normalizeReaderPreferences } from "../../shared/reader-preferences.js";
@@ -130,7 +131,7 @@ describe("Mock Lumiverse Host Lifecycle Contract (8 Scenarios + Wave A Regressio
     let runs = 0;
     const ownerTurnKey = { chatId: "chat-1", assistantMessageId: "m-1", swipeId: "s-1", sourceFingerprint: "src-fp-1234", revision: 1 };
     const job1 = scheduler.schedule(
-      {
+      AssetJobSchema.parse({
         jobId: "job-1",
         ownerTurnKey,
         sceneId: "scene-1",
@@ -141,18 +142,18 @@ describe("Mock Lumiverse Host Lifecycle Contract (8 Scenarios + Wave A Regressio
         priority: "visible",
         status: "queued",
         queuedAt: new Date().toISOString(),
-      },
+      }),
       async () => {
         runs += 1;
         return { imageId: "img-1", imageUrl: "data:image/png;base64,AA==" };
       },
     );
     await job1.promise;
-    scheduler.markBrowserReady("job-1", "data:image/png;base64,AA==");
+    expect(scheduler.markBrowserReady("job-1").imageUrl).toBe("data:image/png;base64,AA==");
 
     // Scheduling a second job with same promptFingerprint after browser_ready reuses without re-running
     const job2 = scheduler.schedule(
-      {
+      AssetJobSchema.parse({
         jobId: "job-2",
         ownerTurnKey,
         sceneId: "scene-1",
@@ -163,7 +164,7 @@ describe("Mock Lumiverse Host Lifecycle Contract (8 Scenarios + Wave A Regressio
         priority: "next",
         status: "queued",
         queuedAt: new Date().toISOString(),
-      },
+      }),
       async () => {
         runs += 1;
         return { imageId: "img-2", imageUrl: "data:image/png;base64,BB==" };

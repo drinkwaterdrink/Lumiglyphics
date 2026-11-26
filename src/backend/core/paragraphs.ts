@@ -442,6 +442,42 @@ export type PreparedNarrative = {
 
 type RawChoice = { id?: string | undefined; label: string; submission: string };
 
+const PRESET_DELIBERATION_TAGS = "(?:[a-z0-9]+[-_])+deliberation(?=[\\s/>])";
+const ORACLE_PATHS = /^[ \t]*<oracle_paths[ \t]*>([\s\S]*?)<\/oracle_paths[ \t]*>[ \t]*(?=\n|$)/gim;
+
+function presetControlBlocks(content: string) {
+  const privateRanges = findBalancedXmlTagRanges(content, PRESET_DELIBERATION_TAGS, { respectProseBoundary: true });
+  const publicSource = maskPanelSpans(content, privateRanges);
+  const oracle = [...publicSource.matchAll(ORACLE_PATHS)];
+  const ranges = [...privateRanges, ...oracle.map(match => ({ start: match.index, end: match.index + match[0].length }))];
+  return { ranges, oracle, publicSource: maskPanelSpans(publicSource, ranges.slice(privateRanges.length)) };
+}
+
+function presetDateline(content: string): { start: number; end: number; date: string; time: string } | undefined {
+  const line = /^[ \t\n]*(@[a-z][\w-]{0,63}\|[^\n]+)/i.exec(content);
+  if (!line?.[1]) return undefined;
+  const fields = line[1].split("|").map(field => field.trim());
+  const [, date, time, cycle] = fields;
+  const calendarDate = /^(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$/i;
+  const clock = /^(?:(?:0?[1-9]|1[0-2]):[0-5]\d\s+[AP]M|(?:[01]?\d|2[0-3]):[0-5]\d)$/i;
+  if (fields.length !== 4 || !date || !calendarDate.test(date) || !time || !clock.test(time) ||
+    !cycle || !/^cycle\s+\d{1,6}$/i.test(cycle)) return undefined;
+  const start = line[0].indexOf(line[1]);
+  return { start, end: start + line[1].length, date, time };
+}
+
+function oracleChoices(body: string): RawChoice[] {
+  const choices: RawChoice[] = [];
+  for (const line of body.split("\n")) {
+    const [marker, label, submission, consequence, extra] = line.split("|").map(field => field.trim());
+    if (!marker || !/^@[a-z][\w-]{0,63}$/i.test(marker) || !label || label.length > 160 ||
+      !submission || submission.length > 1500 || consequence === undefined || extra !== undefined) continue;
+    choices.push({ label, submission });
+    if (choices.length === 8) break;
+  }
+  return choices;
+}
+
 function splitBlocks(content: string): Array<{ sourceIndex: number; text: string }> {
   const blocks: Array<{ sourceIndex: number; text: string }> = [];
   let current: string[] = [];
@@ -568,6 +604,9 @@ export function extractInlineCardImagesWithParagraphs(
   content: string,
   paragraphs: readonly Paragraph[],
 ): Array<{ name: string; paragraphIndex: number }> {
+  content = content.replace(/\r\n?/g, "\n");
+  if (!/[\u2801-\u28FF]/.test(content)) content = content.replace(/\u2800/g, " ");
+  const publicSource = presetControlBlocks(content).publicSource;
   const blocks = splitBlocks(content);
   const sourceToPara = new Map<number, number>();
   for (const paragraph of paragraphs) {
@@ -577,15 +616,18 @@ export function extractInlineCardImagesWithParagraphs(
   const results: Array<{ name: string; paragraphIndex: number }> = [];
   let lastKnownParaIndex = 0;
   let sawParagraph = false;
+  let sourceOffset = 0;
 
   for (const block of blocks) {
+    const start = content.indexOf(block.text, sourceOffset);
+    sourceOffset = start + block.text.length;
     const mapped = sourceToPara.get(block.sourceIndex);
     if (mapped !== undefined) {
       lastKnownParaIndex = mapped;
       sawParagraph = true;
     }
 
-    const matches = [...block.text.matchAll(INLINE_IMG_REGEX)];
+    const matches = [...publicSource.slice(start, sourceOffset).matchAll(INLINE_IMG_REGEX)];
     if (matches.length === 0) continue;
 
     // An inline image marker depicts the preceding paragraph (the dialogue or
@@ -949,8 +991,11 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
   const smartDialogueExtraction = options.smartDialogueExtraction !== false;
   const smartBeatSegmentation = options.smartBeatSegmentation !== false;
 
-  const detectedSceneMetadata = extractDetectedSceneMetadata(content);
-  const structuredHints = extractStructuredTurnHints(content, detectedSceneMetadata);
+  let controls = presetControlBlocks(content);
+  const dateline = smartProseFilter ? presetDateline(controls.publicSource) : undefined;
+  const detected = extractDetectedSceneMetadata(controls.publicSource);
+  const detectedSceneMetadata = dateline ? { date: dateline.date, time: dateline.time, ...detected } : detected;
+  const structuredHints = extractStructuredTurnHints(controls.publicSource, detectedSceneMetadata);
 
   // 1. Extract custom preset dialogue/thought tags before masking/tag-stripping
   const extractedSpeakers = new Map<string, string>();
@@ -979,27 +1024,38 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
       return "\n\n";
     };
 
-    // 1a. Known dialogue/speech tags with optional prefixes (e.g. <eidos_dialogue>, <custom_speech>, <say>, <line>, <voice>)
-    content = content.replace(
+    // Protect the original slots so filtering does not renumber later source blocks.
+    const unwrapDialogue = (source: string) => source.replace(
       /<(([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message))\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi,
       (match, _fullTag: string, prefix: string | undefined, tagKind: string, attrSource: string, body: string) => {
         if (/^[ \t]*<prose\b/im.test(body)) return match;
         return unwrapTag(match, prefix, tagKind, attrSource, body);
       }
-    );
-
-    // 1b. Any arbitrary XML tag with explicit speaker= or character= attribute (e.g. <npc character="Grimbald">"..."</npc>)
-    content = content.replace(
+    ).replace(
       /<([a-zA-Z0-9_-]+)\b([^>]*\b(?:speaker|character)\s*=[^>]*)>([\s\S]*?)<\/\1\s*>/gi,
       (match, tagName: string, attrSource: string, body: string) => {
         if (/^[ \t]*<prose\b/im.test(body)) return match;
         return unwrapTag(match, undefined, tagName, attrSource, body);
       }
     );
+    let previousEnd = 0;
+    const parts: string[] = [];
+    for (const range of [...controls.ranges].sort((a, b) => a.start - b.start)) {
+      if (range.end <= previousEnd) continue;
+      if (range.start > previousEnd) parts.push(unwrapDialogue(content.slice(previousEnd, range.start)));
+      parts.push(content.slice(Math.max(previousEnd, range.start), range.end));
+      previousEnd = range.end;
+    }
+    parts.push(unwrapDialogue(content.slice(previousEnd)));
+    const unwrapped = parts.join("");
+    if (unwrapped !== content) controls = presetControlBlocks(unwrapped);
+    content = unwrapped;
   }
 
-  const spans: PanelSpan[] = extractPanelSpans(content);
-  const hidden: Array<{ start: number; end: number }> = [];
+  const spans: PanelSpan[] = extractPanelSpans(controls.publicSource);
+  const currentDateline = dateline ? presetDateline(controls.publicSource) : undefined;
+  const hidden: Array<{ start: number; end: number }> = [...controls.ranges];
+  if (currentDateline) hidden.push(currentDateline);
 
   // 2. Structural & pattern-based metadata masking if smartProseFilter is active
   if (smartProseFilter) {
@@ -1023,7 +1079,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
   }
 
   if (smartProseFilter) {
-    for (const range of findStructuredSidecarRanges(content)) hidden.push(range);
+    for (const range of findStructuredSidecarRanges(controls.publicSource)) hidden.push(range);
   }
 
   const effectiveIgnoredTags = Array.from(new Set([
@@ -1035,7 +1091,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     const tag = raw.trim().replace(/^[<\[]|[>\]]$/g, "").replace(/^\//, "");
     if (!tag) continue;
     const name = escapeRegExp(tag);
-    const balancedXml = findBalancedXmlTagRanges(content, name, {
+    const balancedXml = findBalancedXmlTagRanges(controls.publicSource, name, {
       respectProseBoundary: tag.toLowerCase() !== "prose",
     });
     const tagRanges: MatchedXmlTagRange[] = [...balancedXml];
@@ -1043,7 +1099,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
       `<\\/?${name}\\b[^>]*>|\\[${name}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name}\\]|\\[\\/?${name}\\b[^\\]]*\\]`,
       "gi"
     );
-    for (const match of content.matchAll(standaloneAndBracket)) {
+    for (const match of controls.publicSource.matchAll(standaloneAndBracket)) {
       const mStart = match.index ?? 0;
       const mEnd = mStart + match[0].length;
       if (balancedXml.some((r) => mStart >= r.start && mEnd <= r.end)) continue;
@@ -1057,7 +1113,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
       const isNestedInsideBalanced = balancedXml.some(
         (other) => other !== range && !other.isBoundaryClose && other.start <= range.start && other.end >= range.end
       );
-      const rawSlice = content.slice(range.start, range.end);
+      const rawSlice = controls.publicSource.slice(range.start, range.end);
       if (!range.isBoundaryClose && !isNestedInsideBalanced && /^(?:status|stats|inventory|hero|world_voice|tracker)$/i.test(tag)
         && rawSlice.length < MAX_PANEL_HTML / 6 && spans.length < MAX_PANELS) {
         spans.push({ start: range.start, end: range.end, html: nestedCards.length ? nestedCards.map((card) => card.html).join("\n") : `<pre>${escapePanelText(rawSlice)}</pre>`, title: tag, followKey: `tag:${tag.toLowerCase()}` });
@@ -1134,7 +1190,8 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
   }));
   const unlocksAfterParagraph = Math.max(0, paragraphs.length - 1);
   const usedIds = new Set<string>();
-  const choices = rawChoices.map((choice, index): Choice => {
+  const selectedChoices = rawChoices.length ? rawChoices : controls.oracle.flatMap(match => oracleChoices(match[1] ?? "")).slice(0, 8);
+  const choices = selectedChoices.map((choice, index): Choice => {
     const baseId = choice.id || stableChoiceId(choice.label, index);
     let id = baseId;
     let suffix = 2;

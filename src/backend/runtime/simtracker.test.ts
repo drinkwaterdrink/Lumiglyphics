@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { TrackerMappingsSchema } from "../../shared/tracker-mappings.js";
 import { extractSimTracker, trackerContext, matchTrackerCharacter } from "./simtracker";
 const message = (id: string, value: unknown) => ({ id, content: `<tracker>${JSON.stringify(value)}</tracker>` });
 
@@ -53,7 +54,7 @@ test("planner tracker context includes unique aliases and excludes ambiguous ali
 });
 
 test('explicit custom mappings supplement identity and scene and prioritize mapped clothing',()=>{
- const mappings={identity:['custom.look'],attire:['custom.outfit'],sceneState:['custom.motion'],world:['custom.scene']};
+ const mappings=TrackerMappingsSchema.parse({identity:['custom.look'],attire:['custom.outfit'],sceneState:['custom.motion'],world:['custom.scene']});
  const evidence=extractSimTracker([message('a',{characters:[{name:'Mira',appearance:{hair:'silver'},clothing:'old coat',stats:{custom:{look:'freckles',outfit:'blue raincoat',motion:'at the doorway',secret:'hidden'}}}],worldData:{location:'garden',custom:{scene:'misty courtyard'}}})],'a',mappings);
  assert.match(evidence.cast[0]!.identity,/silver.*freckles/);
  assert.equal(evidence.cast[0]!.attire,'blue raincoat');
@@ -65,7 +66,7 @@ test('explicit custom mappings supplement identity and scene and prioritize mapp
 });
 
 test('custom mappings retain historical boundaries and standard-field fallback',()=>{
- const mappings={identity:['custom.look'],attire:['custom.outfit'],sceneState:[],world:[]};
+ const mappings=TrackerMappingsSchema.parse({identity:['custom.look'],attire:['custom.outfit'],sceneState:[],world:[]});
  const evidence=extractSimTracker([
  message('target',{characters:[{name:'Mira',clothing:'raincoat',custom:{look:'freckles'}}]}),
  message('future',{characters:[{name:'Mira',custom:{look:'a future injury',outfit:'uniform'}}]})

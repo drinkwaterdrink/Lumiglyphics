@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { FakeNode, installFakeDocument } from "./stage-test-dom";
+import { FakeEvent, FakeNode, installFakeDocument } from "./stage-test-dom";
 import { RPG_HUD_CSS, RpgStageController } from "./rpg-hud";
 import { GAME_REQUEST_EVENT, GAME_STATE_EVENT, GameBridge } from "../host/game-bridge";
 import { VnStage, type VnGameChoice } from "./vn-stage";
@@ -47,7 +47,7 @@ describe("Council Wave 5: RPG HUD, GameBridge, World Lens & Character Folio", ()
         id: `c${i}`,
         label: `Choice ${i}`,
         value: `val ${i}`,
-        check: { stat: "Notice", dc: 10 + (i % 4), modifier: 2 },
+        check: { stat: "WIS", rollMode: "normal", dc: 10 + (i % 4), modifier: 2 },
       });
     }
     expect(drawer.querySelectorAll("li").length).toBe(12);
@@ -66,13 +66,13 @@ describe("Council Wave 5: RPG HUD, GameBridge, World Lens & Character Folio", ()
       id: "choice-a",
       label: "Inspect",
       value: "inspect",
-      check: { stat: "Investigation", dc: 12, modifier: 3 },
+      check: { stat: "INT", rollMode: "normal", dc: 12, modifier: 3 },
     });
     ctrl.decorateChoiceButton(btnB as unknown as HTMLButtonElement, {
       id: "choice-b",
       label: "Climb",
       value: "climb",
-      check: { stat: "Athletics", dc: 14, modifier: 1 },
+      check: { stat: "STR", rollMode: "normal", dc: 14, modifier: 1 },
     });
 
     const infoA = btnA.querySelector("[data-vn-check-info]")!;
@@ -276,15 +276,15 @@ describe("Council Wave 5: RPG HUD, GameBridge, World Lens & Character Folio", ()
     expect(actionWrap).not.toBeNull();
     expect(actionWrap?.textContent).toContain("Ask");
     expect(actionWrap?.textContent).toContain("Approach");
-    (actionWrap?.querySelectorAll("button")[0] as FakeNode).click();
+    actionWrap!.querySelector("button")!.click();
     expect((actionWrap?.querySelector("textarea") as unknown as HTMLTextAreaElement)?.value).toContain("Nadine");
 
     (folio.element.querySelector('[data-subtab="relationships"]') as unknown as HTMLButtonElement).click();
     const saveBtn = folio.element.querySelector("[data-dna-save]") as unknown as HTMLButtonElement;
     expect(saveBtn.disabled).toBe(true);
-    const affRange = folio.element.querySelector("[data-bond-affinity-range]") as unknown as HTMLInputElement;
+    const affRange = folioMount.querySelector("[data-bond-affinity-range]")!;
     affRange.value = "42";
-    affRange.oninput?.(new Event("input") as unknown as Event);
+    affRange.dispatchEvent(new FakeEvent("input", { bubbles: true }));
     expect(saveBtn.disabled).toBe(false);
     expect((folio.element.querySelector("[data-bond-affinity]") as unknown as HTMLInputElement).value).toBe("42");
   });

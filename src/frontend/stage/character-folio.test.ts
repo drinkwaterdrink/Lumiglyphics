@@ -421,7 +421,7 @@ it('renders prominent hero aliases field and excludes scenario card titles from 
     folio.setLibrary({ version: 2, revision: 1, characters: { marseline: dna } });
 
     // 1. Prominent hero aliases field in Hero Card
-    const heroAliasInput = folio.detailContainer.querySelector<HTMLInputElement>('.folio-hero-aliases input');
+    const heroAliasInput = folio.element.querySelector<HTMLInputElement>('.folio-hero-aliases input');
     expect(heroAliasInput).not.toBeNull();
     expect(heroAliasInput?.value).toBe('Lady Marseline, Mars');
 
@@ -546,37 +546,38 @@ it('renders Relationships sub-tab with SVG constellation, integrates RPG compani
       assets: [],
     } as any, 0);
 
+    const body = folio.element.querySelector<HTMLElement>('[data-folio-body]')!;
     // Switch to Relationships tab
-    const relBtn = folio.detailContainer.querySelector('[data-subtab="relationships"]') as unknown as HTMLButtonElement;
+    const relBtn = body.querySelector<HTMLButtonElement>('[data-subtab="relationships"]')!;
     expect(relBtn).not.toBeNull();
     relBtn.click();
 
-    const web = folio.detailContainer.querySelector('[data-relationship-web]');
+    const web = body.querySelector('[data-relationship-web]');
     expect(web).not.toBeNull();
     expect(web?.querySelector('svg')).not.toBeNull();
-    expect(folio.detailContainer.querySelector('[data-bond-target="Darby"]')).not.toBeNull();
-    expect(folio.detailContainer.querySelector('[data-bond-target="Protagonist / User"]')).not.toBeNull();
+    expect(body.querySelector('[data-bond-target="Darby"]')).not.toBeNull();
+    expect(body.querySelector('[data-bond-target="Protagonist / User"]')).not.toBeNull();
 
     // Add a new bond
-    const addTarget = folio.detailContainer.querySelector('[data-add-bond-target]') as unknown as HTMLInputElement;
-    const addDyn = folio.detailContainer.querySelector('[data-add-bond-dynamic]') as unknown as HTMLInputElement;
-    const addAff = folio.detailContainer.querySelector('[data-add-bond-affinity]') as unknown as HTMLInputElement;
+    const addTarget = body.querySelector<HTMLInputElement>('[data-add-bond-target]')!;
+    const addDyn = body.querySelector<HTMLInputElement>('[data-add-bond-dynamic]')!;
+    const addAff = body.querySelector<HTMLInputElement>('[data-add-bond-affinity]')!;
     addTarget.value = 'Aleister';
     addDyn.value = 'Academic rival';
     addAff.value = '-35';
-    (folio.detailContainer.querySelector('[data-add-bond-btn]') as unknown as HTMLButtonElement).click();
+    (body.querySelector<HTMLButtonElement>('[data-add-bond-btn]')!).click();
 
     expect(savedCalls.length).toBeGreaterThanOrEqual(1);
     const lastRelSave = savedCalls.at(-1);
     expect(lastRelSave.relationships.some((r: any) => r.targetName === 'Aleister' && r.affinity === -35)).toBe(true);
 
     // Switch to Story Lore tab and save Player Notes to char.notes
-    const loreBtn = folio.detailContainer.querySelector('[data-subtab="lore"]') as unknown as HTMLButtonElement;
+    const loreBtn = body.querySelector<HTMLButtonElement>('[data-subtab="lore"]')!;
     loreBtn.click();
-    const notesEl = folio.detailContainer.querySelector('[data-player-notes]') as unknown as HTMLTextAreaElement;
+    const notesEl = body.querySelector<HTMLTextAreaElement>('[data-player-notes]')!;
     expect(notesEl).not.toBeNull();
     notesEl.value = 'Carries a hidden brass locket';
-    (folio.detailContainer.querySelector('[data-save-notes]') as unknown as HTMLButtonElement).click();
+    (body.querySelector<HTMLButtonElement>('[data-save-notes]')!).click();
 
     const lastNoteSave = savedCalls.at(-1);
     expect(lastNoteSave.notes).toBe('Carries a hidden brass locket');

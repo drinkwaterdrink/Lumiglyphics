@@ -729,26 +729,10 @@ section[data-reference-observations] h3 {
    APERTURE FULLSCREEN STAGE SCENE & IMAGE OVERLAY
    ========================================================================= */
 
-/* VN Scene & Fullscreen Stage Background:
-   The visual novel scene MUST always span 100% of the viewport (top: 0, bottom: 0, inset: 0).
-   The dialogue box floats over the bottom portion of the image as a semi-transparent glassmorphic sheet.
-   The user can hide the dialogue sheet at any time with the hide button to view the full uncluttered artwork. */
-[data-vn-root] [data-vn-scene],
-[data-vn-root][data-vn-adjustable-sheet] [data-vn-scene],
-[data-vn-root][data-vn-reader-layout] [data-vn-scene],
-[data-vn-root][data-vn-reader-layout="image-first"] [data-vn-scene],
+/* Base scene geometry handles overlay, image-first, and whole-page modes.
+   Aperture's caption clears the bottom toolbar and the safe area. */
 [data-vn-scene] {
-  position: absolute !important;
-  inset: 0 !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
+  --vn-scene-clearance: calc(66px + env(safe-area-inset-bottom, 0px));
   z-index: 1 !important;
 }
 

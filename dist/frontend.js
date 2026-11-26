@@ -26882,7 +26882,7 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 184px);
   min-height: 76px;
-  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  max-height: min(var(--vn-caption-content-limit, 100%), calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px)))) !important;
   padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
@@ -26912,23 +26912,6 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   background: linear-gradient(90deg, transparent, var(--vn-edge-glow, var(--aperture-accent, rgba(224, 238, 177, 0.48))), transparent);
   box-shadow: 0 0 8px color-mix(in srgb, var(--vn-edge-glow, var(--aperture-accent, #dcebad)) 55%, transparent);
   pointer-events: none;
-}
-
-/* Draggable Top Resize Grip — centered pill only so it never covers top-right tools */
-.resize-grip {
-  position: absolute !important;
-  top: -10px !important;
-  left: 50% !important;
-  right: auto !important;
-  width: 68px !important;
-  transform: translateX(-50%) !important;
-  height: 22px; min-height: 22px;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  cursor: ns-resize !important;
-  touch-action: none !important;
-  z-index: 25 !important;
 }
 
 .resize-grip:hover span,
@@ -27097,12 +27080,6 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   transform: translateX(-50%) scale(1.08) !important;
 }
 
-[data-vn-dialogue].large-caption {
-  height: min(65vh, 420px) !important;
-  max-height: calc(100% - 90px) !important;
-  transition: height 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
 /* Reader Top Bar Controls */
 .reader-topbar {
   position: absolute;
@@ -27179,9 +27156,9 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
 [data-vn-reader-header] .round-ghost {
   position: relative !important;
   width: 32px;
-  height: 32px;
+  height: var(--vn-header-control-height, 32px);
   min-width: 32px;
-  min-height: 32px;
+  min-height: var(--vn-header-control-height, 32px);
   flex-shrink: 0 !important;
   border-color: transparent !important;
   background: transparent !important;
@@ -27194,7 +27171,13 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
 [data-vn-reader-header] .round-ghost::after {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: calc((var(--vn-header-control-height, 32px) - 44px) / 2) -6px;
+}
+
+@media (pointer: coarse) {
+  [data-vn-reader-header] [data-action="chat-exit"] {
+    --vn-header-control-height: 44px;
+  }
 }
 
 [data-vn-reader-header] .round-ghost svg {
@@ -27328,10 +27311,10 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
 
 .reader-action-row > .action:not(.nav-step-btn) {
   position: relative !important;
-  height: 38px !important;
-  width: 38px !important;
-  min-width: 38px !important;
-  max-width: 40px !important;
+  height: var(--vn-reader-tool-size, 38px) !important;
+  width: var(--vn-reader-tool-size, 38px) !important;
+  min-width: var(--vn-reader-tool-size, 38px) !important;
+  max-width: var(--vn-reader-tool-size, 40px) !important;
   display: grid !important;
   place-items: center !important;
   border-radius: 50% !important;
@@ -27356,7 +27339,14 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
 .reader-action-row > .action:not(.nav-step-btn)::after {
   content: "";
   position: absolute;
-  inset: -4px;
+  inset: var(--vn-reader-tool-hit-padding, -4px);
+}
+
+@media (pointer: coarse) {
+  .reader-action-row {
+    --vn-reader-tool-size: 44px;
+    --vn-reader-tool-hit-padding: 0px;
+  }
 }
 
 .reader-action-row > .action:not(.nav-step-btn):hover {
@@ -27950,7 +27940,6 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 184px);
   min-height: 76px;
-  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
   padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
@@ -27977,19 +27966,32 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 .resize-grip,
 [data-vn-sheet-handle] {
   position: absolute !important;
-  top: -10px !important;
+  top: var(--vn-grip-top, -10px) !important;
   left: 50% !important;
   right: auto !important;
   width: 68px !important;
   transform: translateX(-50%) !important;
   min-width: 68px;
-  height: 22px;
+  height: var(--vn-grip-height, 22px);
+  min-height: var(--vn-grip-height, 22px);
+  box-sizing: border-box;
+  padding-top: var(--vn-grip-padding, 0px);
   cursor: ns-resize !important;
   display: flex !important;
-  align-items: center !important;
+  align-items: var(--vn-grip-align, center) !important;
   justify-content: center !important;
-  z-index: 25 !important;
+  z-index: var(--vn-grip-layer, 25) !important;
   touch-action: none !important;
+}
+
+@media (pointer: coarse) {
+  [data-vn-sheet-handle] {
+    --vn-grip-top: 0px;
+    --vn-grip-height: 44px;
+    --vn-grip-padding: 3px;
+    --vn-grip-align: flex-start;
+    --vn-grip-layer: 39;
+  }
 }
 
 .resize-grip span {
@@ -28141,10 +28143,10 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] button,
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-hide-text] {
   position: relative !important;
-  width: 30px;
-  height: 26px;
-  min-width: 30px;
-  min-height: 26px;
+  width: var(--vn-caption-tool-size, 30px);
+  height: var(--vn-caption-tool-size, 26px);
+  min-width: var(--vn-caption-tool-size, 30px);
+  min-height: var(--vn-caption-tool-size, 26px);
   border-radius: 999px !important;
   border: 0 !important;
   background: transparent !important;
@@ -28161,7 +28163,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 [data-vn-hide-text]::after {
   content: "";
   position: absolute;
-  inset: -10px -8px;
+  inset: var(--vn-caption-hit-padding, -10px -8px);
 }
 
 .caption-tool:hover,
@@ -28430,6 +28432,14 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   flex: none !important;
 }
 
+@media (pointer: coarse) {
+  [data-vn-root] {
+    --vn-step-hit-size: 44px;
+    --vn-caption-tool-size: 44px;
+    --vn-caption-hit-padding: 0px;
+  }
+}
+
 .reader-step-nav > [data-vn-control="previous"].nav-step-btn,
 .reader-step-nav > [data-vn-continue].nav-step-btn,
 [data-vn-root][data-vn-adjustable-sheet="true"] .reader-step-nav > [data-vn-continue],
@@ -28443,10 +28453,10 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   top: auto !important;
   bottom: auto !important;
   transform: none !important;
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
-  min-height: 32px !important;
+  width: var(--vn-step-hit-size, 32px) !important;
+  height: var(--vn-step-hit-size, 32px) !important;
+  min-width: var(--vn-step-hit-size, 32px) !important;
+  min-height: var(--vn-step-hit-size, 32px) !important;
   padding: 0 !important;
   margin: 0 !important;
   display: flex !important;
@@ -28466,7 +28476,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 [data-vn-continue].nav-step-btn::after {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: calc((var(--vn-step-hit-size, 32px) - 44px) / 2);
 }
 
 [data-vn-control="previous"].nav-step-btn:hover:not(:disabled),
@@ -30094,26 +30104,10 @@ section[data-reference-observations] h3 {
    APERTURE FULLSCREEN STAGE SCENE & IMAGE OVERLAY
    ========================================================================= */
 
-/* VN Scene & Fullscreen Stage Background:
-   The visual novel scene MUST always span 100% of the viewport (top: 0, bottom: 0, inset: 0).
-   The dialogue box floats over the bottom portion of the image as a semi-transparent glassmorphic sheet.
-   The user can hide the dialogue sheet at any time with the hide button to view the full uncluttered artwork. */
-[data-vn-root] [data-vn-scene],
-[data-vn-root][data-vn-adjustable-sheet] [data-vn-scene],
-[data-vn-root][data-vn-reader-layout] [data-vn-scene],
-[data-vn-root][data-vn-reader-layout="image-first"] [data-vn-scene],
+/* Base scene geometry handles overlay, image-first, and whole-page modes.
+   Aperture's caption clears the bottom toolbar and the safe area. */
 [data-vn-scene] {
-  position: absolute !important;
-  inset: 0 !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
+  --vn-scene-clearance: calc(66px + env(safe-area-inset-bottom, 0px));
   z-index: 1 !important;
 }
 
@@ -38445,12 +38439,15 @@ class DialogueSheet {
     this.dialogue.style.setProperty("--caption-height", `${heightPx}px`);
     const autoFitReading = !this.hidden && !this.drag && this.preferences.heightRatio === undefined && this.preferences.sheetSize === "reading";
     if (autoFitReading) {
+      const contentLimit = `${Math.max(112, Math.min(184, heightPx + 26))}px`;
       this.dialogue.style.height = "auto";
       this.dialogue.style.minHeight = "76px";
-      this.dialogue.style.maxHeight = `${Math.max(112, Math.min(184, heightPx + 26))}px`;
+      this.dialogue.style.maxHeight = contentLimit;
+      this.root.style.setProperty("--vn-caption-content-limit", contentLimit);
     } else {
       this.dialogue.style.minHeight = "";
       this.dialogue.style.maxHeight = "";
+      this.root.style.setProperty("--vn-caption-content-limit", "");
       this.dialogue.style.height = `${heightPx}px`;
     }
     this.dialogue.classList?.toggle?.("large-caption", activeDetent === "expanded");
@@ -44564,7 +44561,7 @@ ${VN_TEXT_EFFECTS_CSS}
 }
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue-footer] { flex-shrink: 0; min-height: 44px; padding-right: 54px; margin-top: 0; align-items: center; }
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-continue] { bottom: .6rem; right: .75rem; width: 44px; height: 44px; }
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout="image-first"] [data-vn-scene] { bottom: calc(var(--vn-sheet-height) + 3.5rem + max(var(--vn-sheet-keyboard-inset, 0px), var(--reader-keyboard-inset, 0px))); }
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout="image-first"] [data-vn-scene] { bottom: calc(var(--vn-caption-content-limit, var(--vn-sheet-height)) + var(--vn-scene-clearance, 3.5rem) + max(var(--vn-sheet-keyboard-inset, 0px), var(--reader-keyboard-inset, 0px))); }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-text-hidden="true"] [data-vn-narrative] { visibility: hidden; pointer-events: none; }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-text-hidden="true"] [data-vn-scene] { bottom: 0; }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-text-hidden="true"] { --vn-interaction-clearance: 5rem; }
@@ -44629,7 +44626,7 @@ ${VN_TEXT_EFFECTS_CSS}
 /* Complete pages keep every panel, even when ordinary pictures fill the stage. */
 [data-vn-root][data-vn-page="true"] [data-vn-scrim] { display: none; }
 [data-vn-page-backdrop] { position: absolute; inset: -5%; width: 110%; height: 110%; object-fit: cover; filter: blur(24px) brightness(.35); pointer-events: none; opacity: .7; }
-[data-vn-root][data-vn-page="true"] [data-vn-scene] { top: 4.5rem; bottom: calc(var(--vn-sheet-height, 11.5rem) + 3.5rem + max(var(--vn-sheet-keyboard-inset, 0px), var(--reader-keyboard-inset, 0px))); }
+[data-vn-root][data-vn-page="true"] [data-vn-scene] { top: 4.5rem; bottom: calc(var(--vn-caption-content-limit, var(--vn-sheet-height, 11.5rem)) + var(--vn-scene-clearance, 3.5rem) + max(var(--vn-sheet-keyboard-inset, 0px), var(--reader-keyboard-inset, 0px))); }
 [data-vn-root][data-vn-page="true"] [data-vn-scene-image] { object-fit: contain !important; transform: none !important; }
 [data-vn-page-view] { position: absolute; z-index: 8; top: 4.7rem; left: .65rem; width: 44px; height: 44px; padding: 0; border: 1px solid var(--vn-panel-border); border-radius: var(--vn-button-radius, .65rem); background: var(--vn-panel-bg); color: var(--vn-text); font-size: 1.4rem; cursor: pointer; }
 [data-vn-page-view]:focus-visible { outline: 2px solid var(--vn-accent); outline-offset: 3px; }
@@ -47354,7 +47351,7 @@ var queryRequired = (root, selector) => {
     throw new Error(`VN stage is missing ${selector}.`);
   return element;
 };
-var isInteractiveTarget = (target2) => target2 instanceof Element && Boolean(target2.closest("button, textarea, input, select, option, a, [role='button'], [data-vn-interaction]"));
+var isInteractiveTarget = (target2) => target2 instanceof Element && Boolean(target2.closest("button, textarea, input, select, option, a, [role='button'], [data-vn-interaction], [data-vn-sheet-handle], [data-vn-sheet-header]"));
 var phaseLoadingLabel = (phase) => {
   switch (phase) {
     case "waiting-for-response":
@@ -49813,7 +49810,7 @@ class VnStage {
         const dy = touch.clientY - touchStartY;
         const dt = performance.now() - touchStartTime;
         const target2 = event.target;
-        if (target2?.closest("[data-vn-interaction]"))
+        if (isInteractiveTarget(target2))
           return;
         const scrollable = target2?.closest(".scroll-copy, [data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
         const isScrollingText = scrollable && scrollable.scrollHeight > scrollable.clientHeight && Math.abs(dy) > 15;
@@ -64787,7 +64784,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.17-beta.185";
+var LUMIGLYPHICS_VERSION = "0.2.18-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

@@ -19,6 +19,8 @@ Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visu
 
 ### Reader controls and presentation
 
+- **Read replies from HTML-heavy presets.** The reader keeps narrative and dialogue, pulls recognized date and time headers into the stage HUD, and puts supported inline HTML cards in **Panels**. Recognized preset deliberation blocks stay out of the reader and reference analysis. Supported Oracle path footers become authored choices when **CYOA** is enabled. Newly prepared replies get this treatment, and the original reply remains available in Lumiverse chat.
+
 - **Revisit a passage.** Tap or drag the dots along the caption timeline, or select the passage counter to jump to any paragraph you’ve already revealed in that reply. With the timeline focused, Left and Right seek one passage at a time. Home and End go to the first and last revealed passages. Ready and generating markers describe artwork for that passage.
 - **Adjust the stage.** In **Settings → Reading → Cinematic presentation**, choose Cinematic camera movement, Gentle drift, or turn off the virtual camera. Global effects and system reduced-motion settings can further limit motion.
 - **Apply a presentation preset.** Open **Presentation presets** to see what Cinematic, Reading, and Quiet change. Choose **Apply preset** to save the listed camera, lighting, and bond-banner preferences. **Undo preset** is available in the same Settings session and preserves later edits to those controls. Changing the preset selection alone makes no save or generation request.
@@ -42,7 +44,7 @@ Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visu
 
 ### How the reader keeps story context
 
-- **Sidecar Curator** collects optional story details after the reply is readable. If the provider is unavailable or returns partial data, you can keep reading and verified document quotes remain available.
+- **Sidecar Curator** collects optional story details after the reply is readable. If the provider is unavailable or returns partial data, you can keep reading and verified document quotes remain available. Reopening a newly prepared reply resumes a scan interrupted by leaving it. Completed scans stay attached to their original reply version.
 - **World Lens** follows the current swipe and reading position. Document excerpts appear when you reach their source paragraph. Turn-level discoveries, such as inferred beliefs, thread changes, and outfits, appear at the last paragraph of their source reply.
 - **Character Folio** keeps your saved outfit selections and locks. An inferred scene outfit can inform the reader and future scene planning without changing what you saved in the Folio.
 - Old inferred transcripts without a reliable source may be hidden from the reader. The saved data and any authored notes remain available for recovery.

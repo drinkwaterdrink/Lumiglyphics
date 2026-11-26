@@ -251,7 +251,6 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 184px);
   min-height: 76px;
-  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
   padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
@@ -278,19 +277,32 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 .resize-grip,
 [data-vn-sheet-handle] {
   position: absolute !important;
-  top: -10px !important;
+  top: var(--vn-grip-top, -10px) !important;
   left: 50% !important;
   right: auto !important;
   width: 68px !important;
   transform: translateX(-50%) !important;
   min-width: 68px;
-  height: 22px;
+  height: var(--vn-grip-height, 22px);
+  min-height: var(--vn-grip-height, 22px);
+  box-sizing: border-box;
+  padding-top: var(--vn-grip-padding, 0px);
   cursor: ns-resize !important;
   display: flex !important;
-  align-items: center !important;
+  align-items: var(--vn-grip-align, center) !important;
   justify-content: center !important;
-  z-index: 25 !important;
+  z-index: var(--vn-grip-layer, 25) !important;
   touch-action: none !important;
+}
+
+@media (pointer: coarse) {
+  [data-vn-sheet-handle] {
+    --vn-grip-top: 0px;
+    --vn-grip-height: 44px;
+    --vn-grip-padding: 3px;
+    --vn-grip-align: flex-start;
+    --vn-grip-layer: 39;
+  }
 }
 
 .resize-grip span {
@@ -442,10 +454,10 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] button,
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-hide-text] {
   position: relative !important;
-  width: 30px;
-  height: 26px;
-  min-width: 30px;
-  min-height: 26px;
+  width: var(--vn-caption-tool-size, 30px);
+  height: var(--vn-caption-tool-size, 26px);
+  min-width: var(--vn-caption-tool-size, 30px);
+  min-height: var(--vn-caption-tool-size, 26px);
   border-radius: 999px !important;
   border: 0 !important;
   background: transparent !important;
@@ -462,7 +474,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 [data-vn-hide-text]::after {
   content: "";
   position: absolute;
-  inset: -10px -8px;
+  inset: var(--vn-caption-hit-padding, -10px -8px);
 }
 
 .caption-tool:hover,
@@ -731,6 +743,14 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   flex: none !important;
 }
 
+@media (pointer: coarse) {
+  [data-vn-root] {
+    --vn-step-hit-size: 44px;
+    --vn-caption-tool-size: 44px;
+    --vn-caption-hit-padding: 0px;
+  }
+}
+
 .reader-step-nav > [data-vn-control="previous"].nav-step-btn,
 .reader-step-nav > [data-vn-continue].nav-step-btn,
 [data-vn-root][data-vn-adjustable-sheet="true"] .reader-step-nav > [data-vn-continue],
@@ -744,10 +764,10 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   top: auto !important;
   bottom: auto !important;
   transform: none !important;
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
-  min-height: 32px !important;
+  width: var(--vn-step-hit-size, 32px) !important;
+  height: var(--vn-step-hit-size, 32px) !important;
+  min-width: var(--vn-step-hit-size, 32px) !important;
+  min-height: var(--vn-step-hit-size, 32px) !important;
   padding: 0 !important;
   margin: 0 !important;
   display: flex !important;
@@ -767,7 +787,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 [data-vn-continue].nav-step-btn::after {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: calc((var(--vn-step-hit-size, 32px) - 44px) / 2);
 }
 
 [data-vn-control="previous"].nav-step-btn:hover:not(:disabled),

@@ -14,7 +14,8 @@ try{
  assert.equal(await page.title(),'Settings workspace');
  assert.equal(await settings.locator('[data-home]').isVisible(),true);
  assert.equal(await settings.locator('[data-section-select]').count(),0);
- assert.equal(await settings.locator('[data-home-categories] button').count(),7);
+ assert.deepEqual(await settings.locator('[data-home-categories] button').evaluateAll(buttons=>buttons.map(button=>button.getAttribute('data-page-link'))),
+  ['reading','look','audio','pictures','connections','advanced']);
  assert.deepEqual(await settings.locator('[data-settings-home-group] h2').allTextContents(),['Reading','Look & sound','Artwork','Setup & advanced']);
  await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('reading'));
  const relationship=settings.locator('[name="relationshipTrackerEnabled"]');assert.equal(await relationship.isChecked(),false);await relationship.check();assert.equal(await page.evaluate(()=>(window as any).settingsFixture.patches.at(-1).relationshipTrackerEnabled),true);

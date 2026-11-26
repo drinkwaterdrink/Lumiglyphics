@@ -131,7 +131,7 @@ describe('Ideogram V4 Native Prompting Engine', () => {
   test.each(['json', 'structured-prose'] as const)('%s reserves lettering for explicit visual cues', (ideogramPromptMode) => {
     const profile = resolveImagePromptProfileV2('nanogpt', 'ideogram/v4/instant', { ideogramPromptMode });
     const promptFor = (action: string) => compileModelPrompt({
-      brief: { ...baseBrief, action }, shotSpec, outputPlan, profile
+      brief: { ...baseBrief, action }, shotSpec, styleDNA: {}, outputPlan, profile
     }).prompt;
     const lettering = (prompt: string) => ideogramPromptMode === 'json'
       ? JSON.parse(prompt).compositional_deconstruction.elements.find((e: { type: string }) => e.type === 'text')?.text

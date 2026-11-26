@@ -41140,6 +41140,7 @@ async function loadTurnRecord(spindle2, path2, userId, isCurrent = () => true) {
   const status = raw.status === "planning" || raw.status === "failed" || raw.status === "cancelled" ? raw.status : "ready";
   return {
     schemaVersion: 1,
+    ...raw.sidecarState === "pending" || raw.sidecarState === "settled" ? { sidecarState: raw.sidecarState } : {},
     ...raw.presentation !== undefined ? { presentation: raw.presentation } : {},
     ...raw.referenceLineage !== undefined ? { referenceLineage: raw.referenceLineage } : {},
     ...raw.imageLibrary !== undefined ? { imageLibrary: raw.imageLibrary } : {},
@@ -41168,7 +41169,7 @@ async function loadTurnRecord(spindle2, path2, userId, isCurrent = () => true) {
 }
 async function saveTurnRecord(spindle2, path2, record3, userId) {
   await serializedWrite(scopedKey(userId, path2), async () => {
-    const next = await recordWithImageLibrary(spindle2, path2, record3, userId);
+    const next = await recordWithRetainedHistory(spindle2, path2, record3, userId);
     await spindle2.userStorage.setJson(path2, recordWithPresentation(next), { indent: 2, ...userOptions(userId) ?? {} });
   });
 }
@@ -41468,7 +41469,7 @@ async function saveTurnRecordIfCurrent(spindle2, path2, record3, userId, isCurre
   await serializedWrite(scopedKey(userId, path2), async () => {
     if (!isCurrent())
       return;
-    const next = await recordWithImageLibrary(spindle2, path2, record3, userId);
+    const next = await recordWithRetainedHistory(spindle2, path2, record3, userId);
     if (!isCurrent())
       return;
     await spindle2.userStorage.setJson(path2, recordWithPresentation(next), { indent: 2, ...userOptions(userId) ?? {} });
@@ -41476,16 +41477,30 @@ async function saveTurnRecordIfCurrent(spindle2, path2, record3, userId, isCurre
   });
   return saved;
 }
-async function recordWithImageLibrary(spindle2, path2, record3, userId) {
+async function recordWithRetainedHistory(spindle2, path2, record3, userId) {
   let previous = null;
   try {
     previous = await spindle2.userStorage.getJson(path2, { fallback: null, ...userOptions(userId) ?? {} });
   } catch {
     spindle2.log?.warn?.("Previous image history could not be read; recovery will retain only available image references.");
-    const imageLibrary = mergeImageLibrary(undefined, record3);
-    return { ...record3, imageLibrary: imageLibrary && typeof imageLibrary === "object" && imageLibrary.version === 1 ? { ...imageLibrary, incomplete: true } : imageLibrary };
+    const imageLibrary2 = mergeImageLibrary(undefined, record3);
+    return { ...record3, imageLibrary: imageLibrary2 && typeof imageLibrary2 === "object" && imageLibrary2.version === 1 ? { ...imageLibrary2, incomplete: true } : imageLibrary2 };
   }
-  return { ...record3, imageLibrary: mergeImageLibrary(previous ?? undefined, record3) };
+  const imageLibrary = mergeImageLibrary(previous ?? undefined, record3);
+  if (record3.sidecarState === "pending" && previous?.sidecarState === "settled" && previous.plan?.key && samePresentationTurn(previous.plan.key, record3.plan.key) && previous.plan.createdAt === record3.plan.createdAt) {
+    const { storyReferences, storyDocuments } = previous.plan;
+    return {
+      ...record3,
+      sidecarState: "settled",
+      imageLibrary,
+      plan: {
+        ...record3.plan,
+        ...storyReferences !== undefined ? { storyReferences } : {},
+        ...storyDocuments !== undefined ? { storyDocuments } : {}
+      }
+    };
+  }
+  return { ...record3, imageLibrary };
 }
 function presentationBelongsToPlan(presentation, plan) {
   if (!presentation || typeof presentation !== "object")
@@ -44305,6 +44320,39 @@ function extractStructuredTurnHints(rawContent, detectedMeta) {
     knownDocuments
   };
 }
+function presetControlBlocks(content) {
+  const privateRanges = findBalancedXmlTagRanges(content, PRESET_DELIBERATION_TAGS, { respectProseBoundary: true });
+  const publicSource = maskPanelSpans(content, privateRanges);
+  const oracle = [...publicSource.matchAll(ORACLE_PATHS)];
+  const ranges = [...privateRanges, ...oracle.map((match) => ({ start: match.index, end: match.index + match[0].length }))];
+  return { ranges, oracle, publicSource: maskPanelSpans(publicSource, ranges.slice(privateRanges.length)) };
+}
+function presetDateline(content) {
+  const line2 = /^[ \t\n]*(@[a-z][\w-]{0,63}\|[^\n]+)/i.exec(content);
+  if (!line2?.[1])
+    return;
+  const fields2 = line2[1].split("|").map((field) => field.trim());
+  const [, date5, time3, cycle] = fields2;
+  const calendarDate = /^(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$/i;
+  const clock = /^(?:(?:0?[1-9]|1[0-2]):[0-5]\d\s+[AP]M|(?:[01]?\d|2[0-3]):[0-5]\d)$/i;
+  if (fields2.length !== 4 || !date5 || !calendarDate.test(date5) || !time3 || !clock.test(time3) || !cycle || !/^cycle\s+\d{1,6}$/i.test(cycle))
+    return;
+  const start = line2[0].indexOf(line2[1]);
+  return { start, end: start + line2[1].length, date: date5, time: time3 };
+}
+function oracleChoices(body2) {
+  const choices = [];
+  for (const line2 of body2.split(`
+`)) {
+    const [marker, label, submission, consequence, extra] = line2.split("|").map((field) => field.trim());
+    if (!marker || !/^@[a-z][\w-]{0,63}$/i.test(marker) || !label || label.length > 160 || !submission || submission.length > 1500 || consequence === undefined || extra !== undefined)
+      continue;
+    choices.push({ label, submission });
+    if (choices.length === 8)
+      break;
+  }
+  return choices;
+}
 function splitBlocks(content) {
   const blocks = [];
   let current = [];
@@ -44404,6 +44452,11 @@ function extractInlineCardImages(text3) {
   return { text: cleaned, assetNames };
 }
 function extractInlineCardImagesWithParagraphs(content, paragraphs) {
+  content = content.replace(/\r\n?/g, `
+`);
+  if (!/[\u2801-\u28FF]/.test(content))
+    content = content.replace(/\u2800/g, " ");
+  const publicSource = presetControlBlocks(content).publicSource;
   const blocks = splitBlocks(content);
   const sourceToPara = new Map;
   for (const paragraph of paragraphs) {
@@ -44412,13 +44465,16 @@ function extractInlineCardImagesWithParagraphs(content, paragraphs) {
   const results = [];
   let lastKnownParaIndex = 0;
   let sawParagraph = false;
+  let sourceOffset = 0;
   for (const block2 of blocks) {
+    const start = content.indexOf(block2.text, sourceOffset);
+    sourceOffset = start + block2.text.length;
     const mapped = sourceToPara.get(block2.sourceIndex);
     if (mapped !== undefined) {
       lastKnownParaIndex = mapped;
       sawParagraph = true;
     }
-    const matches = [...block2.text.matchAll(INLINE_IMG_REGEX)];
+    const matches = [...publicSource.slice(start, sourceOffset).matchAll(INLINE_IMG_REGEX)];
     if (matches.length === 0)
       continue;
     const paragraphIndex = sawParagraph ? lastKnownParaIndex : 0;
@@ -44724,8 +44780,11 @@ function prepareNarrative(content, options2 = {}) {
   const smartProseFilter = options2.smartProseFilter !== false;
   const smartDialogueExtraction = options2.smartDialogueExtraction !== false;
   const smartBeatSegmentation = options2.smartBeatSegmentation !== false;
-  const detectedSceneMetadata = extractDetectedSceneMetadata(content);
-  const structuredHints = extractStructuredTurnHints(content, detectedSceneMetadata);
+  let controls = presetControlBlocks(content);
+  const dateline = smartProseFilter ? presetDateline(controls.publicSource) : undefined;
+  const detected = extractDetectedSceneMetadata(controls.publicSource);
+  const detectedSceneMetadata = dateline ? { date: dateline.date, time: dateline.time, ...detected } : detected;
+  const structuredHints = extractStructuredTurnHints(controls.publicSource, detectedSceneMetadata);
   const extractedSpeakers = new Map;
   if (smartDialogueExtraction) {
     const unwrapTag = (_match, prefix, tagKind, attrSource, body2) => {
@@ -44756,19 +44815,36 @@ ${cleanBody}
 
 `;
     };
-    content = content.replace(/<(([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message))\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi, (match, _fullTag, prefix, tagKind, attrSource, body2) => {
+    const unwrapDialogue = (source) => source.replace(/<(([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message))\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi, (match, _fullTag, prefix, tagKind, attrSource, body2) => {
       if (/^[ \t]*<prose\b/im.test(body2))
         return match;
       return unwrapTag(match, prefix, tagKind, attrSource, body2);
-    });
-    content = content.replace(/<([a-zA-Z0-9_-]+)\b([^>]*\b(?:speaker|character)\s*=[^>]*)>([\s\S]*?)<\/\1\s*>/gi, (match, tagName, attrSource, body2) => {
+    }).replace(/<([a-zA-Z0-9_-]+)\b([^>]*\b(?:speaker|character)\s*=[^>]*)>([\s\S]*?)<\/\1\s*>/gi, (match, tagName, attrSource, body2) => {
       if (/^[ \t]*<prose\b/im.test(body2))
         return match;
       return unwrapTag(match, undefined, tagName, attrSource, body2);
     });
+    let previousEnd = 0;
+    const parts = [];
+    for (const range of [...controls.ranges].sort((a, b) => a.start - b.start)) {
+      if (range.end <= previousEnd)
+        continue;
+      if (range.start > previousEnd)
+        parts.push(unwrapDialogue(content.slice(previousEnd, range.start)));
+      parts.push(content.slice(Math.max(previousEnd, range.start), range.end));
+      previousEnd = range.end;
+    }
+    parts.push(unwrapDialogue(content.slice(previousEnd)));
+    const unwrapped = parts.join("");
+    if (unwrapped !== content)
+      controls = presetControlBlocks(unwrapped);
+    content = unwrapped;
   }
-  const spans = extractPanelSpans(content);
-  const hidden = [];
+  const spans = extractPanelSpans(controls.publicSource);
+  const currentDateline = dateline ? presetDateline(controls.publicSource) : undefined;
+  const hidden = [...controls.ranges];
+  if (currentDateline)
+    hidden.push(currentDateline);
   if (smartProseFilter) {
     for (const match of content.matchAll(/(?:<!--\s*GFX[-_\s]*START\s*-->|\[GFX[-_\s]*START\]|<GFX[-_\s]*START\b[^>]*>)[\s\S]*?(?:<!--\s*GFX[-_\s]*END\s*-->|\[GFX[-_\s]*END\]|<\/GFX[-_\s]*START>|<\/GFX[-_\s]*END>|$)/gi)) {
       hidden.push({ start: match.index, end: match.index + match[0].length });
@@ -44789,7 +44865,7 @@ ${cleanBody}
     }
   }
   if (smartProseFilter) {
-    for (const range of findStructuredSidecarRanges(content))
+    for (const range of findStructuredSidecarRanges(controls.publicSource))
       hidden.push(range);
   }
   const effectiveIgnoredTags = Array.from(new Set([
@@ -44801,12 +44877,12 @@ ${cleanBody}
     if (!tag)
       continue;
     const name2 = escapeRegExp3(tag);
-    const balancedXml = findBalancedXmlTagRanges(content, name2, {
+    const balancedXml = findBalancedXmlTagRanges(controls.publicSource, name2, {
       respectProseBoundary: tag.toLowerCase() !== "prose"
     });
     const tagRanges = [...balancedXml];
     const standaloneAndBracket = new RegExp(`<\\/?${name2}\\b[^>]*>|\\[${name2}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name2}\\]|\\[\\/?${name2}\\b[^\\]]*\\]`, "gi");
-    for (const match of content.matchAll(standaloneAndBracket)) {
+    for (const match of controls.publicSource.matchAll(standaloneAndBracket)) {
       const mStart = match.index ?? 0;
       const mEnd = mStart + match[0].length;
       if (balancedXml.some((r) => mStart >= r.start && mEnd <= r.end))
@@ -44819,7 +44895,7 @@ ${cleanBody}
       for (const card of nestedCards)
         spans.splice(spans.indexOf(card), 1);
       const isNestedInsideBalanced = balancedXml.some((other) => other !== range && !other.isBoundaryClose && other.start <= range.start && other.end >= range.end);
-      const rawSlice = content.slice(range.start, range.end);
+      const rawSlice = controls.publicSource.slice(range.start, range.end);
       if (!range.isBoundaryClose && !isNestedInsideBalanced && /^(?:status|stats|inventory|hero|world_voice|tracker)$/i.test(tag) && rawSlice.length < MAX_PANEL_HTML / 6 && spans.length < MAX_PANELS) {
         spans.push({ start: range.start, end: range.end, html: nestedCards.length ? nestedCards.map((card) => card.html).join(`
 `) : `<pre>${escapePanelText(rawSlice)}</pre>`, title: tag, followKey: `tag:${tag.toLowerCase()}` });
@@ -44897,7 +44973,8 @@ ${cleanBody}
   }));
   const unlocksAfterParagraph = Math.max(0, paragraphs.length - 1);
   const usedIds = new Set;
-  const choices = rawChoices.map((choice, index) => {
+  const selectedChoices = rawChoices.length ? rawChoices : controls.oracle.flatMap((match) => oracleChoices(match[1] ?? "")).slice(0, 8);
+  const choices = selectedChoices.map((choice, index) => {
     const baseId = choice.id || stableChoiceId(choice.label, index);
     let id8 = baseId;
     let suffix = 2;
@@ -44915,7 +44992,7 @@ ${cleanBody}
     ...structuredHints ? { structuredHints } : {}
   };
 }
-var BUILTIN_HEURISTIC_TAGS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, DIEGETIC_DOCUMENT_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE, BEAT_MAX_CHARS = 220, BEAT_TRIGGER_CHARS = 240, ABBREVIATION_RE, ATTRIBUTION_START_RE, DYNAMIC_METADATA_TAG_SOURCE = "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+";
+var BUILTIN_HEURISTIC_TAGS, PRESET_DELIBERATION_TAGS = "(?:[a-z0-9]+[-_])+deliberation(?=[\\s/>])", ORACLE_PATHS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, DIEGETIC_DOCUMENT_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE, BEAT_MAX_CHARS = 220, BEAT_TRIGGER_CHARS = 240, ABBREVIATION_RE, ATTRIBUTION_START_RE, DYNAMIC_METADATA_TAG_SOURCE = "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+";
 var init_paragraphs = __esm(() => {
   init_text_effects();
   init_panels();
@@ -45002,6 +45079,7 @@ var init_paragraphs = __esm(() => {
     "internal_state",
     "internal-state"
   ];
+  ORACLE_PATHS = /^[ \t]*<oracle_paths[ \t]*>([\s\S]*?)<\/oracle_paths[ \t]*>[ \t]*(?=\n|$)/gim;
   INLINE_IMG_REGEX = /<p?img\s*=\s*["'\u201C\u201D][^"'\u201C\u201D]+["'\u201C\u201D]\s*\/?>|<p?img\s*=\s*[^\s"'\u201C\u201D>][^\s>]*?[\s>]|<p?img\b[^>]*?\b(?:cmd|src)\s*=\s*["'\u201C\u201D][^"'\u201C\u201D]+["'\u201C\u201D][^>]*?\/?>|<p?img\b[^>]*?\b(?:cmd|src)\s*=\s*[^\s"'\u201C\u201D>]+[^>]*?\/?>|\{\{img::[^\}]+\}\}/gi;
   PROSE_FORMATTING_TAGS = new Set(["b", "i", "em", "strong", "u", "s", "br", "small", "sub", "sup", "mark", "img", "pimg"]);
   DIEGETIC_DOCUMENT_TAGS = new Set([
@@ -61045,8 +61123,10 @@ function capEpochMap(map2, max = 256) {
     map2.delete(oldest);
   }
 }
-var scheduledLoreTurns = new Map;
 var pendingLoreJobs = new Map;
+function sidecarEnabled(config2) {
+  return config2.enabled && (config2.collectEntityReferences || config2.tooltips.enabled) && config2.sidecarCollection.selected.length > 0;
+}
 function cancelSplitHorizonLore(key) {
   const pending = pendingLoreJobs.get(key);
   if (!pending)
@@ -61058,11 +61138,11 @@ function cancelSplitHorizonLore(key) {
 }
 function scheduleSplitHorizonLore(spindle2, params) {
   const { config: config2, paragraphs } = params;
-  if (!paragraphs.length || !config2.collectEntityReferences && !config2.tooltips.enabled)
+  if (!paragraphs.length || !sidecarEnabled(config2))
     return;
   const key = runtimeKey(params.userId, params.chatId);
   const scheduled = JSON.stringify([params.turnKey, params.intakeEpoch]);
-  if (scheduledLoreTurns.get(key) === scheduled || pendingLoreJobs.get(key)?.scheduled === scheduled)
+  if (pendingLoreJobs.get(key)?.scheduled === scheduled)
     return;
   cancelSplitHorizonLore(key);
   const controller = new AbortController;
@@ -61070,6 +61150,9 @@ function scheduleSplitHorizonLore(spindle2, params) {
   const run = async () => {
     try {
       if (!isCurrent())
+        return;
+      const stored = await loadTurnRecord(spindle2, params.path, params.userId);
+      if (!stored || stored.sidecarState !== "pending" || !compareTurnKeys(stored.plan.key, params.turnKey).accepted || !isCurrent())
         return;
       let openDocumentTitles;
       if (spindle2.userStorage) {
@@ -61092,12 +61175,6 @@ function scheduleSplitHorizonLore(spindle2, params) {
         ...p.sourceIndex !== undefined ? { sourceIndex: p.sourceIndex } : {},
         text: stripTextEffectTags(p.text)
       }));
-      scheduledLoreTurns.set(key, scheduled);
-      if (scheduledLoreTurns.size > 256) {
-        const oldest = scheduledLoreTurns.keys().next().value;
-        if (oldest !== undefined)
-          scheduledLoreTurns.delete(oldest);
-      }
       const lore = await extractTurnLoreAsync(spindle2, {
         config: config2,
         paragraphs: strippedParagraphs,
@@ -61128,10 +61205,14 @@ function scheduleSplitHorizonLore(spindle2, params) {
       if (config2.debugLogging) {
         spindle2.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name2, status]) => `${name2}=${status}`).join(", ")}`);
       }
-      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && lore.suppressedDocumentNouns.length === 0)
+      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && lore.suppressedDocumentNouns.length === 0) {
+        await mutateActiveTurnRecord(spindle2, params.chatId, params.path, params.userId, (current) => compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: "settled" } : null, isCurrent);
         return;
+      }
       let previousDocIds = new Set;
       const updated = await mutateActiveTurnRecord(spindle2, params.chatId, params.path, params.userId, (current) => {
+        if (!compareTurnKeys(current.plan.key, params.turnKey).accepted)
+          return null;
         previousDocIds = new Set((current.plan.storyDocuments ?? []).map((d) => d.id));
         const mergedRefs = [...current.plan.storyReferences ?? []];
         const seenRef = new Set(mergedRefs.map((r) => JSON.stringify(r)));
@@ -61156,6 +61237,7 @@ function scheduleSplitHorizonLore(spindle2, params) {
       }, isCurrent);
       if (!updated || !isCurrent())
         return;
+      let dnaSaved = false;
       if (spindle2.userStorage) {
         try {
           const swipeTag = swipeTurnTag(params.turnKey.assistantMessageId, Number(params.turnKey.swipeId ?? 0) || 0);
@@ -61173,7 +61255,14 @@ function scheduleSplitHorizonLore(spindle2, params) {
               }
             });
           });
-        } catch {}
+          dnaSaved = true;
+        } catch (error61) {
+          if (isCurrent())
+            spindle2.log?.warn?.(`Sidecar Story DNA save failed: ${errorText2(error61)}`);
+        }
+      }
+      if (dnaSaved && isCurrent()) {
+        await mutateActiveTurnRecord(spindle2, params.chatId, params.path, params.userId, (current) => compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: "settled" } : null, isCurrent);
       }
       if (!isCurrent())
         return;
@@ -61254,6 +61343,25 @@ function scheduleSplitHorizonLore(spindle2, params) {
     run();
   }, delayMs);
   pendingLoreJobs.set(key, { timer, controller, scheduled, userId: params.userId });
+}
+function resumeStoredSidecar(spindle2, record5, path3, config2, messages, userId, intakeEpoch) {
+  const { key, paragraphs, paragraphSpeakers } = record5.plan;
+  const latest = messages.find((message) => message.id === key.assistantMessageId && !message.is_user);
+  const location = record5.plan.scenes[0]?.environment.location ?? null;
+  scheduleSplitHorizonLore(spindle2, {
+    ...userId ? { userId } : {},
+    chatId: key.chatId,
+    path: path3,
+    turnKey: key,
+    intakeEpoch,
+    config: config2,
+    paragraphs,
+    paragraphSpeakers,
+    messages,
+    prevLocationName: location,
+    ...record5.cardRole ? { cardRole: record5.cardRole } : {},
+    ...latest?.name ? { scenarioReferenceName: characterAppearanceKey(latest.name) } : {}
+  });
 }
 function bumpIntakeEpoch(userId, chatId) {
   const key = runtimeKey(userId, chatId);
@@ -61718,6 +61826,8 @@ async function sendState(spindle2, chatId, userId, options3 = {}) {
     spindle2.log.warn(`Stored visual novel turn could not be loaded; rebuilding it from chat: ${errorText2(error61)}`);
   }
   let stale = null;
+  let resumeMessages;
+  const sidecarEpoch = intakeEpochs.get(runtimeKey(userId, chatId)) ?? 0;
   if (record5) {
     try {
       const messages = await spindle2.chat.getMessages(chatId);
@@ -61743,10 +61853,12 @@ async function sendState(spindle2, chatId, userId, options3 = {}) {
             dbg(spindle2, userId, `host could not resolve message ${latest.id}; keeping the stored turn chat=${chatId}`);
           } else if (relation !== "current") {
             stale = { message: latest, intake, relation };
-          }
+          } else
+            resumeMessages = messages;
         } else if (relateRecord(record5, latest, { selectionText: latest.content, stableSelection: true }) !== "current") {
           stale = { message: latest, intake: { text: latest.content, selectionText: latest.content, resolved: true, stableSelection: true }, relation: "changed" };
-        }
+        } else
+          resumeMessages = messages;
       }
     } catch (error61) {
       spindle2.log.warn(`Stored turn freshness check failed; sending the stored turn: ${errorText2(error61)}`);
@@ -61777,6 +61889,13 @@ async function sendState(spindle2, chatId, userId, options3 = {}) {
     readingPosition: await loadReadingPosition(spindle2, chatId, userId)
   }, userId);
   const canPlan = !options3.readOnly && config2.enabled && views.isOpen(userId, chatId);
+  if (canPlan && options3.viewOpen === true && !stale && resumeMessages && chatState.activeTurnPath && record5?.sidecarState === "pending" && sidecarEnabled(config2) && (intakeEpochs.get(stateKey) ?? 0) === sidecarEpoch) {
+    const owner = activeTurnKeys.get(stateKey);
+    if (!owner || compareTurnKeys(owner, record5.plan.key).accepted) {
+      activeTurnKeys.set(stateKey, record5.plan.key);
+      resumeStoredSidecar(spindle2, record5, chatState.activeTurnPath, config2, resumeMessages, userId, sidecarEpoch);
+    }
+  }
   if (!record5) {
     if (canPlan)
       await bootstrapLatestAssistantTurn(spindle2, chatId, userId);
@@ -62222,6 +62341,15 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
       activeTurnKeys.set(key, reusable.plan.key);
       await persistActiveTurn(spindle2, reusable, path3, userId);
       spindle2.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle2, reusable, userId) }, userId);
+      if (reusable.sidecarState === "pending" && (intakeEpochs.get(key) ?? 0) === intakeEpoch) {
+        const config2 = await loadConfig(spindle2, userId);
+        if (sidecarEnabled(config2) && views.isOpen(userId, chatId)) {
+          const messages = await spindle2.chat.getMessages(chatId).catch(() => [message]);
+          if ((intakeEpochs.get(key) ?? 0) === intakeEpoch && compareTurnKeys(activeTurnKeys.get(key) ?? null, reusable.plan.key).accepted) {
+            resumeStoredSidecar(spindle2, reusable, path3, config2, messages, userId, intakeEpoch);
+          }
+        }
+      }
       return;
     }
   }
@@ -62405,6 +62533,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     const nowTime = new Date().toISOString();
     const record5 = {
       schemaVersion: 1,
+      ...sidecarEnabled(config2) ? { sidecarState: "pending" } : {},
       cardRole: result.cardRole,
       plannerMode: result.usedFallback ? "fallback" : "model",
       ...relation === "current" && existing?.forceImageReview ? { forceImageReview: true } : {},
@@ -63175,6 +63304,7 @@ async function replanCurrentTurn(spindle2, request, userId) {
         jobs,
         previousImages,
         forceImageReview: true,
+        ...sidecarEnabled(config2) ? { sidecarState: "pending" } : {},
         imageRequests: safeImageHistory((old.imageRequests ?? []).filter((r) => r.state === "approved" && jobs.some((job) => job.jobId === r.jobId))),
         cardRole: result.cardRole,
         plannerMode: result.usedFallback ? "fallback" : "model",

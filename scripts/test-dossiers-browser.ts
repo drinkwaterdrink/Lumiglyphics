@@ -9,7 +9,7 @@ await mkdir(".cache/dossiers",{recursive:true});
 const browser=await chromium.launch({headless:true});
 try {
  for(const viewport of [{width:360,height:800},{width:390,height:844},{width:844,height:390},{width:1200,height:800}]) {
-  const page=await browser.newPage({viewport,reducedMotion:"reduce"});page.setDefaultTimeout(5000);const external:string[]=[];
+  const page=await browser.newPage({viewport,hasTouch:true,reducedMotion:"reduce"});page.setDefaultTimeout(5000);const external:string[]=[];
   page.on('request',r=>{if(/^https?:/i.test(r.url())&&!r.url().startsWith(`http://127.0.0.1:${server.port}`))external.push(r.url());});
   // Local blob media is not a network request; reject actual external HTTP traffic.
   await page.route('**/*',route=>/^https?:/i.test(route.request().url())&&!route.request().url().startsWith(`http://127.0.0.1:${server.port}`)?route.abort():route.continue());
@@ -28,21 +28,38 @@ try {
   assert.equal(await text.innerText(),'Mira enters Lantern House.');
   assert.equal(await text.locator('[data-entity-anchor]').count(),2);
   const referenceButton=page.getByRole('button',{name:'World Lens',exact:true});
-  const refBox=await referenceButton.boundingBox();assert.ok(refBox&&refBox.width>=44&&refBox.height>=44,'reference menu has a usable touch target');
+  const assertLensHitArea=async()=>{
+   const bounds=await referenceButton.boundingBox();
+   assert.ok(bounds&&bounds.width>=43.99&&bounds.height>=43.99,'World Lens has a 44px touch target');
+   const hit=await referenceButton.evaluate(button=>{
+    const rect=button.getBoundingClientRect(),root=button.getRootNode() as ShadowRoot;
+    return [[0,0],[-21.5,0],[21.5,0],[0,-21.5],[0,21.5]].every(([x,y])=>{
+     const target=root.elementFromPoint(rect.x+rect.width/2+x,rect.y+rect.height/2+y);
+     return target===button||button.contains(target);
+    });
+   });
+   assert.ok(hit,'the World Lens touch target is unobstructed along both axes');
+  };
+  assert.ok(await page.evaluate(()=>matchMedia('(pointer: coarse)').matches));
+  await assertLensHitArea();
   assert.equal(await referenceButton.locator('svg').count(),1,'reference menu has a recognizable icon');
   const iconBox=await referenceButton.locator('svg').boundingBox();assert.ok(iconBox&&iconBox.width>=18&&iconBox.height>=18);
   assert.equal(await page.locator('[data-vn-controls]').innerText(),'','toolbar is icon only');
   assert.notEqual(await text.locator('[data-entity-anchor]').first().evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','references have a visible highlight');
 
   await page.screenshot({path:`.cache/dossiers/header-${viewport.width}.png`});
-  await text.getByRole('button',{name:'About Mira',exact:true}).click();
+  const openMira=async()=>{
+   await text.getByRole('button',{name:'About Mira',exact:true}).click();
+   await page.getByRole('dialog',{name:'Mira quick summary',exact:true}).getByRole('button',{name:/Open in Character Folio/}).click();
+  };
+  await openMira();
   const card=page.getByRole('dialog',{name:'About Mira',exact:true});
   assert.match(await card.innerText(),/silver hair/);assert.doesNotMatch(await card.innerText(),/uniform|black key/);
   await page.screenshot({path:`.cache/dossiers/${viewport.width}.png`});
-  await page.keyboard.press('Shift+Tab');
-  assert.equal(await card.getByRole('button',{name:'Back to reading',exact:true}).evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'reference heading keeps its Back action reachable');
-  await page.keyboard.press('Shift+Tab');
-  assert.equal(await page.locator('[data-workspace-close]').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'non-modal details keep workspace navigation reachable');
+  const back=page.getByRole('button',{name:'Go back to previous screen',exact:true});
+  const close=page.locator('[data-workspace-close]');
+  await back.focus();await page.keyboard.press('Tab');
+  assert.equal(await close.evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'keyboard navigation includes workspace Back and Close');
   await card.locator('summary').filter({hasText:'Local display note'}).focus();
   await page.keyboard.press('Enter');await page.keyboard.press('Tab');
   assert.equal(await card.locator('textarea').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
@@ -50,8 +67,8 @@ try {
   await page.keyboard.press('Tab');await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(()=>(window as any).readingFixture.counters.tooltipPreferences.overrides[0].note),'Remember the silver hair');
   assert.match(await card.locator('[data-reference-saved-note]').innerText(),/Remember the silver hair/);
-  await card.getByRole('button',{name:'Back to reading',exact:true}).click();
-  await text.getByRole('button',{name:'About Mira',exact:true}).click();
+  await back.click();
+  await openMira();
   const progress=await page.locator('[data-vn-progress]').innerText();
   await page.keyboard.press('ArrowRight');assert.equal(await page.locator('[data-vn-progress]').innerText(),progress);
   const bounds=await card.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height);
@@ -63,11 +80,12 @@ try {
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences(f.prefs);});
   await page.locator('[data-vn-continue]').click();
   await text.getByRole('button',{name:'About the black key',exact:true}).click();
-  await page.getByRole('dialog',{name:'About the black key',exact:true}).getByRole('button',{name:'Hide this reference',exact:true}).click();
+  await page.getByRole('dialog',{name:'the black key quick summary',exact:true}).getByRole('button',{name:/Inspect & Edit DNA/}).click();
+  await page.getByRole('dialog',{name:'About the black key',exact:true}).getByRole('button',{name:'Hide from World Lens',exact:true}).click();
   assert.equal(await text.getByRole('button',{name:'About the black key',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>(window as any).readingFixture.counters.tooltipPreferences.overrides[0].suppressed),true);
   await page.getByRole('button',{name:'Previous paragraph',exact:true}).click();
-  await text.getByRole('button',{name:'About Mira',exact:true}).click();
+  await openMira();
   assert.match(await page.getByRole('dialog',{name:'About Mira',exact:true}).innerText(),/coat/);
   assert.doesNotMatch(await page.getByRole('dialog',{name:'About Mira',exact:true}).innerText(),/uniform/);
   await page.keyboard.press('Escape');
@@ -75,15 +93,15 @@ try {
   assert.equal(await text.locator('[data-entity-anchor]').count(),0,'menu-only leaves prose plain');
   await referenceButton.click();const sheet=page.getByRole('dialog',{name:'World Lens',exact:true});
   assert.ok(await sheet.getByLabel('Search references').isVisible());await sheet.getByLabel('Search references').fill('lantern');
-  assert.equal(await sheet.locator('[data-reference-list] button').count(),1);await sheet.getByRole('button',{name:'Lantern House',exact:true}).click();await sheet.getByRole('button',{name:'Read story reference',exact:true}).click();
-  await page.getByRole('button',{name:'Back to references',exact:true}).click();assert.equal(await sheet.getByLabel('Search references').inputValue(),'lantern','return preserves search');
-  await sheet.getByLabel('Search references').fill('missing');assert.match(await sheet.locator('[role=status]').innerText(),/No references match/);
-  await sheet.getByLabel('Search references').fill('');await sheet.getByRole('button',{name:'People',exact:true}).click();assert.equal(await sheet.locator('[data-reference-list] button').count(),1);
-  await sheet.getByRole('button',{name:'People',exact:true}).focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');assert.equal(await sheet.getByRole('button',{name:'People',exact:true}).evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'keyboard focus includes filter controls');
+  assert.equal(await sheet.locator('[data-reference-list] button').count(),1);await sheet.locator('[data-reference-list]').getByRole('button',{name:'Lantern House',exact:true}).click();
+  await back.click();assert.equal(await sheet.getByLabel('Search references').inputValue(),'lantern','return preserves search');
+  await sheet.getByLabel('Search references').fill('missing');assert.ok(await sheet.getByRole('heading',{name:'No matching references',exact:true}).isVisible());
+  await sheet.getByLabel('Search references').fill('');const places=sheet.getByRole('button',{name:'Places',exact:true});await places.click();assert.equal(await sheet.locator('[data-reference-list] button').count(),1);
+  await places.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');assert.equal(await places.evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'keyboard focus includes filter controls');
   const current=await page.locator('[data-vn-progress]').innerText();await page.keyboard.press('ArrowRight');assert.equal(await page.locator('[data-vn-progress]').innerText(),current);
   await page.screenshot({path:`.cache/dossiers/quiet-${viewport.width}.png`});
   await page.keyboard.press('Escape');assert.equal(await referenceButton.evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
-  await page.evaluate(()=>{const f=(window as any).readingFixture;const snapshots=f.dossierTurn.presentation.snapshots.map((s:any)=>({...s,stateByEntity:{},presentEntityIds:['long0'],locationId:null,speakerEntityId:'long0',drawableEntityId:'long0',entities:Array.from({length:32},(_,i)=>({...s.entities[0],id:'long'+i,name:'A very long established character name '.repeat(4)+i,aliases:['Unique'+i],facts:[]}))}));f.stage.loadTurn({...f.dossierTurn,presentation:{version:1,snapshots}});});
+  await page.evaluate(()=>{const f=(window as any).readingFixture;const snapshots=f.dossierTurn.presentation.snapshots.map((s:any)=>({...s,stateByEntity:{},presentEntityIds:[],locationId:'long0',speakerEntityId:null,drawableEntityId:null,entities:Array.from({length:32},(_,i)=>({...s.entities[1],id:'long'+i,name:'A very long established location name '.repeat(4)+i,aliases:['Unique'+i],facts:[]}))}));f.stage.loadTurn({...f.dossierTurn,presentation:{version:1,snapshots}});});
   await referenceButton.click();const many=page.getByRole('dialog',{name:'World Lens',exact:true});
   assert.equal(await many.locator('[data-reference-list] button').count(),32,'long-name fixture has valid source/state identities');
   await many.evaluate(el=>el.style.fontSize='22px');
@@ -113,15 +131,11 @@ try {
    assert.ok(speaker&&speaker.width>0&&speaker.height>0&&panelBox&&speaker.x>=panelBox.x&&speaker.x+speaker.width<=panelBox.x+panelBox.width,`speaker name remains visible in ${preset}/${viewport.width}x${viewport.height}: ${JSON.stringify({speaker,panelBox})}`);
    assert.equal(await page.locator('[data-vn-speaker]').textContent(),'Mira','speaker label keeps its complete name');
    assert.equal(await page.locator('[data-vn-speaker]').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`speaker name is not clipped in ${preset}`);
-   for(const control of await page.locator('[data-vn-sheet-header] button').all()){
-    if(!await control.isVisible())continue;const b=await control.boundingBox();
-    if(await control.locator("[data-vn-control-icon]").count())assert.equal(await control.locator("[data-vn-control-icon]").isVisible(),true,`icon visible in ${preset}`);
-    assert.ok(b&&b.width>=44&&b.height>=44&&panelBox&&b.x>=panelBox.x&&b.x+b.width<=panelBox.x+panelBox.width+.5,`touch target fits ${preset}: ${await control.getAttribute("data-vn-control")} ${JSON.stringify(b)} panel=${JSON.stringify(panelBox)}`);
-   }
-   await page.getByRole('button',{name:'World Lens',exact:true}).click();
-   await page.getByRole('dialog',{name:'World Lens',exact:true}).getByRole('button',{name:'Mira',exact:true}).click();
-   await page.getByRole('button',{name:'Read story reference',exact:true}).click();
-   const themed=await page.getByRole('dialog',{name:'About Mira',exact:true}).boundingBox();
+   assert.ok(await referenceButton.locator('svg').isVisible(),`World Lens icon visible in ${preset}`);
+   await assertLensHitArea();
+   await referenceButton.click();
+   await sheet.locator('[data-reference-list]').getByRole('button',{name:'Lantern House',exact:true}).click();
+   const themed=await page.getByRole('dialog',{name:'About Lantern House',exact:true}).boundingBox();
    assert.ok(themed&&themed.x>=0&&themed.x+themed.width<=viewport.width&&themed.y+themed.height<=viewport.height,`card fits theme ${preset}`);
    await page.locator('[data-workspace-close]').click();
   }

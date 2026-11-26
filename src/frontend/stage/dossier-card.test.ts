@@ -175,7 +175,7 @@ describe('DossierCard & World Lens Header', () => {
       const saveBtn = card.host.querySelector('.fact-edit-input button') as unknown as HTMLButtonElement;
       saveBtn.click();
 
-      expect(dossier.facts[0].value).toBe('High cedar wood ceiling with golden lanterns');
+      expect(dossier.facts[0]?.value).toBe('High cedar wood ceiling with golden lanterns');
       const textSpan = card.host.querySelector('.fact-value-text');
       expect(textSpan?.textContent).toBe('High cedar wood ceiling with golden lanterns');
 
@@ -195,7 +195,7 @@ describe('DossierCard & World Lens Header', () => {
       const sentBodies: any[] = [];
       card.setStoryDnaRequester((body) => sentBodies.push(body));
       card.setStoryDna({
-        version: 1,
+        revision: 1,
         locations: {
           'flat-3': {
             id: 'flat-3',

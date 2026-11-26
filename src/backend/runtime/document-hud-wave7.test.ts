@@ -122,7 +122,7 @@ characters: []
     });
 
     const mapped = extractSimTracker([msg], 'm1', {
-      character: [],
+      identity: [],
       world: [],
       attire: [],
       sceneState: [],

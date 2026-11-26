@@ -280,7 +280,6 @@ describe("Wave 3 RpgStageController DOM & Breakdown UI", () => {
       id: "c-locked",
       label: "Vault",
       value: "Enter vault",
-      locked: false,
       disabled: true,
       lockedReason: "Need Master Key",
       setsFlags: { vault_entered: true },
@@ -291,7 +290,6 @@ describe("Wave 3 RpgStageController DOM & Breakdown UI", () => {
       id: "c-locked",
       label: "Vault",
       value: "Enter vault",
-      locked: false,
       setsFlags: { vault_entered: true },
     })).toBe("Enter vault");
 
@@ -307,7 +305,6 @@ describe("Wave 3 RpgStageController DOM & Breakdown UI", () => {
       id: "c-check",
       label: "Persuade",
       value: "Ask Mira for backup",
-      locked: false,
       check: { stat: "CHA", dc: 14, modifier: 1, rollMode: "normal" },
     });
     expect(checkBtn.title).toContain("Companion Bond: +1");
@@ -316,7 +313,6 @@ describe("Wave 3 RpgStageController DOM & Breakdown UI", () => {
       id: "c-check",
       label: "Persuade",
       value: "Ask Mira for backup",
-      locked: false,
       setsFlags: { backup_asked: true },
       check: { stat: "CHA", dc: 14, modifier: 1, rollMode: "normal" },
     });

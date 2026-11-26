@@ -217,12 +217,15 @@ export class DialogueSheet {
       this.preferences.heightRatio === undefined &&
       this.preferences.sheetSize === "reading";
     if (autoFitReading) {
+      const contentLimit = `${Math.max(112, Math.min(184, heightPx + 26))}px`;
       this.dialogue.style.height = "auto";
       this.dialogue.style.minHeight = "76px";
-      this.dialogue.style.maxHeight = `${Math.max(112, Math.min(184, heightPx + 26))}px`;
+      this.dialogue.style.maxHeight = contentLimit;
+      this.root.style.setProperty("--vn-caption-content-limit", contentLimit);
     } else {
       this.dialogue.style.minHeight = "";
       this.dialogue.style.maxHeight = "";
+      this.root.style.setProperty("--vn-caption-content-limit", "");
       this.dialogue.style.height = `${heightPx}px`;
     }
     this.dialogue.classList?.toggle?.("large-caption", activeDetent === "expanded");

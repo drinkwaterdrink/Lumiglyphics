@@ -486,6 +486,7 @@ test("planner tolerant parse recovers choices in alternate (choice/option/text) 
     const makeRpg = (turnCounter: number) => ({
       turnCounter,
       turnsSinceProgress: turnCounter,
+      flags: {},
       vitals: { name: "Hero", level: 1, archetype: "Scout", hp: 20, maxHp: 20, stamina: 10, maxStamina: 10, stress: 10, currency: "0g", inventory: [], statusEffects: [], companions: [] },
       quests: [],
       atlas: { currentLocationId: null, nodes: [], edges: [] }

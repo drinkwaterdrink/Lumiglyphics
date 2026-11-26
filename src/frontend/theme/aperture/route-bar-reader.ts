@@ -504,7 +504,7 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 184px);
   min-height: 76px;
-  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  max-height: min(var(--vn-caption-content-limit, 100%), calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px)))) !important;
   padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
@@ -534,23 +534,6 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   background: linear-gradient(90deg, transparent, var(--vn-edge-glow, var(--aperture-accent, rgba(224, 238, 177, 0.48))), transparent);
   box-shadow: 0 0 8px color-mix(in srgb, var(--vn-edge-glow, var(--aperture-accent, #dcebad)) 55%, transparent);
   pointer-events: none;
-}
-
-/* Draggable Top Resize Grip — centered pill only so it never covers top-right tools */
-.resize-grip {
-  position: absolute !important;
-  top: -10px !important;
-  left: 50% !important;
-  right: auto !important;
-  width: 68px !important;
-  transform: translateX(-50%) !important;
-  height: 22px; min-height: 22px;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  cursor: ns-resize !important;
-  touch-action: none !important;
-  z-index: 25 !important;
 }
 
 .resize-grip:hover span,
@@ -719,12 +702,6 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   transform: translateX(-50%) scale(1.08) !important;
 }
 
-[data-vn-dialogue].large-caption {
-  height: min(65vh, 420px) !important;
-  max-height: calc(100% - 90px) !important;
-  transition: height 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
 /* Reader Top Bar Controls */
 .reader-topbar {
   position: absolute;
@@ -801,9 +778,9 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
 [data-vn-reader-header] .round-ghost {
   position: relative !important;
   width: 32px;
-  height: 32px;
+  height: var(--vn-header-control-height, 32px);
   min-width: 32px;
-  min-height: 32px;
+  min-height: var(--vn-header-control-height, 32px);
   flex-shrink: 0 !important;
   border-color: transparent !important;
   background: transparent !important;
@@ -816,7 +793,13 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
 [data-vn-reader-header] .round-ghost::after {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: calc((var(--vn-header-control-height, 32px) - 44px) / 2) -6px;
+}
+
+@media (pointer: coarse) {
+  [data-vn-reader-header] [data-action="chat-exit"] {
+    --vn-header-control-height: 44px;
+  }
 }
 
 [data-vn-reader-header] .round-ghost svg {
@@ -950,10 +933,10 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
 
 .reader-action-row > .action:not(.nav-step-btn) {
   position: relative !important;
-  height: 38px !important;
-  width: 38px !important;
-  min-width: 38px !important;
-  max-width: 40px !important;
+  height: var(--vn-reader-tool-size, 38px) !important;
+  width: var(--vn-reader-tool-size, 38px) !important;
+  min-width: var(--vn-reader-tool-size, 38px) !important;
+  max-width: var(--vn-reader-tool-size, 40px) !important;
   display: grid !important;
   place-items: center !important;
   border-radius: 50% !important;
@@ -978,7 +961,14 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
 .reader-action-row > .action:not(.nav-step-btn)::after {
   content: "";
   position: absolute;
-  inset: -4px;
+  inset: var(--vn-reader-tool-hit-padding, -4px);
+}
+
+@media (pointer: coarse) {
+  .reader-action-row {
+    --vn-reader-tool-size: 44px;
+    --vn-reader-tool-hit-padding: 0px;
+  }
 }
 
 .reader-action-row > .action:not(.nav-step-btn):hover {

@@ -18,20 +18,20 @@ test('Audit #1: isClaimGroundedInEvidence rejects negation polarity flips and sw
 test('Audit #2: filterStoryDnaForActiveBranch filters thoughtCabinet, chapterCodex, and npcBeliefs across swipes', () => {
   const baseSet: StoryDNASet = {
     locations: {
-      locA: { id: 'locA', name: 'Harbor', aliases: [], autoDiscovered: true, seenInSwipes: ['m1:0'], lastUpdated: 1 },
-      locB: { id: 'locB', name: 'Tower', aliases: [], autoDiscovered: true, seenInSwipes: ['m1:1'], lastUpdated: 1 },
+      locA: { id: 'locA', name: 'Harbor', aliases: [], persistentElements: [], autoDiscovered: true, seenInSwipes: ['m1:0'], lastUpdated: 1 },
+      locB: { id: 'locB', name: 'Tower', aliases: [], persistentElements: [], autoDiscovered: true, seenInSwipes: ['m1:1'], lastUpdated: 1 },
     },
     items: {
-      itemA: { id: 'itemA', name: 'Compass', aliases: [], autoDiscovered: true, seenInSwipes: ['m1:0'], lastUpdated: 1 },
-      itemB: { id: 'itemB', name: 'Dagger', aliases: [], autoDiscovered: true, seenInSwipes: ['m1:1'], lastUpdated: 1 },
+      itemA: { id: 'itemA', name: 'Compass', aliases: [], description: 'Brass compass', distinctiveFeatures: [], colors: [], autoDiscovered: true, seenInSwipes: ['m1:0'], lastUpdated: 1 },
+      itemB: { id: 'itemB', name: 'Dagger', aliases: [], description: 'Steel dagger', distinctiveFeatures: [], colors: [], autoDiscovered: true, seenInSwipes: ['m1:1'], lastUpdated: 1 },
     },
     thoughtCabinet: [
       { id: 'tc-a', title: 'Missing Letter', category: 'clue', description: 'Swipe A clue', status: 'germinating', seenInSwipes: ['m1:0'], updatedAt: 1 },
       { id: 'tc-b', title: 'Secret Vault', category: 'secret', description: 'Swipe B secret', status: 'germinating', seenInSwipes: ['m1:1'], updatedAt: 1 },
     ],
     chapterCodex: [
-      { id: 'cc-a', chapterTitle: 'Ch 1A', summary: 'Harbor arrival', keyEvents: [], seenInSwipes: ['m1:0'], createdAt: 1 },
-      { id: 'cc-b', chapterTitle: 'Ch 1B', summary: 'Tower climb', keyEvents: [], seenInSwipes: ['m1:1'], createdAt: 1 },
+      { id: 'cc-a', title: 'Ch 1A', location: 'Harbor', summary: 'Harbor arrival', seenInSwipes: ['m1:0'], timestamp: 1 },
+      { id: 'cc-b', title: 'Ch 1B', location: 'Tower', summary: 'Tower climb', seenInSwipes: ['m1:1'], timestamp: 1 },
     ],
     npcBeliefs: {
       Mara: [
@@ -39,10 +39,7 @@ test('Audit #2: filterStoryDnaForActiveBranch filters thoughtCabinet, chapterCod
         { topic: 'statedGoals', belief: 'Scale the tower', knowsSecret: false, seenInSwipes: ['m1:1'], updatedAt: 1 },
       ],
     },
-    relationships: {},
-    sceneHistory: [],
     revision: 1,
-    lastUpdated: 1,
   };
 
   const viewA = filterStoryDnaForActiveBranch(baseSet, new Set(['m1:0']));
@@ -64,13 +61,10 @@ test('Audit #3 & #4: Thought Cabinet prevents cross-paragraph false closes and g
   const set: StoryDNASet = {
     locations: {},
     items: {},
-    relationships: {},
-    sceneHistory: [],
     thoughtCabinet: [
       { id: 'tc-letter-1', title: 'Missing Letter Mystery', category: 'clue', description: 'Where is the letter?', status: 'germinating', updatedAt: 1 },
     ],
     revision: 1,
-    lastUpdated: 1,
   };
 
   const basePlan = {
@@ -111,8 +105,6 @@ test('Audit #3 & #4: Thought Cabinet prevents cross-paragraph false closes and g
   const bulkSet: StoryDNASet = {
     locations: {},
     items: {},
-    relationships: {},
-    sceneHistory: [],
     thoughtCabinet: Array.from({ length: 40 }, (_, i) => ({
       id: `tc-mara-${i + 1}`,
       title: `Mara clue ${i + 1}`,
@@ -122,7 +114,6 @@ test('Audit #3 & #4: Thought Cabinet prevents cross-paragraph false closes and g
       updatedAt: 1,
     })),
     revision: 1,
-    lastUpdated: 1,
   };
   const addPlan = {
     ...basePlan,

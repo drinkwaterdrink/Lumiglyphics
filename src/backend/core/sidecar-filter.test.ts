@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { prepareNarrative } from "./paragraphs.js";
+import { extractInlineCardImagesWithParagraphs, prepareNarrative } from "./paragraphs.js";
 
 /** Condensed from a real preset reply: prose interleaved with metadata sidecars. */
 const REPLY = `<scene_header sky="storm" location="PRUITT FARMHOUSE" time="4:47 PM" />
@@ -46,6 +46,44 @@ function texts(content: string, smartProseFilter = true): string[] {
 }
 
 describe("structured sidecar filter", () => {
+  test("routes a preset dateline, colored speech, HTML card, deliberation, and Oracle options separately", () => {
+    const reply = [
+      "@campus|Monday, January 5, 2026|8:18 AM|Cycle 1",
+      "Mira stepped through the gate.",
+      '<soul_deliberation>{"chime":"Internal direction","whisper":"Ask the model to suggest a lost key"}</soul_deliberation>',
+      '<font color="#80CBC4">"Come through,"</font> the guard said.',
+      '<div style="border:1px solid gold"><span>ENTRY LOG</span><span>Permit pending</span></div>',
+      "The guard shut the register.",
+      "<oracle_paths>\n@sun|Follow the guard|I follow the guard.|The gate closes behind you.\n\n@moon|Wait here|I wait by the gate.|The fog thickens.\n</oracle_paths>",
+    ].join("\n\n").replaceAll(" ", "\u2800");
+    const prepared = prepareNarrative(reply);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "Mira stepped through the gate.", '"Come through," the guard said.', "The guard shut the register.",
+    ]);
+    expect(prepared.detectedSceneMetadata).toMatchObject({ date: "Monday, January 5, 2026", time: "8:18 AM" });
+    expect(prepared.panels).toHaveLength(1);
+    expect(prepared.panels[0]?.html).toContain("ENTRY LOG");
+    expect(prepared.choices.map(({ label, submission, unlocksAfterParagraph }) => ({ label, submission, unlocksAfterParagraph }))).toEqual([
+      { label: "Follow the guard", submission: "I follow the guard.", unlocksAfterParagraph: 2 },
+      { label: "Wait here", submission: "I wait by the gate.", unlocksAfterParagraph: 2 },
+    ]);
+  });
+
+  test("retains ambiguous prose while keeping a private block out of speech, panel and scene hints", () => {
+    const reply = '@reader|this line is part of the story.\n\n<muse-deliberation><say speaker="Mira">Private sentence.</say><scene time="2:00 AM"/><div>Private card</div></muse-deliberation>\n\n<letter>Bring the copper key.</letter>';
+    const prepared = prepareNarrative(reply);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual(["@reader|this line is part of the story.", "Bring the copper key."]);
+    expect(prepared.panels).toEqual([]);
+    expect(prepared.detectedSceneMetadata).toBeUndefined();
+    expect(prepared.detectedSpeakers).toBeUndefined();
+  });
+
+  test("preserves source paragraph slots and ignores image directives inside deliberation", () => {
+    const reply = 'The gate opened.\n\n<soul_deliberation><img="private"></soul_deliberation>\n\nMira stepped inside. <img="entrance">';
+    const { paragraphs } = prepareNarrative(reply);
+    expect(paragraphs.map(p => p.sourceIndex)).toEqual([0, 2]);
+    expect(extractInlineCardImagesWithParagraphs(reply, paragraphs)).toEqual([{ name: "entrance", paragraphIndex: 1 }]);
+  });
   test("keeps the story prose, including speech and action wrapped in tags", () => {
     const output = texts(REPLY).join("\n");
     expect(output).toContain('"Sunday," Nadine says.');

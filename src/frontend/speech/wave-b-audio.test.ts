@@ -94,7 +94,16 @@ describe("Wave B — Zero-Gap Audiobook, Procedural Audio & Auto-Cast", () => {
       async listProfiles() { return []; },
       async listVoices() { return []; },
       async getProfile(connectionId): Promise<TtsProfileSnapshot> {
-        return { connectionId, updatedAt: "rev-1", model: "gemini-2.5-flash-tts", voice: "v1", parametersFingerprint: "p1" };
+        return {
+          id: connectionId,
+          name: "Narrator",
+          provider: "openrouter_tts",
+          model: "gemini-2.5-flash-tts",
+          voice: "v1",
+          isDefault: false,
+          updatedAt: "rev-1",
+          parametersFingerprint: "p1",
+        };
       },
       async synthesize(req) {
         synthCalls.push(req.text);

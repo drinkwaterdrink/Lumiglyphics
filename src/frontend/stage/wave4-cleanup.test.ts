@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { installFakeDocument } from "./stage-test-dom.js";
+import { FakeEvent, FakeNode, installFakeDocument } from "./stage-test-dom.js";
 import { APERTURE_SETTINGS_CSS, APERTURE_STAGE_CSS } from "../theme/aperture-theme.js";
 import { DOCKED_LIBRARY_CSS } from "../image-library/library.js";
 import { PresentationRulesPanel } from "../settings/presentation-rules.js";
@@ -28,26 +28,22 @@ describe("Wave 4 CSS separation, in-DOM confirm & shared helpers", () => {
   });
 
   test("PresentationRulesPanel.guardNavigation uses in-DOM alertdialog instead of window.confirm", () => {
-    const mount = document.createElement("div");
-    const panel = new PresentationRulesPanel({
-      mount,
-      getChat: () => "chat-1",
-      send: () => {},
-      templates: () => [],
-      config: () => ({} as any),
-    });
-
-    (panel as any).dirty = true;
+    const panel = new PresentationRulesPanel(() => "chat-1", () => {});
+    const mount = new FakeNode("div");
+    const host = panel.host;
+    if (!(host instanceof FakeNode)) throw new Error("Presentation rules should mount in the fake DOM");
+    mount.append(host);
+    mount.querySelector("form")!.dispatchEvent(new FakeEvent("input"));
     let navigated = false;
     const allowed = panel.guardNavigation(() => { navigated = true; });
     expect(allowed).toBe(false);
     expect(navigated).toBe(false);
 
-    const dialog = (panel as any).root.querySelector('[data-rule-nav-confirm][role="alertdialog"]') as HTMLElement | null;
+    const dialog = mount.querySelector('[data-rule-nav-confirm][role="alertdialog"]');
     expect(dialog).not.toBeNull();
     expect(dialog?.hidden).toBe(false);
 
-    const leaveBtn = dialog?.querySelector("[data-rule-nav-leave]") as HTMLButtonElement;
+    const leaveBtn = dialog!.querySelector("[data-rule-nav-leave]")!;
     leaveBtn.click();
     expect(navigated).toBe(true);
     expect(dialog?.hidden).toBe(true);

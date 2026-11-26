@@ -32,10 +32,10 @@ describe("Wave 3 Council v4 Overhaul Tests", () => {
 
   it("resolveVoiceForParagraph falls back to character aliases when primary name has no direct override", () => {
     const settings = {
-      narrator: { provider: "browser", voiceId: "narrator-voice" },
-      characterDefault: { provider: "browser", voiceId: "default-char-voice" },
+      narrator: { connectionId: "speech-profile", voice: "narrator-voice" },
+      characterDefault: { connectionId: "speech-profile", voice: "default-char-voice" },
       characters: {
-        "chat::chat-1::orin": { provider: "browser", voiceId: "orin-voice" },
+        "chat::chat-1::orin": { connectionId: "speech-profile", voice: "orin-voice" },
       },
     };
 
@@ -48,7 +48,7 @@ describe("Wave 3 Council v4 Overhaul Tests", () => {
     });
 
     expect(resolved.source).toBe("character-override");
-    expect(resolved.ref?.voiceId).toBe("orin-voice");
+    expect(resolved.ref?.voice).toBe("orin-voice");
     expect(resolved.speakerName).toBe("Attendant");
   });
 
@@ -107,7 +107,7 @@ describe("Wave 3 Council v4 Overhaul Tests", () => {
     otherChar.distinguishingFeatures = ["rune scar on right cheek"];
 
     await saveCharacterDNA(spindle, "c1", targetChar, "u1");
-    await saveCharacterDNA(spindle, "c1", otherChar, "u1");
+    const beforeMerge = await saveCharacterDNA(spindle, "c1", otherChar, "u1");
 
     await handleCharacterDnaRequest(
       spindle,
@@ -118,6 +118,7 @@ describe("Wave 3 Council v4 Overhaul Tests", () => {
         requestId: "req-merge",
         characterId: "aurelia",
         otherId: "aurie",
+        revision: beforeMerge.revision ?? 0,
       },
       "u1"
     );

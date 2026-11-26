@@ -235,6 +235,13 @@ describe("Council Wave 6: Split-Horizon Lore Patch, One-Thumb Stage, Theme Bridg
       holdStart.clientX = 100;
       holdStart.clientY = 100;
       holdStart.button = 0;
+      const resizeGrip = root.querySelector("[data-vn-sheet-handle]");
+      expect(resizeGrip).not.toBeNull();
+      Object.defineProperty(holdStart, "target", { value: resizeGrip, configurable: true });
+      root.dispatchEvent(holdStart);
+      await new Promise((r) => setTimeout(r, 510));
+      expect(root.dataset.vnHudHidden === "true").toBe(initialHud);
+
       Object.defineProperty(holdStart, "target", { value: stageSurface, configurable: true });
       root.dispatchEvent(holdStart);
 

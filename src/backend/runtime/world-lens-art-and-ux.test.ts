@@ -40,13 +40,15 @@ function makePlan(): TurnPlan {
 
 test('Document prompt builder uses straight-on deep-focus flat-lay framing and legible text directives', () => {
   const plan = makePlan();
+  const entry = 'Oct 14 — Crate #9: 400 silver';
+  plan.paragraphs[0]!.text = entry;
   const built = buildDocumentPropPromptInput({
     doc: {
       id: 'doc-ledger-1',
       name: 'Harbor Ledger',
       kind: 'journal',
       paragraphIndex: 0,
-      sections: [{ paragraphIndex: 0, text: 'Oct 14 — Crate #9: 400 silver' }],
+      sections: [{ paragraphIndex: 0, start: 0, end: entry.length, text: entry }],
       visualDetails: 'inked columns on cream paper',
     },
     plan,

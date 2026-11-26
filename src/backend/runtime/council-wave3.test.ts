@@ -192,7 +192,7 @@ describe("Council Wave 3 verification", () => {
     const wired = plan.references.filter((r) => typeof r.wireIndex === "number");
     expect(wired.length).toBeLessThanOrEqual(3);
     expect(wired.map((r) => r.wireIndex)).toEqual([1, 2, 3]);
-    const dirs = formatReferenceDirectives(plan, "natural").join(" ");
+    const dirs = formatReferenceDirectives(plan).join(" ");
     expect(dirs).toContain("Use reference image 1");
     expect(dirs).toContain("Use reference image 2");
     expect(dirs).toContain("Use reference image 3");
@@ -220,11 +220,11 @@ describe("Council Wave 3 verification", () => {
     expect(id1a.continuityDigest).not.toBe(id1Diff.continuityDigest);
     expect(id1Diff.relightRevision).toBe(1);
 
-    const v2Plan = computeDeterministicV2Plan({ config, scene: turn.scenes[0]!, cue: beat1, reference: undefined, providerId: "nanogpt" });
-    expect(v2Plan).not.toBeNull();
-    expect(id1a.shotSpecDigest).toBe(v2Plan!.shotSpecDigest);
-    expect(id1a.styleDnaDigest).toBe(v2Plan!.styleDnaDigest);
-    expect(id1a.templateDigest).toBe(v2Plan!.compiled.prompt ? id1a.templateDigest : "");
+    const v2Plan = computeDeterministicV2Plan({ config, scene: turn.scenes[0]!, cue: beat1, provider: "nanogpt" });
+    expect(id1a.shotSpecDigest).toBe(v2Plan.shotSpecDigest);
+    expect(id1a.styleDnaDigest).toBe(v2Plan.styleDnaDigest);
+    expect(id1a.imageTemplate).toEqual(beat1.imageTemplate);
+    expect(id1a.outputPlanDigest).toBe(v2Plan.outputPlanDigest);
 
     const portraitConfig = normalizeConfig({ ...config, persistentCastArt: true });
     const portraitCue = makeVisualCue({
@@ -241,17 +241,19 @@ describe("Council Wave 3 verification", () => {
     expect(castA!.appearanceFingerprint).toBe(castB!.appearanceFingerprint);
 
     // Cross-beat previousSceneShot threading inside generateAssets
-    const sent: Array<{ cueId: string; framing?: string }> = [];
+    const sent: Array<{ jobId: string; shotSize: string | undefined }> = [];
     const spindle: any = {
       userStorage: { getJson: async (_p: string, o: any) => structuredClone(o?.fallback), setJson: async () => {} },
       imageGen: { generate: async () => ({ imageId: `img-${sent.length + 1}` }) },
     };
     await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, "u1", {
-      beforeGenerate: async (job, _req, metadata) => {
-        sent.push({ cueId: job.cueId, framing: metadata.imagePromptMetadata?.v2?.shot?.shotType });
+      beforeGenerate: async (job, request) => {
+        sent.push({ jobId: job.jobId, shotSize: request.shotSpec?.camera.shotSize });
+        return request;
       },
     });
-    expect(sent.length).toBe(2);
+    expect(sent.map(entry => entry.jobId)).toEqual([beat1.assetJobId, beat2.assetJobId]);
+    expect(sent.every(entry => Boolean(entry.shotSize))).toBe(true);
   });
 
   test("ImageRetryQueue enforces viewport priority ordering, empty enqueue no-op, and clearPending cleanup", async () => {

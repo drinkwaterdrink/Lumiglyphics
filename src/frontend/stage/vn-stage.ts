@@ -2474,7 +2474,7 @@ export class VnStage {
 
         // Check if user is scrolling inside dialogue text or scrollable card
         const target = event.target as HTMLElement | null;
-        if(target?.closest("[data-vn-interaction]"))return;
+        if (isInteractiveTarget(target)) return;
         const scrollable = target?.closest(".scroll-copy, [data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
         const isScrollingText = scrollable && scrollable.scrollHeight > scrollable.clientHeight && Math.abs(dy) > 15;
 

@@ -16,13 +16,18 @@ try{
   assert.equal(await warp.isVisible(),true);assert.equal(await other.isVisible(),true);
   const edit=page.getByRole('button',{name:'Edit Ask Mira about the door as message',exact:true});await edit.click();
   const editor=page.locator('[data-vn-move-draft]'),input=editor.getByRole('textbox',{name:'Action draft',exact:true});
-  assert.equal(await page.getByRole('button',{name:/^Image prompts/}).isVisible(),false,'move editor keeps the floating prompt launcher out of the way');
+  const artwork=page.getByRole('button',{name:'Open Art Studio',exact:true});
+  assert.equal(await artwork.evaluate(el => {
+    const box = el.getBoundingClientRect();
+    const target = (el.getRootNode() as ShadowRoot).elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return target?.closest('button') === el;
+  }), true, 'move editor leaves the Art Studio header shortcut unobstructed');
   assert.equal(await input.inputValue(),'Ask Mira about the door');assert.equal(await editor.locator('[data-vn-game-odds]').count(),0);
   assert.match(await editor.innerText(),/odds and automatic checks do not apply/);
   await page.screenshot({path:`.cache/game-moves/editor-${mode}-${viewport.width}.png`});
   await input.fill('I ask Mira whether she has a key.');await editor.getByRole('button',{name:'Insert into reply',exact:true}).click();
   const reply=page.getByRole('textbox',{name:'Your reply',exact:true});assert.equal(await reply.inputValue(),'I ask Mira whether she has a key.');
-  assert.equal(await page.getByRole('button',{name:/^Image prompts/}).isVisible(),true);
+  assert.equal(await editor.isVisible(),false,'inserting the move closes the editor');
   assert.deepEqual(await page.evaluate(()=>(window as any).gameFixture.picks),[]);assert.deepEqual(await page.evaluate(()=>(window as any).gameFixture.submissions),[]);
   await reply.fill('Existing reply');await edit.click();await input.fill('I listen carefully.');await editor.getByRole('button',{name:'Insert into reply',exact:true}).click();assert.equal(await reply.inputValue(),'Existing reply\n\nI listen carefully.');
   await edit.click();await input.fill('I knock once.');await editor.getByRole('button',{name:'Replace reply draft',exact:true}).click();assert.equal(await reply.inputValue(),'I knock once.');
@@ -36,7 +41,7 @@ try{
   await page.evaluate(()=>{const f=(window as any).gameFixture;f.reset();f.publish('warp','Ask Mira about the door');f.publish('other','Look through the window',.8);});await page.locator('[data-vn-continue]').click();
   if(!await page.locator('[data-vn-game-moves]').evaluate(e=>(e as HTMLDetailsElement).open))await summary.click();
   await page.evaluate(()=>{const f=(window as any).gameFixture;f.stage.setTooltipPreferences({...f.prefs,actionsEnabled:false});});assert.equal(await page.locator('[data-vn-edit-game-move]').count(),0);assert.equal(await other.isVisible(),true);
-  await other.click();await page.evaluate(()=>{const f=(window as any).gameFixture;const c={id:'shared-id',provider:'other',label:'Look through the window',group:'Story moves',detail:'A provider-owned move',odds:.8};f.bridge.pick('moves-chat',c);});
+  await other.click();
   assert.deepEqual(await page.evaluate(()=>(window as any).gameFixture.picks),[{version:1,provider:'other',chatId:'moves-chat',id:'shared-id'}]);
   await page.evaluate(()=>{const f=(window as any).gameFixture;f.reset();f.stage.setTooltipPreferences(f.prefs);f.publish('warp','Ask Mira about the door',.62,true);});await page.locator('[data-vn-continue]').click();
   assert.equal(await page.locator('[data-vn-game-choice]').first().isDisabled(),true);

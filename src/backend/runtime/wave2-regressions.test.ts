@@ -5,6 +5,7 @@ import { findBackdropArt, saveBackdropArt } from "./scene-art-index.js";
 import { prepareAssetJobs } from "./images.js";
 import { deriveColorScriptKeyframe } from "./visual-brief.js";
 import { harvestTurnStoryDNA } from "./story-dna-harvester.js";
+import { FIXED_CAMERA } from "./planner/schemas.js";
 import type { TurnPlan } from "../../shared/contracts.js";
 
 function memoryStorage() {
@@ -48,40 +49,43 @@ describe("Wave 2 Regressions (P3 Backdrop/Trigger + Seat 1 ColorScript + P9 Code
     const { spindle, images } = memoryStorage();
     images.add("img-library-1");
     const plan: TurnPlan = {
+      schemaVersion: 1,
       key: { chatId: "chat-p3", assistantMessageId: "m1", swipeId: 0, sourceFingerprint: "fp12345678", revision: 1 },
       paragraphs: [
-        { index: 0, text: "Entering the library.", kind: "narration", speaker: "Narrator" },
-        { index: 1, text: "Walking past the reading tables.", kind: "narration", speaker: "Narrator" }
+        { index: 0, sourceIndex: 0, text: "Entering the library." },
+        { index: 1, sourceIndex: 1, text: "Walking past the reading tables." }
       ],
       scenes: [{
         sceneId: "scene-lib",
         revision: 1,
         startParagraph: 0,
-        environment: { location: "Obsidian Library", timeOfDay: "night", weather: null, lighting: "candlelight", description: "Tall shelves.", persistentElements: ["oak desk"], removedElements: [] },
+        environment: { location: "Obsidian Library", timeOfDay: "night", weather: null, lighting: "candlelight", description: "Tall shelves.", persistentElements: ["oak desk"] },
         cast: ["Mira"],
         character: "Mira",
         attire: "library robes",
         ambient: null,
         ambientSource: "explicit",
-        continuity: { characters: [] },
+        continuity: { revision: 1, characters: {}, facts: {} },
         basePrompt: "obsidian library",
         identityPrompt: "silver hair",
-        cameraLock: "eye level",
+        cameraLock: FIXED_CAMERA,
         compositionLock: "centered",
         activeAssetId: null,
         priorSceneId: null
       }],
       visualCues: [
-        { paragraphIndex: 0, sceneId: "scene-lib", sceneRevision: 1, assetJobId: "job-0", visualDescription: "Standing by oak desk", expression: "idle", action: null, character: "Mira", characterId: "char-mira", subjectCategory: "female", poseExpressionId: "idle", resolvedIdentity: "silver hair", resolvedAttire: "library robes", promptDelta: "p0" },
-        { paragraphIndex: 1, sceneId: "scene-lib", sceneRevision: 1, assetJobId: "job-1", visualDescription: "Reading by candle", expression: "think", action: null, character: "Mira", characterId: "char-mira", subjectCategory: "female", poseExpressionId: "think", resolvedIdentity: "silver hair", resolvedAttire: "library robes", promptDelta: "p1" }
+        { cueId: "cue-0", kind: "flattened_scene", paragraphIndex: 0, sceneId: "scene-lib", sceneRevision: 1, assetJobId: "job-0", visualDescription: "Standing by oak desk", expression: "idle", action: null, character: "Mira", characterId: "char-mira", subjectCategory: "female", poseExpressionId: "idle", resolvedIdentity: "silver hair", resolvedAttire: "library robes", promptDelta: "p0" },
+        { cueId: "cue-1", kind: "flattened_scene", paragraphIndex: 1, sceneId: "scene-lib", sceneRevision: 1, assetJobId: "job-1", visualDescription: "Reading by candle", expression: "think", action: null, character: "Mira", characterId: "char-mira", subjectCategory: "female", poseExpressionId: "think", resolvedIdentity: "silver hair", resolvedAttire: "library robes", promptDelta: "p1" }
       ],
       audioCues: [],
       effectCues: [],
       choices: [],
-      characters: [],
-      speakers: [],
-      initialContinuity: { characters: [] },
-      terminalContinuity: { characters: [] }
+      paragraphSpeakers: ["", ""],
+      continuityDeltas: [],
+      planningStatus: "planned",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      initialContinuity: { revision: 1, characters: {}, facts: {} },
+      terminalContinuity: { revision: 1, characters: {}, facts: {} }
     };
     const cfg = { ...DEFAULT_CONFIG, imageGenerationTrigger: "scene-change" as const, maxImagesPerTurn: 4 };
     const jobsFirst = await prepareAssetJobs(spindle, plan, cfg, undefined, new SceneImageCache(), "u1");

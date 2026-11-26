@@ -9,7 +9,6 @@ try{
   await page.evaluate(()=>{
    const f=(window as any).readingFixture;f.stage.loadTurn({...f.turn,paragraphs:Array.from({length:20},(_,i)=>({id:`p${i}`,text:`Earlier paragraph ${i}. `.repeat(30),speaker:'Dana'}))});
    for(let i=0;i<19;i++)f.stage.advance();
-   const mount=f.stage.panelMount,host=document.createElement('div');host.dataset.imageStudio='';host.style.cssText='position:absolute;inset:0;z-index:9;pointer-events:none';const shadow=host.attachShadow({mode:'open'});shadow.innerHTML='<button style="position:absolute;top:70px;right:12px;min-height:44px;pointer-events:auto">Image prompts</button>';mount.append(host);
   });
   const progress=await page.locator('[data-vn-progress]').textContent();await page.evaluate(()=>(window as any).readingFixture.stage.openBacklog());
   const close=page.getByRole('button',{name:'Close history',exact:true});const box=await close.boundingBox();assert.ok(box&&box.width>=44&&box.height>=44&&box.y>=70,'History has a mobile-sized close below navigation');
@@ -21,11 +20,11 @@ try{
   if(viewport.width===390&&(preset==='lumiverse'||preset==='literature-club'))await page.screenshot({path:`.cache/history-${preset}.png`});
   await back.tap();
   assert.equal(await page.getByRole('dialog',{name:'History',exact:true}).isVisible(),false);assert.equal(await page.locator('[data-vn-progress]').textContent(),progress);
-  assert.equal(await page.locator('[data-image-studio]').isVisible(),true,'floating controls return');
+  assert.equal(await page.getByRole('button',{name:'Previous paragraph',exact:true}).isEnabled(),true,'reader passage navigation is available again');
   await page.close();
  }
  const unified=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await unified.goto(`http://127.0.0.1:${server.port}/?unified=1`);
- const before=await unified.locator('[data-vn-progress]').textContent();await unified.getByRole('button',{name:'Open APERTURE navigation',exact:true}).tap();await unified.locator('[data-aperture-route="history"]').tap();
+ const before=await unified.locator('[data-vn-progress]').textContent();await unified.getByRole('button',{name:'Open Lumiglyphics APERTURE navigation',exact:true}).tap();await unified.locator('[data-aperture-route="history"]').tap();
  assert.equal(await unified.locator('[data-image-library] section').isVisible(),true,'real reader History opens unified window');
  assert.equal(await unified.locator('[data-vn-backlog]').isVisible(),false,'legacy backlog does not open underneath');
  await unified.getByText('Read reply',{exact:true}).tap();assert.ok(await unified.locator('[data-image-library]').getByText('Speaker 0',{exact:true}).isVisible());

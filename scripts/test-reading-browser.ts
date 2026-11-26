@@ -26,15 +26,30 @@ try {
   await mobile.goto(url("mode=cyoa"));
   await mobile.locator("[data-vn-dialogue]").waitFor();
   assert.equal(await mobile.evaluate(() => matchMedia("(pointer: coarse)").matches), true, "phone context emulates a coarse pointer");
+  await mobile.evaluate(() => (window as any).readingFixture.stage.advance());
   for (const name of ['[data-vn-control="previous"]','[data-vn-control="log"]','[data-action="caption-auto"]','[data-vn-hide-text]']) {
-    const box = await mobile.locator(name).boundingBox();
-    // CSS pixels can differ by a floating-point fraction after device scaling.
-    assert.ok(box && box.height >= 43.99 && box.width >= 43.99, `${name} control is a 44px touch target (got ${box?.width}x${box?.height})`);
+    const hits = await mobile.locator(name).evaluate(button => {
+      const box = button.getBoundingClientRect();
+      const root = button.getRootNode() as ShadowRoot;
+      return [[0, 0], [-21, 0], [21, 0], [0, -21], [0, 21]].every(([x, y]) => {
+        const target = root.elementFromPoint(box.x + box.width / 2 + x!, box.y + box.height / 2 + y!);
+        return target === button || button.contains(target);
+      });
+    });
+    assert.ok(hits, `${name} receives touches across its 44px target`);
   }
+  await mobile.evaluate(() => (window as any).readingFixture.stage.previous());
   const continueBox = await mobile.getByRole("button", { name: "Continue", exact: true }).boundingBox();
   assert.ok(continueBox && continueBox.height >= 44 && continueBox.width >= 44, "Continue is a 44px touch target");
-  const exitBox = await mobile.getByRole("button", { name: "Back to Lumiverse chat", exact: true }).boundingBox();
-  assert.ok(exitBox && exitBox.height >= 44, "Back to chat is a 44px touch target");
+  const exitHits = await mobile.getByRole("button", { name: "Back to Lumiverse chat", exact: true }).evaluate(button => {
+    const box = button.getBoundingClientRect();
+    const root = button.getRootNode() as ShadowRoot;
+    return [-21, 0, 21].every(offset => {
+      const hit = root.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2 + offset);
+      return hit === button || button.contains(hit);
+    });
+  });
+  assert.ok(exitHits, "Back to chat receives touches throughout its vertical target");
   const controls = await mobile.locator("[data-vn-controls]").boundingBox();
   const speaker = await mobile.locator("[data-vn-speaker]").boundingBox();
   assert.ok(controls && speaker && speaker.y + speaker.height <= controls.y + 0.5, "phone toolbar stays below the dialogue nameplate");
@@ -61,23 +76,25 @@ try {
   // Labels
   assert.equal(await page.getByRole("button", { name: "Back to Lumiverse chat", exact: true }).getAttribute("title"), "Back to chat");
   assert.equal((await page.getByRole("button", { name: "Open history", exact: true }).textContent())?.trim(), "History");
-  assert.equal(await page.getByRole("button", { name: "Toggle auto-play", exact: true }).getAttribute("aria-pressed"), "false");
+  const auto = page.locator('[data-action="caption-auto"]');
+  assert.equal(await auto.getAttribute("aria-pressed"), "false");
   assert.match(await page.locator('[data-vn-control="skip"]').evaluate((el) => (el as HTMLElement).getAttribute("aria-describedby") ?? ""), /vn-skip-description/);
 
   // Keyboard path with visible focus rings
-  await page.getByRole("button", {name:"Open history",exact:true}).focus();
-  assert.match(await focusOutline(), /solid/, "History shows a visible focus ring");
-  for(const expected of ['button[data-vn-control=lens]','button[data-vn-control=cast]','button[data-vn-control=settings]','button[data-vn-continue]']){
+  await page.getByRole("button", {name:"Extension settings",exact:true}).focus();
+  assert.match(await focusOutline(), /solid/, "Settings shows a visible focus ring");
+  for(const expected of ['button[data-vn-control=lens]','button[data-vn-control=cast]','button[data-vn-control=log]']){
     await page.keyboard.press("Tab");assert.equal(await active(),expected,"keyboard follows the visible reading controls");
     assert.match(await focusOutline(),/solid/,"each visible reading control shows focus");
   }
-  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Continue", exact: true }).press("Enter");
   assert.equal(await page.evaluate(() => (window as any).readingFixture.stage.getState().currentParagraphIndex), 1);
 
   // Auto/Pause visible state + footer
-  const auto = page.getByRole("button", { name: "Toggle auto-play", exact: true });
+  assert.equal(await auto.getAttribute("aria-label"), "Start auto-read and speech");
   await auto.click();
   assert.equal(await auto.getAttribute("aria-pressed"), "true");
+  assert.equal(await auto.getAttribute("aria-label"), "Pause auto-read and speech");
   assert.equal(await auto.getAttribute("data-active"),"true","visible Auto control shows its active state");
   assert.equal(await page.locator("[data-vn-reading-state]").textContent(), "Auto play on");
   await auto.click();
@@ -105,7 +122,8 @@ try {
   await page.keyboard.press("ArrowLeft");
   assert.equal(await page.evaluate(() => (window as any).readingFixture.stage.getState().currentParagraphIndex), 2, "Left Arrow inside the reply field only moves the caret");
   const previous = page.getByRole("button", { name: "Previous paragraph", exact: true });
-  assert.equal(await previous.evaluate((el) => el.closest("[data-vn-controls]") !== null), true, "Previous stays in the toolbar at Your turn");
+  assert.equal(await previous.evaluate((el) => el.closest(".reader-step-nav") !== null), true, "Previous stays in the passage controls at Your turn");
+  await page.evaluate(() => (window as any).readingFixture.stage.focus());
   await previous.click();
   assert.equal(await page.evaluate(() => (window as any).readingFixture.stage.getState().draft), "Keep my draft");
   await page.evaluate(() => (window as any).readingFixture.stage.focus());
@@ -120,15 +138,15 @@ try {
   await page.evaluate(() => { const s = (window as any).readingFixture.stage; s.setPhase("waiting-for-response"); s.setAssetProgress({ current: 2, total: 3 }); });
   assert.equal(await page.getByText("Waiting for the reply…", { exact: true }).isVisible(), true);
   assert.equal(await page.getByText("Creating image 2 of 3", { exact: true }).isVisible(), true);
-  // The "Panels" launcher sits in the top-left corner; status badges must not be under it.
+  // Status badges must leave the current header navigation tappable.
   {
-    const launcher = page.getByRole("button", { name: "Open Panels",exact:true });
-    assert.equal(await launcher.isVisible(), true, "Panels launcher is mounted on the stage");
-    const l = (await launcher.boundingBox())!;
+    const header = page.locator("[data-vn-reader-header]");
+    assert.equal(await header.isVisible(), true, "Reader navigation remains available during preparation");
+    const l = (await header.boundingBox())!;
     for (const text of ["Waiting for the reply…", "Creating image 2 of 3"]) {
       const b = (await page.getByText(text, { exact: true }).boundingBox())!;
       const overlaps = l.x < b.x + b.width && b.x < l.x + l.width && l.y < b.y + b.height && b.y < l.y + l.height;
-      assert.ok(!overlaps, `status badge "${text}" is not covered by the Panels launcher (launcher ${JSON.stringify(l)} badge ${JSON.stringify(b)})`);
+      assert.ok(!overlaps, `status badge "${text}" stays clear of the reader header`);
     }
   }
   assert.equal(await page.locator("[data-vn-dialogue-text]").isVisible(), true, "the last paragraph stays readable while the reply prepares");

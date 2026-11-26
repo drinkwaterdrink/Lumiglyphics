@@ -163,8 +163,11 @@ function capEpochMap(map: Map<string, number>, max = 256): void {
     map.delete(oldest);
   }
 }
-const scheduledLoreTurns = new Map<string, string>();
 const pendingLoreJobs = new Map<string, { timer?: ReturnType<typeof setTimeout>; controller: AbortController; scheduled: string; userId?: string | undefined }>();
+
+function sidecarEnabled(config: VisualNovelConfig): boolean {
+  return config.enabled && (config.collectEntityReferences || config.tooltips.enabled) && config.sidecarCollection.selected.length > 0;
+}
 
 export function cancelSplitHorizonLore(key: string): void {
   const pending = pendingLoreJobs.get(key);
@@ -195,10 +198,10 @@ export function scheduleSplitHorizonLore(
   }
 ): void {
   const { config, paragraphs } = params;
-  if (!paragraphs.length || (!config.collectEntityReferences && !config.tooltips.enabled)) return;
+  if (!paragraphs.length || !sidecarEnabled(config)) return;
   const key = runtimeKey(params.userId, params.chatId);
   const scheduled = JSON.stringify([params.turnKey, params.intakeEpoch]);
-  if (scheduledLoreTurns.get(key) === scheduled || pendingLoreJobs.get(key)?.scheduled === scheduled) return;
+  if (pendingLoreJobs.get(key)?.scheduled === scheduled) return;
   cancelSplitHorizonLore(key);
   const controller = new AbortController();
   const isCurrent = () =>
@@ -210,6 +213,8 @@ export function scheduleSplitHorizonLore(
   const run = async () => {
     try {
       if (!isCurrent()) return;
+      const stored = await loadTurnRecord(spindle, params.path, params.userId);
+      if (!stored || stored.sidecarState !== 'pending' || !compareTurnKeys(stored.plan.key, params.turnKey).accepted || !isCurrent()) return;
       let openDocumentTitles: string[] | undefined;
       if (spindle.userStorage) {
         try {
@@ -227,11 +232,6 @@ export function scheduleSplitHorizonLore(
         ...(p.sourceIndex !== undefined ? { sourceIndex: p.sourceIndex } : {}),
         text: stripTextEffectTags(p.text),
       }));
-      scheduledLoreTurns.set(key, scheduled);
-      if (scheduledLoreTurns.size > 256) {
-        const oldest = scheduledLoreTurns.keys().next().value;
-        if (oldest !== undefined) scheduledLoreTurns.delete(oldest);
-      }
       const lore = await extractTurnLoreAsync(spindle, {
         config,
         paragraphs: strippedParagraphs,
@@ -267,9 +267,14 @@ export function scheduleSplitHorizonLore(
         && lore.threadUpdates.length === 0
         && lore.wardrobeDeltas.length === 0
         && lore.suppressedDocumentNouns.length === 0
-      ) return;
+      ) {
+        await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, current =>
+          compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: 'settled' } : null, isCurrent);
+        return;
+      }
       let previousDocIds = new Set<string>();
       const updated = await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, (current) => {
+        if (!compareTurnKeys(current.plan.key, params.turnKey).accepted) return null;
         previousDocIds = new Set((current.plan.storyDocuments ?? []).map((d) => d.id));
         const mergedRefs = [...(current.plan.storyReferences ?? [])];
         const seenRef = new Set(mergedRefs.map((r) => JSON.stringify(r)));
@@ -297,6 +302,7 @@ export function scheduleSplitHorizonLore(
         };
       }, isCurrent);
       if (!updated || !isCurrent()) return;
+      let dnaSaved = false;
       if (spindle.userStorage) {
         try {
           const swipeTag = swipeTurnTag(params.turnKey.assistantMessageId, Number(params.turnKey.swipeId ?? 0) || 0);
@@ -313,7 +319,14 @@ export function scheduleSplitHorizonLore(
               },
             });
           });
-        } catch {}
+          dnaSaved = true;
+        } catch (error) {
+          if (isCurrent()) spindle.log?.warn?.(`Sidecar Story DNA save failed: ${errorText(error)}`);
+        }
+      }
+      if (dnaSaved && isCurrent()) {
+        await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, current =>
+          compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: 'settled' } : null, isCurrent);
       }
       if (!isCurrent()) return;
       const presentation = readerPresentationFor(updated.plan, updated.presentation);
@@ -391,6 +404,21 @@ export function scheduleSplitHorizonLore(
     void run();
   }, delayMs);
   pendingLoreJobs.set(key, { timer, controller, scheduled, userId: params.userId });
+}
+
+function resumeStoredSidecar(
+  spindle: SpindleAPI, record: StoredTurnRecord, path: string, config: VisualNovelConfig,
+  messages: readonly ChatMessageDTO[], userId: string | undefined, intakeEpoch: number,
+): void {
+  const { key, paragraphs, paragraphSpeakers } = record.plan;
+  const latest = messages.find(message => message.id === key.assistantMessageId && !message.is_user);
+  const location = record.plan.scenes[0]?.environment.location ?? null;
+  scheduleSplitHorizonLore(spindle, {
+    ...(userId ? { userId } : {}), chatId: key.chatId, path, turnKey: key, intakeEpoch, config,
+    paragraphs, paragraphSpeakers, messages, prevLocationName: location,
+    ...(record.cardRole ? { cardRole: record.cardRole } : {}),
+    ...(latest?.name ? { scenarioReferenceName: characterAppearanceKey(latest.name) } : {}),
+  });
 }
 
 function bumpIntakeEpoch(userId: string | undefined, chatId: string): void {
@@ -1029,6 +1057,8 @@ export async function sendState(
   // resolve right now (interceptor not loaded, transient error) keeps the
   // stored turn instead of replacing it.
   let stale: { message: NormalizedChatMessage; intake: MessageIntake | null; relation: RecordRelation } | null = null;
+  let resumeMessages: NormalizedChatMessage[] | undefined;
+  const sidecarEpoch = intakeEpochs.get(runtimeKey(userId, chatId)) ?? 0;
   if (record) {
     try {
       const messages = await spindle.chat.getMessages(chatId) as NormalizedChatMessage[];
@@ -1054,10 +1084,10 @@ export async function sendState(
             dbg(spindle, userId, `host could not resolve message ${latest.id}; keeping the stored turn chat=${chatId}`);
           } else if (relation !== "current") {
             stale = { message: latest, intake, relation };
-          }
+          } else resumeMessages = messages;
         } else if (relateRecord(record, latest, { selectionText: latest.content, stableSelection: true }) !== "current") {
           stale = { message: latest, intake: { text: latest.content, selectionText: latest.content, resolved: true, stableSelection: true }, relation: "changed" };
-        }
+        } else resumeMessages = messages;
       }
     } catch (error) {
       spindle.log.warn(`Stored turn freshness check failed; sending the stored turn: ${errorText(error)}`);
@@ -1096,6 +1126,14 @@ export async function sendState(
     readingPosition: await loadReadingPosition(spindle, chatId, userId)
   }, userId);
   const canPlan = !options.readOnly&&config.enabled && views.isOpen(userId, chatId);
+  if (canPlan && options.viewOpen === true && !stale && resumeMessages && chatState.activeTurnPath &&
+      record?.sidecarState === 'pending' && sidecarEnabled(config) && (intakeEpochs.get(stateKey) ?? 0) === sidecarEpoch) {
+    const owner = activeTurnKeys.get(stateKey);
+    if (!owner || compareTurnKeys(owner, record.plan.key).accepted) {
+      activeTurnKeys.set(stateKey, record.plan.key);
+      resumeStoredSidecar(spindle, record, chatState.activeTurnPath, config, resumeMessages, userId, sidecarEpoch);
+    }
+  }
   if (!record) {
     if (canPlan) await bootstrapLatestAssistantTurn(spindle, chatId, userId);
     else dbg(spindle, userId, `skipped bootstrap: ${config.enabled ? "view closed" : "extension disabled (enabled=false)"} chat=${chatId}`);
@@ -1487,6 +1525,15 @@ async function processAssistantMessage(
       activeTurnKeys.set(key, reusable.plan.key);
       await persistActiveTurn(spindle, reusable, path, userId);
       spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, reusable, userId) }, userId);
+      if (reusable.sidecarState === 'pending' && (intakeEpochs.get(key) ?? 0) === intakeEpoch) {
+        const config = await loadConfig(spindle, userId);
+        if (sidecarEnabled(config) && views.isOpen(userId, chatId)) {
+          const messages = await spindle.chat.getMessages(chatId).catch(() => [message]);
+          if ((intakeEpochs.get(key) ?? 0) === intakeEpoch && compareTurnKeys(activeTurnKeys.get(key) ?? null, reusable.plan.key).accepted) {
+            resumeStoredSidecar(spindle, reusable, path, config, messages, userId, intakeEpoch);
+          }
+        }
+      }
       return;
     }
   }
@@ -1695,6 +1742,7 @@ async function processAssistantMessage(
     const nowTime = new Date().toISOString();
     const record: StoredTurnRecord = {
       schemaVersion: 1,
+      ...(sidecarEnabled(config) ? { sidecarState: 'pending' } : {}),
       cardRole:result.cardRole,
       plannerMode: result.usedFallback ? 'fallback' : 'model',
       ...(relation === 'current' && existing?.forceImageReview ? {forceImageReview:true} : {}),
@@ -2440,6 +2488,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
       }
       const now = new Date().toISOString();
       const record: StoredTurnRecord = {schemaVersion:1,speaker:result.cardRole === 'scenario' ? 'Narrator' : latest.name || 'Narrator',...(old.userSpeaker ? {userSpeaker:old.userSpeaker} : {}),status:'ready',plan,jobs,previousImages,forceImageReview:true,
+        ...(sidecarEnabled(config) ? { sidecarState: 'pending' } : {}),
         imageRequests:safeImageHistory((old.imageRequests ?? []).filter(r => r.state === 'approved' && jobs.some(job => job.jobId === r.jobId))),
         cardRole:result.cardRole,plannerMode:result.usedFallback ? 'fallback' : 'model',...(result.cardId ? {cardId:result.cardId} : {}),
         replanRequestIds:[...(old.replanRequestIds ?? []),action.requestId].slice(-32),

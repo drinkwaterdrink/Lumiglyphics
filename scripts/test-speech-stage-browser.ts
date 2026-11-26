@@ -50,7 +50,7 @@ try {
 
   // Click at the exact center of Play button
   await page.mouse.click(playButtonBox.x, playButtonBox.y);
-  await page.waitForTimeout(50);
+  await page.waitForFunction(() => (window as any).fixture.logs.includes("audio:play"), undefined, { timeout: 5000 });
 
   const logsAfterPlay = await page.evaluate(() => [...(window as any).fixture.logs]);
   console.log("Logs after Play click:", logsAfterPlay);

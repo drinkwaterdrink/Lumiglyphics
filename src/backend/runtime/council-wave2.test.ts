@@ -118,7 +118,7 @@ Still thinking about choices {unfinished
 
     const rpg1 = reduceRpgState(null, { personaName: "Hero" });
     rpg1.turnCounter = 1;
-    rpg1.vitals.companions = [{ name: "Mira", affinity: 35, status: "healthy" }];
+    rpg1.vitals.companions = [{ name: "Mira", hp: 100, maxHp: 100, affinity: 35, status: "healthy" }];
     const r1 = await planTurn(spindle, {
       chatId: "chat-w2",
       message: { ...baseMessage, content: "At the harbor." },

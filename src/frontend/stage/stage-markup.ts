@@ -215,7 +215,7 @@ export const queryRequired = <T extends Element>(
 
 export const isInteractiveTarget = (target: EventTarget | null): boolean =>
   target instanceof Element &&
-  Boolean(target.closest("button, textarea, input, select, option, a, [role='button'], [data-vn-interaction]"));
+  Boolean(target.closest("button, textarea, input, select, option, a, [role='button'], [data-vn-interaction], [data-vn-sheet-handle], [data-vn-sheet-header]"));
 
 export const phaseLoadingLabel = (phase: VnPhase): string | null => {
   switch (phase) {

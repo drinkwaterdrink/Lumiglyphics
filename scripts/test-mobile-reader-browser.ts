@@ -1,7 +1,11 @@
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { THEME_PRESET_IDS } from "../src/config.js";
+
+const resizeGrip = (page: Page) => page.getByRole("separator", { name: "Drag to resize dialogue panel", exact: true });
+const hideText = (page: Page) => page.getByRole("button", { name: "Hide text reader to view full artwork", exact: true });
+const paragraphIndex = (page: Page) => page.evaluate(() => (window as any).readingFixture.stage.getState().currentParagraphIndex as number);
 
 const build = await Bun.build({ entrypoints: ["scripts/reading-browser-fixture.ts"], target: "browser" });
 assert.ok(build.success, String(build.logs));
@@ -19,6 +23,7 @@ await mkdir(".cache/mobile-reader", { recursive: true });
 try {
   for (const viewport of [{ width: 360, height: 800 }, { width: 390, height: 844 }, { width: 412, height: 915 }, { width: 844, height: 390 }]) {
     const page = await browser.newPage({ viewport, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+    page.setDefaultTimeout(7000);
     await page.goto(`http://127.0.0.1:${server.port}/`);
     await page.evaluate(() => {
       const f = (window as any).readingFixture;
@@ -30,32 +35,49 @@ try {
     assert.equal(await page.locator("[data-vn-sheet-tools]").innerText(), "", "reader chrome is icon-only without a title");
     const panel = page.locator("[data-vn-dialogue]");
     const header = page.locator("[data-vn-sheet-header]");
-    const grip = page.getByRole("button", { name: "Resize text panel", exact: true });
+    const grip = resizeGrip(page);
     const headerBox = await header.boundingBox();
     const gripBox = await grip.boundingBox();
     const panelBox = await panel.boundingBox();
-    assert.ok(headerBox && gripBox && panelBox && gripBox.x - panelBox.x < 25 && headerBox.height < 60, "single compact header with left-corner grip");
-    const initialHeight = (await panel.boundingBox())!.height;
-    await page.mouse.move(gripBox!.x + 20, gripBox!.y + 20);
+    assert.ok(headerBox && gripBox && panelBox && headerBox.height < 60, "single compact header with a resize grip");
+    const gripCenter = gripBox.x + gripBox.width / 2;
+    assert.ok(Math.abs(gripCenter - (panelBox.x + panelBox.width / 2)) < 2, "resize grip is centered along the top edge");
+    const initialHeight = panelBox.height;
+    const gripMiddle = gripBox.y + gripBox.height / 2;
+    const gripHit = await grip.evaluate((el, { x, y }) => {
+      const target = (el.getRootNode() as ShadowRoot).elementFromPoint(x, y);
+      return target === el || el.contains(target);
+    }, { x: gripCenter, y: gripMiddle });
+    assert.ok(gripHit, `resize grip receives pointer input: ${JSON.stringify({ viewport, gripBox })}`);
+    const beforeDrag = await paragraphIndex(page);
+    await page.mouse.move(gripCenter, gripMiddle);
     await page.mouse.down();
-    await page.mouse.move(gripBox!.x + 20, gripBox!.y - 37, { steps: 4 });
+    await page.mouse.move(gripCenter, gripMiddle - 57, { steps: 4 });
     const duringHeight = (await panel.boundingBox())!.height;
     await page.mouse.up();
     const savedHeight = (await panel.boundingBox())!.height;
+    assert.equal(await paragraphIndex(page), beforeDrag, `dragging the resize grip leaves the paragraph unchanged at ${viewport.width}×${viewport.height}`);
     assert.ok(Math.abs(savedHeight - duringHeight) < 2, "release keeps intermediate height without snapping");
-    if (viewport.height > 500) assert.ok(savedHeight > initialHeight + 40, "drag adjusts height continuously");
+    if (viewport.height > 500) assert.ok(savedHeight > initialHeight + 40, `drag adjusts height continuously: ${JSON.stringify({ viewport, initialHeight, duringHeight, savedHeight })}`);
     await page.evaluate(() => { const f = (window as any).readingFixture; f.stage.setReaderPreferences(f.counters.readerPreferences); });
     assert.ok(Math.abs((await panel.boundingBox())!.height - savedHeight) < 2, "saved preference echo retains dragged height");
 
     const text = page.locator("[data-vn-dialogue-text]");
-    await assert.doesNotReject(() => panel.waitFor());
-    const beforeTap = await page.locator("[data-vn-progress]").textContent();
-    await text.click();
-    assert.notEqual(await page.locator("[data-vn-progress]").textContent(), beforeTap, "tapping prose advances exactly once");
-    await page.getByRole("button", { name: "Previous paragraph", exact: true }).click();
-    assert.equal(await page.locator("[data-vn-progress]").textContent(), beforeTap, "previous button does not also advance");
-    await panel.click({ position: { x: 3, y: (await panel.boundingBox())!.height / 2 } });
-    assert.notEqual(await page.locator("[data-vn-progress]").textContent(), beforeTap, "tapping empty panel space advances");
+    const readerState = await page.locator("[data-vn-root]").evaluate(root => ({
+      phase: (root as HTMLElement).dataset.vnPhase,
+      hudHidden: (root as HTMLElement).dataset.vnHudHidden,
+      textHidden: (root as HTMLElement).dataset.vnTextHidden,
+      cleanView: (root as HTMLElement).dataset.vnCleanView,
+    }));
+    assert.equal(await panel.isVisible(), true, `resizing leaves the sheet visible at ${viewport.width}×${viewport.height}: ${JSON.stringify(readerState)}`);
+    const beforeTap = await paragraphIndex(page);
+    // A long paragraph extends below the scroll window, so target its visible first line.
+    await text.tap({ position: { x: 12, y: 10 } });
+    assert.equal(await paragraphIndex(page), beforeTap + 1, "tapping prose advances exactly once");
+    await page.getByRole("button", { name: "Previous paragraph", exact: true }).tap();
+    assert.equal(await paragraphIndex(page), beforeTap, "previous button returns to the preceding paragraph");
+    await panel.tap({ position: { x: 3, y: (await panel.boundingBox())!.height / 2 } });
+    assert.equal(await paragraphIndex(page), beforeTap + 1, "tapping empty panel space advances exactly once");
     const originalProgress = await page.locator("[data-vn-progress]").textContent();
     await text.dispatchEvent("pointerdown", { pointerId: 1, clientX: 100, clientY: 200 });
     await text.dispatchEvent("pointermove", { pointerId: 1, clientX: 100, clientY: 250 });
@@ -70,24 +92,31 @@ try {
     assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress, "selected prose does not advance");
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
     for (const size of ["compact", "expanded", "reading"]) {
-      await page.evaluate(size => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: size, backgroundOpacity: .55 }), size);
+      await page.evaluate(size => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: size, backgroundOpacity: .55, heightRatio: undefined }), size);
       const box = await panel.boundingBox();
       const metrics = await page.evaluate(() => ({ height: innerHeight, viewport: visualViewport?.height, scale: visualViewport?.scale, width: document.documentElement.scrollWidth, inset: getComputedStyle((window as any).readingFixture.stage.root).getPropertyValue("--vn-sheet-keyboard-inset") }));
       assert.ok(box && box.y >= 60 && box.y + box.height <= viewport.height + 1, `sheet stays on screen at ${viewport.width}/${size}: ${JSON.stringify({box,metrics})}`);
       assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress, "resize does not advance");
     }
-    await text.evaluate(el => { el.scrollTop = 100; });
-    assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress);
-    await page.getByRole("button", { name: "Auto play", exact: true }).click();
-    await page.getByRole("button", { name: "Hide text", exact: true }).click();
-    assert.equal(await page.getByRole("button", { name: "Show text", exact: true }).isVisible(), true);
+    const scrollTop = await panel.locator(".scroll-copy").evaluate(el => {
+      el.scrollTop = 100;
+      return el.scrollTop;
+    });
+    assert.ok(scrollTop > 0, "long prose scrolls within the dialogue sheet");
+    assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress, "scrolling the prose does not advance");
+    await page.getByRole("button", { name: "Start auto-read and speech", exact: true }).click();
+    assert.equal(await page.getByRole("button", { name: "Pause auto-read and speech", exact: true }).getAttribute("aria-pressed"), "true");
+    await hideText(page).click();
+    const showText = page.getByRole("button", { name: "Show text reader", exact: true });
+    assert.equal(await showText.isVisible(), true);
     assert.equal(await panel.isVisible(), false);
-    assert.equal(await page.getByRole("button", { name: "Back to chat", exact: true }).isVisible(), true);
-    await page.getByRole("button", { name: "Show text", exact: true }).click();
-    assert.equal(await page.getByRole("button", { name: "Auto play", exact: true }).getAttribute("aria-pressed"), "false");
+    assert.equal(await page.getByRole("button", { name: "Back to Lumiverse chat", exact: true }).isVisible(), true);
+    await showText.click();
+    assert.equal(await page.getByRole("button", { name: "Start auto-read and speech", exact: true }).getAttribute("aria-pressed"), "false");
     assert.equal(await panel.isVisible(), true);
-    await page.getByRole("button", { name: "Resize text panel", exact: true }).press("ArrowUp");
-    assert.equal(await page.locator("[data-vn-root]").evaluate(el => el.style.getPropertyValue("--vn-sheet-height") !== ""), true);
+    const beforeArrow = (await panel.boundingBox())!.height;
+    await grip.press("ArrowUp");
+    assert.ok((await panel.boundingBox())!.height > beforeArrow, "ArrowUp on the resize grip increases the visible panel height");
     if (viewport.height > 500) {
       await page.evaluate(() => {
         Object.defineProperty(window.visualViewport!, "height", { configurable: true, value: 420 });
@@ -101,26 +130,29 @@ try {
       });
     }
     await page.setViewportSize({ width: viewport.width, height: Math.min(viewport.height, 480) });
-    await page.evaluate(() => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: "compact", backgroundOpacity: .55 }));
+    await page.evaluate(() => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: "compact", backgroundOpacity: .55, heightRatio: undefined }));
     assert.equal(await page.getByRole("button", { name: "Continue", exact: true }).isVisible(), true);
     await page.screenshot({ path: `.cache/mobile-reader/${viewport.width}.png` });
     await page.close();
   }
   const settings = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await settings.goto(`http://127.0.0.1:${server.port}/settings?setupDone&noSpeech`);
-  await settings.evaluate(() => (window as any).settingsFixture.panel.openPage("appearance"));
+  await settings.evaluate(() => (window as any).settingsFixture.panel.openPage("look"));
   await settings.locator('[name="adjustableSheetEnabled"]').check();
   await settings.locator('[name="readerLayout"]').selectOption("image-first");
   await settings.locator('[name="readerSheetSize"]').selectOption("expanded");
   await settings.locator('[name="readerBackgroundOpacity"]').fill("0.55");
   await settings.locator('[name="readerBackgroundOpacity"]').dispatchEvent("change");
-  assert.deepEqual(await settings.evaluate(() => (window as any).settingsFixture.config.readerPreferences), { adjustableSheetEnabled: true, layout: "image-first", sheetSize: "expanded", backgroundOpacity: .55 });
+  assert.deepEqual(await settings.evaluate(() => {
+    const { adjustableSheetEnabled, layout, sheetSize, backgroundOpacity, heightRatio } = (window as any).settingsFixture.config.readerPreferences;
+    return { adjustableSheetEnabled, layout, sheetSize, backgroundOpacity, heightRatio };
+  }), { adjustableSheetEnabled: true, layout: "image-first", sheetSize: "expanded", backgroundOpacity: .55, heightRatio: undefined });
   await settings.close();
   for (const preset of THEME_PRESET_IDS) {
     const themed = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
     await themed.goto(`http://127.0.0.1:${server.port}/?preset=${preset}`);
     await themed.evaluate(() => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: "reading", backgroundOpacity: .9 }));
-    const handle = await themed.getByRole("button", { name: "Resize text panel", exact: true }).boundingBox();
+    const handle = await resizeGrip(themed).boundingBox();
     assert.ok(handle && handle.height >= 43.9 && handle.y > 60, `${preset} handle bounds ${JSON.stringify(handle)}`);
     const progress = await themed.locator("[data-vn-progress]").textContent();
     await themed.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
@@ -144,19 +176,27 @@ try {
   assert.ok(await resume.locator("[data-vn-typing-rest]").count() > 0, "resuming does not permanently suppress future typing/effects");
   await resume.close();
   for (const scale of [1.5, .8]) {
-    const scaled = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+    const scaled = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: "reduce" });
+    scaled.setDefaultTimeout(7000);
     await scaled.goto(`http://127.0.0.1:${server.port}/?uiScale=${scale}&preset=paper-novel`);
     await scaled.evaluate(() => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "overlay", sheetSize: "expanded", backgroundOpacity: 1 }));
-    const box = await scaled.locator("[data-vn-dialogue]").boundingBox();
-    assert.ok(box && box.y >= 60 && box.height < 600, "zoomed sheet uses local CSS coordinates");
-    const selectBox = await scaled.getByRole("button", { name: "Hide text", exact: true }).boundingBox();
+    await scaled.waitForFunction(scale => {
+      const root = (window as any).readingFixture.stage.root as HTMLElement;
+      const panel = root.querySelector<HTMLElement>("[data-vn-dialogue]")!;
+      const box = panel.getBoundingClientRect();
+      const expectedHeight = Number.parseFloat(panel.style.height) * scale;
+      return box.y >= 60 && box.bottom <= innerHeight && Math.abs(box.height - expectedHeight) < 2;
+    }, scale);
+    const selectBox = await hideText(scaled).boundingBox();
     assert.ok(selectBox && selectBox.width >= 35 && selectBox.height >= 35, `scaled icon remains usable: ${JSON.stringify(selectBox)}`);
-    const controls = await scaled.locator('[data-vn-control="previous"], [data-vn-control="log"], [data-vn-control="auto"], [data-vn-control="skip"]').all();
-    let previousRight = 0;
+    const controls = await scaled.locator('[data-vn-continue], [data-vn-control="log"], [data-action="caption-auto"], [data-vn-hide-text]').all();
+    assert.equal(controls.length, 4, "scaled reader exposes navigation, history, auto-read, and hide-text controls");
+    const controlBounds: Array<{ x: number; y: number; width: number; height: number }> = [];
     for (const control of controls) {
       const b = await control.boundingBox();
-      assert.ok(b && b.x >= previousRight - 1 && b.x + b.width <= 390, "scaled reading controls do not overlap");
-      previousRight = b.x + b.width;
+      assert.ok(b && b.x >= 0 && b.x + b.width <= 391 && b.y >= 0 && b.y + b.height <= 845, `scaled reading control stays on screen: ${JSON.stringify(b)}`);
+      assert.ok(controlBounds.every(other => b.x + b.width <= other.x + 1 || other.x + other.width <= b.x + 1 || b.y + b.height <= other.y + 1 || other.y + other.height <= b.y + 1), "scaled reading controls do not overlap");
+      controlBounds.push(b);
     }
     const background = await scaled.locator("[data-vn-dialogue]").evaluate(el => {
       const style = getComputedStyle(el, "::before");
@@ -168,8 +208,8 @@ try {
     await scaled.close();
   }
   const manga = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
-  await manga.goto(`http://127.0.0.1:${server.port}/?preset=arcana`);
-  await manga.evaluate(async () => {
+  await manga.goto(`http://127.0.0.1:${server.port}/?preset=yamaku-classic`);
+  const loadedPage = await manga.evaluate(async () => {
     const stage = (window as any).readingFixture.stage;
     stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "overlay", sheetSize: "reading", backgroundOpacity: .7 });
     stage.setSceneImageFit("cover");
@@ -178,22 +218,29 @@ try {
     ctx.fillStyle = "#ded7cd"; ctx.fillRect(0, 0, 864, 1536);
     ctx.strokeStyle = "#183c47"; ctx.lineWidth = 12;
     for (let i = 0; i < 6; i++) { const x = (i % 2) * 420 + 18, y = Math.floor(i / 2) * 490 + 18; ctx.strokeRect(x, y, 400, 470); ctx.fillStyle = "#183c47"; ctx.font = "60px serif"; ctx.fillText(`Panel ${i + 1}`, x + 35, y + 200); }
-    await stage.setSceneImage({ url: canvas.toDataURL(), alt: "Six-panel page", requestId: "manga", presentation: "page" });
+    return stage.setSceneImage({ url: canvas.toDataURL(), alt: "Six-panel page", requestId: "manga", presentation: "page" });
   });
+  assert.equal(loadedPage, true, "the local six-panel page loads");
+  const viewPage = manga.getByRole('button', { name: 'View whole page', exact: true });
+  await viewPage.waitFor({ timeout: 7000 });
   const pageImage = manga.locator('[data-vn-scene-image][data-vn-layer="active"]');
   assert.equal(await pageImage.evaluate(el => getComputedStyle(el).objectFit), "contain", "whole page survives fill-stage preference");
-  const pageArea = await manga.locator('[data-vn-scene]').boundingBox();
-  const sheetArea = await manga.locator('[data-vn-dialogue]').boundingBox();
-  assert.ok(pageArea && sheetArea && pageArea.y + pageArea.height <= sheetArea.y, "text does not obscure the page");
+  await manga.waitForFunction(() => {
+    const root = (window as any).readingFixture.stage.root as HTMLElement;
+    const art = root.querySelector('[data-vn-scene]')!.getBoundingClientRect();
+    const sheet = root.querySelector('[data-vn-dialogue]')!.getBoundingClientRect();
+    return art.height > 0 && sheet.height > 0 && art.bottom <= sheet.top + 1;
+  }, undefined, { timeout: 7000 });
   assert.equal(await manga.locator('[data-vn-page-backdrop]').isVisible(), true);
   await manga.screenshot({ path: ".cache/mobile-reader/manga-page.png" });
   const progressBefore = await manga.locator('[data-vn-progress]').textContent();
-  await manga.getByRole('button', { name: 'View whole page', exact: true }).click();
-  assert.equal(await manga.locator('[data-vn-dialogue]').isVisible(), false);
+  await viewPage.click();
+  assert.equal(await manga.getByRole('button', { name: 'Return to reading', exact: true }).getAttribute('aria-pressed'), 'true');
+  await manga.locator('[data-vn-dialogue]').waitFor({ state: 'hidden', timeout: 7000 });
   await manga.locator('[data-vn-scene]').click();
   assert.equal(await manga.locator('[data-vn-progress]').textContent(), progressBefore, "page inspection does not advance");
   await manga.getByRole('button', { name: 'Return to reading', exact: true }).press('Escape');
-  assert.equal(await manga.locator('[data-vn-dialogue]').isVisible(), true);
+  await manga.locator('[data-vn-dialogue]').waitFor({ timeout: 7000 });
   await manga.evaluate(async () => (window as any).readingFixture.stage.setSceneImage({ url: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', alt: 'Ordinary scene', requestId: 'normal' }));
   await manga.waitForTimeout(350);
   assert.equal(await manga.getByRole('button', { name: 'View whole page', exact: true }).count(), 0);

@@ -126,6 +126,7 @@ try{
   assert.equal(await director.getByRole('button', { name: 'Open Artwork Studio' }).isVisible(), true);
   const rehearsal = director.locator('[data-scene-rehearsal]');
   await rehearsal.locator('summary').click();
+  await rehearsal.locator('[data-rehearsal-caption]').waitFor();
   assert.match(await rehearsal.innerText(), /No saved artwork is visible/);
   assert.match(await rehearsal.locator('[data-rehearsal-caption]').innerText(), /First paragraph/);
   await rehearsal.getByLabel('Camera move', { exact: true }).selectOption('gentle');
@@ -170,6 +171,7 @@ try{
   await openDirector();
   const rehearsalBefore = await page.evaluate(() => (window as any).hostFixture.stage().getState());
   await rehearsal.locator('summary').click();
+  await rehearsal.locator('[data-rehearsal-caption]').waitFor();
   assert.equal(await rehearsal.locator('[data-rehearsal-art]').isVisible(), true);
   const cameraMove = rehearsal.getByLabel('Camera move', { exact: true });
   assert.equal(await cameraMove.inputValue(), 'full', 'reopening uses the current reader preferences');

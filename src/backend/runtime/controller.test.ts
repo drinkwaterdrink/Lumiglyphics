@@ -532,34 +532,82 @@ test('closing the reader before narrative preparation suppresses the optional pr
  expect(f.sent.some((m:any)=>m.type==='vn_narrative_preview')).toBe(false);expect(f.gates).toHaveLength(0);
 });
 
-test('reader turn is available while Sidecar is pending and retains literal documents after a partial result', async () => {
+test('Sidecar resumes interrupted enrichment, grounds references and preserves literal documents after a partial result', async () => {
   const f = generationFixture();
   const original = (await f.spindle.chat.getMessages('chat'))[0]!;
-  f.spindle.chat.getMessages = async () => [{ ...original, content: 'Mira opens the sealed letter. The sealed letter reads: "Meet me at dawn."' }];
+  f.spindle.chat.getMessages = async () => [{
+    ...original,
+    content: 'Mira has silver hair. Mira opens the sealed letter. The sealed letter reads: "Meet me at dawn."\n\n' +
+      'Mira suspects the ferry is late. She puts on a green coat and decides to meet the ferryman.\n\n' +
+      '<soul_deliberation>{"whisper":"Private observatory direction"}</soul_deliberation>\n\n' +
+      '<oracle_paths>\n@moon|Stay here|I wait here.|Private oracle consequence\n</oracle_paths>',
+  }];
   f.data.set('config.json', {
     generateImages: false, collectEntityReferences: true, tooltips: { enabled: true },
     includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false,
   });
+  const abandoned = deferred<any>();
   const sidecar = deferred<any>();
-  let started = false;
+  let scans = 0;
+  let sidecarInput = '';
   f.spindle.generate.raw = (async (request: any) => {
     if (request.messages[0]?.content?.includes('Master Narrative Sidecar Curator')) {
-      started = true;
-      return sidecar.promise;
+      scans += 1;
+      sidecarInput = JSON.stringify(request.messages);
+      return scans === 1 ? abandoned.promise : sidecar.promise;
     }
     return { content: JSON.stringify(generationPayload([])) };
   }) as typeof f.spindle.generate.raw;
   registerVisualNovelBackend(f.spindle);
   try {
     await sendState(f.spindle, 'chat', 'sidecar-readiness', { viewOpen: true });
-    await waitFor(() => started);
+    await waitFor(() => scans === 1);
+    expect(sidecarInput).toContain('Mira opens the sealed letter.');
+    expect(sidecarInput).not.toContain('Private observatory direction');
+    expect(sidecarInput).not.toContain('Private oracle consequence');
     expect(f.sent.some((m: any) => m.type === 'vn_turn' && m.turn.status === 'ready')).toBe(true);
     expect(f.sent.some((m: any) => m.type === 'vn_turn_lore_patch')).toBe(false);
-    sidecar.resolve({ content: JSON.stringify({ suppressedDocumentNouns: ['sealed letter'], storyReferences: [] }) });
+    await sendState(f.spindle, 'chat', 'sidecar-readiness', { viewOpen: false });
+    abandoned.resolve({ content: JSON.stringify({ storyReferences: [] }) });
+    await sendState(f.spindle, 'chat', 'sidecar-readiness', { viewOpen: true, readOnly: true });
+    expect(scans).toBe(1);
+    await sendState(f.spindle, 'chat', 'sidecar-readiness', { viewOpen: true });
+    await waitFor(() => scans === 2);
+    expect(f.sent.some((m: any) => m.type === 'vn_turn_lore_patch')).toBe(false);
+    const path = turnPath('chat', 'assistant-1', 0);
+    const earlierSnapshot = f.data.get(path) as StoredTurnRecord;
+    const reference = { kind: 'npc', name: 'Mira', field: 'appearance', paragraphIndex: 0, value: 'silver hair', evidence: 'Mira has silver hair.' } as const;
+    sidecar.resolve({ content: JSON.stringify({
+      suppressedDocumentNouns: ['sealed letter'],
+      storyReferences: [reference, { ...reference, value: 'green eyes' }],
+      npcBeliefs: [{ npc: 'Mira', topic: 'Ferry', belief: 'The ferry is late', status: 'suspects' }],
+      threadUpdates: [{ title: 'Meet the ferryman', action: 'open' }],
+      wardrobeDeltas: [{ character: 'Mira', activeOutfit: 'green coat' }],
+    }) });
     await waitFor(() => f.sent.some((m: any) => m.type === 'vn_turn_lore_patch'));
-    const saved = f.data.get(turnPath('chat', 'assistant-1', 0)) as StoredTurnRecord;
+    const saved = f.data.get(path) as StoredTurnRecord;
+    expect(saved.sidecarState).toBe('settled');
+    expect(saved.plan.storyReferences).toEqual([reference]);
     expect(saved.plan.storyDocuments?.flatMap(d => d.sections).map(s => s.text).join(' ')).toContain('Meet me at dawn.');
+    const { loadStoryDNASet } = await import('./story-dna-store.js');
+    const dna = await loadStoryDNASet(f.spindle, 'chat', 'sidecar-readiness');
+    const event = dna.loreEvents?.find(entry => entry.key.sourceFingerprint === saved.plan.key.sourceFingerprint);
+    expect(event).toMatchObject({
+      paragraphIndex: saved.plan.paragraphs.length - 1,
+      npcBeliefs: [{ npc: 'Mira', topic: 'Ferry', status: 'suspects' }],
+      threadUpdates: [{ title: 'Meet the ferryman', action: 'open' }],
+      wardrobeDeltas: [{ character: 'Mira', activeOutfit: 'green coat' }],
+    });
+    const patch = f.sent.find((m: any) => m.type === 'vn_turn_lore_patch') as any;
+    expect(selectPresentationSnapshot(patch.presentation, 0)?.entities.some(entity => entity.name === 'Mira' &&
+      entity.facts.some(fact => fact.value === 'silver hair'))).toBe(true);
+    await saveTurnRecord(f.spindle, path, earlierSnapshot, 'sidecar-readiness');
+    expect(f.data.get(path)).toMatchObject({ sidecarState: 'settled', plan: { storyReferences: [reference] } });
+    await sendState(f.spindle, 'chat', 'sidecar-readiness', { viewOpen: true });
+    await new Promise(resolve => setTimeout(resolve, 1550));
+    expect(scans).toBe(2);
   } finally {
+    abandoned.resolve({ content: '{}' });
     sidecar.resolve({ content: '{}' });
     f.request({ type: 'vn_view', chatId: 'chat', open: false }, 'sidecar-readiness');
   }
@@ -697,7 +745,7 @@ test("CYOA commit validates mode and deduplicates choices across retries", async
   f.spindle.chat.getMessages = async () => history;
   const allowWrite = Promise.withResolvers<void>();
   let writes = 0;
-  f.spindle.chat.appendMessage = (async (_chatId: string, message: { content: string; metadata: object }) => {
+  f.spindle.chat.appendMessage = (async (_chatId: string, message: { content: string; metadata: Record<string, unknown> }) => {
     writes++;
     await allowWrite.promise;
     history.push({ ...history[0]!, id: "user-choice", is_user: true, content: message.content, metadata: message.metadata });
