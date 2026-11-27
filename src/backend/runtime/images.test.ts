@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { TurnPlanSchema, type SceneState, type TurnPlan, type VisualCue } from "../../shared/contracts.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
-import { compileImagePrompt, compileNegativePrompt, createAssetJobs, generateAssets,sceneImageIdentityFor } from "./images.js";
+import { compileImagePrompt, compileNegativePrompt, compileNovelAiRequest, createAssetJobs, generateAssets,sceneImageIdentityFor } from "./images.js";
 import { ImageReviewGate } from "./image-review.js";
 import { normalizeConfig } from '../../config.js';
 import { templateSnapshot } from '../../shared/image-templates.js';
@@ -26,6 +26,45 @@ test('saved DNA reaches the actual image payload only for pictured characters an
 });
 
 const now = new Date().toISOString();
+
+test("NovelAI positioned captions use the same roster DNA as the ensemble prompt", async () => {
+  const config = normalizeConfig({ imageModel: "nai-diffusion-4-5-full", imagePromptEngineVersion: 2 });
+  const mira = createEmptyCharacterDNA("Mira");
+  mira.hair.color = "silver";
+  const darby = createEmptyCharacterDNA("Darby");
+  darby.hair.color = "neon purple";
+  const visual = {
+    ...cue("idle"),
+    imageTemplate: templateSnapshot(config.imageTemplates.find(template => template.id === "two-shot")!),
+    ensembleSubjects: [{ name: "Mira", appearance: "old red hair" }, { name: "Darby", appearance: "" }],
+  };
+  const compiled = compileNovelAiRequest(config, plan([visual]).scenes[0]!, visual, {}, { [mira.id]: mira, [darby.id]: darby });
+  expect(compiled.prompt).toContain("neon purple");
+  expect(compiled.parameters.characterTags[0]?.tags).toContain("silver");
+  expect(compiled.parameters.characterTags[1]?.tags).toContain("neon purple");
+  expect(compiled.parameters.characterTags[1]?.tags).not.toContain("Darby");
+  const stored = new Map<string, unknown>();
+  const sent: any[] = [];
+  const spindle: any = {
+    userStorage: {
+      getJson: async (path: string, options: any) => structuredClone(stored.get(path) ?? options.fallback),
+      setJson: async (path: string, value: unknown) => { stored.set(path, structuredClone(value)); },
+    },
+    imageGen: {
+      listConnections: async () => [{ id: "nai", provider: "novelai", model: config.imageModel, is_default: true }],
+      generate: async (payload: unknown) => { sent.push(payload); return { imageId: "group-image" }; },
+    },
+  };
+  const turn = plan([visual]);
+  await saveCharacterDNA(spindle, turn.key.chatId, mira, "user");
+  await saveCharacterDNA(spindle, turn.key.chatId, darby, "user");
+  const connectionConfig = { ...config, imageModel: "", referenceAnchoring: false, promptPrefix: "", promptSuffix: "" };
+  const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, connectionConfig), connectionConfig, new AbortController().signal, () => {}, "user");
+  expect(jobs[0]?.status).toBe("generated");
+  expect(sent[0].parameters.characterTags[0].tags).toContain("silver");
+  expect(sent[0].parameters.characterTags[1].tags).toContain("neon purple");
+  expect(sent[0].ensembleCast).toBeUndefined();
+});
 
 test('changing only the recorded preset association does not invalidate identical rendered art',()=>{
  const config=normalizeConfig({selectedSharedStyleId:''});

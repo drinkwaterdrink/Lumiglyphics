@@ -52,79 +52,79 @@ var activeBackendUuidProvider = null;
 // node_modules/zod/v4/core/util.js
 var exports_util = {};
 __export(exports_util, {
-  BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
-  CONSTANT_CATCH: () => CONSTANT_CATCH,
-  Class: () => Class,
-  NUMBER_FORMAT_RANGES: () => NUMBER_FORMAT_RANGES,
-  aborted: () => aborted,
-  allowsEval: () => allowsEval,
-  assert: () => assert,
-  assertEqual: () => assertEqual,
-  assertIs: () => assertIs,
-  assertNever: () => assertNever,
-  assertNotEqual: () => assertNotEqual,
-  assignProp: () => assignProp,
-  attachSchema: () => attachSchema,
-  base64ToUint8Array: () => base64ToUint8Array,
-  base64urlToUint8Array: () => base64urlToUint8Array,
-  cached: () => cached,
-  captureStackTrace: () => captureStackTrace,
-  cleanEnum: () => cleanEnum,
-  cleanRegex: () => cleanRegex,
-  clone: () => clone,
-  cloneDef: () => cloneDef,
-  codePointLength: () => codePointLength,
-  constantCatch: () => constantCatch,
-  createTransparentProxy: () => createTransparentProxy,
-  defineLazy: () => defineLazy,
-  defineLazyInternal: () => defineLazyInternal,
-  esc: () => esc,
-  escapeRegex: () => escapeRegex,
-  explicitlyAborted: () => explicitlyAborted,
-  extend: () => extend,
-  finalizeIssue: () => finalizeIssue,
-  floatSafeRemainder: () => floatSafeRemainder,
-  getElementAtPath: () => getElementAtPath,
-  getEnumValues: () => getEnumValues,
-  getLengthableOrigin: () => getLengthableOrigin,
-  getParsedType: () => getParsedType,
-  getSizableOrigin: () => getSizableOrigin,
-  hexToUint8Array: () => hexToUint8Array,
-  hide: () => hide,
-  installLazyProp: () => installLazyProp,
-  isObject: () => isObject,
-  isPlainObject: () => isPlainObject,
-  issue: () => issue,
-  joinValues: () => joinValues,
-  jsonStringifyReplacer: () => jsonStringifyReplacer,
-  members: () => members,
-  merge: () => merge,
-  mergeDefs: () => mergeDefs,
-  normalizeParams: () => normalizeParams,
-  nullish: () => nullish,
-  numKeys: () => numKeys,
-  objectClone: () => objectClone,
-  omit: () => omit,
-  optionalKeys: () => optionalKeys,
-  own: () => own,
-  parsedType: () => parsedType,
-  partial: () => partial,
-  pick: () => pick,
-  prefixIssues: () => prefixIssues,
-  primitiveTypes: () => primitiveTypes,
-  promiseAllObject: () => promiseAllObject,
-  propertyKeyTypes: () => propertyKeyTypes,
-  randomString: () => randomString,
-  required: () => required,
-  safeExtend: () => safeExtend,
-  shallowClone: () => shallowClone,
-  slugify: () => slugify,
-  stringifyPrimitive: () => stringifyPrimitive,
-  toZod: () => toZod,
-  uint8ArrayToBase64: () => uint8ArrayToBase64,
-  uint8ArrayToBase64url: () => uint8ArrayToBase64url,
+  unwrapMessage: () => unwrapMessage,
   uint8ArrayToHex: () => uint8ArrayToHex,
-  unwrapMessage: () => unwrapMessage
+  uint8ArrayToBase64url: () => uint8ArrayToBase64url,
+  uint8ArrayToBase64: () => uint8ArrayToBase64,
+  toZod: () => toZod,
+  stringifyPrimitive: () => stringifyPrimitive,
+  slugify: () => slugify,
+  shallowClone: () => shallowClone,
+  safeExtend: () => safeExtend,
+  required: () => required,
+  randomString: () => randomString,
+  propertyKeyTypes: () => propertyKeyTypes,
+  promiseAllObject: () => promiseAllObject,
+  primitiveTypes: () => primitiveTypes,
+  prefixIssues: () => prefixIssues,
+  pick: () => pick,
+  partial: () => partial,
+  parsedType: () => parsedType,
+  own: () => own,
+  optionalKeys: () => optionalKeys,
+  omit: () => omit,
+  objectClone: () => objectClone,
+  numKeys: () => numKeys,
+  nullish: () => nullish,
+  normalizeParams: () => normalizeParams,
+  mergeDefs: () => mergeDefs,
+  merge: () => merge,
+  members: () => members,
+  jsonStringifyReplacer: () => jsonStringifyReplacer,
+  joinValues: () => joinValues,
+  issue: () => issue,
+  isPlainObject: () => isPlainObject,
+  isObject: () => isObject,
+  installLazyProp: () => installLazyProp,
+  hide: () => hide,
+  hexToUint8Array: () => hexToUint8Array,
+  getSizableOrigin: () => getSizableOrigin,
+  getParsedType: () => getParsedType,
+  getLengthableOrigin: () => getLengthableOrigin,
+  getEnumValues: () => getEnumValues,
+  getElementAtPath: () => getElementAtPath,
+  floatSafeRemainder: () => floatSafeRemainder,
+  finalizeIssue: () => finalizeIssue,
+  extend: () => extend,
+  explicitlyAborted: () => explicitlyAborted,
+  escapeRegex: () => escapeRegex,
+  esc: () => esc,
+  defineLazyInternal: () => defineLazyInternal,
+  defineLazy: () => defineLazy,
+  createTransparentProxy: () => createTransparentProxy,
+  constantCatch: () => constantCatch,
+  codePointLength: () => codePointLength,
+  cloneDef: () => cloneDef,
+  clone: () => clone,
+  cleanRegex: () => cleanRegex,
+  cleanEnum: () => cleanEnum,
+  captureStackTrace: () => captureStackTrace,
+  cached: () => cached,
+  base64urlToUint8Array: () => base64urlToUint8Array,
+  base64ToUint8Array: () => base64ToUint8Array,
+  attachSchema: () => attachSchema,
+  assignProp: () => assignProp,
+  assertNotEqual: () => assertNotEqual,
+  assertNever: () => assertNever,
+  assertIs: () => assertIs,
+  assertEqual: () => assertEqual,
+  assert: () => assert,
+  allowsEval: () => allowsEval,
+  aborted: () => aborted,
+  NUMBER_FORMAT_RANGES: () => NUMBER_FORMAT_RANGES,
+  Class: () => Class,
+  CONSTANT_CATCH: () => CONSTANT_CATCH,
+  BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES
 });
 function assertEqual(val) {
   return val;
@@ -1347,67 +1347,67 @@ var init_parse = __esm(() => {
 // node_modules/zod/v4/core/regexes.js
 var exports_regexes = {};
 __export(exports_regexes, {
-  base64: () => base64,
-  base64url: () => base64url,
-  bigint: () => bigint,
-  boolean: () => boolean,
-  browserEmail: () => browserEmail,
-  cidrv4: () => cidrv4,
-  cidrv6: () => cidrv6,
-  creditCard: () => creditCard,
-  cuid: () => cuid,
-  cuid2: () => cuid2,
-  date: () => date,
-  datetime: () => datetime,
-  domain: () => domain,
-  duration: () => duration,
-  e164: () => e164,
-  email: () => email,
-  emoji: () => emoji,
-  extendedDuration: () => extendedDuration,
-  guid: () => guid,
-  hex: () => hex,
-  hostname: () => hostname,
-  html5Email: () => html5Email,
-  httpProtocol: () => httpProtocol,
-  idnEmail: () => idnEmail,
-  integer: () => integer,
-  ipv4: () => ipv4,
-  ipv6: () => ipv6,
-  ksuid: () => ksuid,
-  lowercase: () => lowercase,
-  mac: () => mac,
-  md5_base64: () => md5_base64,
-  md5_base64url: () => md5_base64url,
-  md5_hex: () => md5_hex,
-  nanoid: () => nanoid,
-  nanoidOfLength: () => nanoidOfLength,
-  null: () => _null,
-  number: () => number,
-  rfc5322Email: () => rfc5322Email,
-  sha1_base64: () => sha1_base64,
-  sha1_base64url: () => sha1_base64url,
-  sha1_hex: () => sha1_hex,
-  sha256_base64: () => sha256_base64,
-  sha256_base64url: () => sha256_base64url,
-  sha256_hex: () => sha256_hex,
-  sha384_base64: () => sha384_base64,
-  sha384_base64url: () => sha384_base64url,
-  sha384_hex: () => sha384_hex,
-  sha512_base64: () => sha512_base64,
-  sha512_base64url: () => sha512_base64url,
-  sha512_hex: () => sha512_hex,
-  string: () => string,
-  time: () => time,
-  ulid: () => ulid,
-  undefined: () => _undefined,
-  unicodeEmail: () => unicodeEmail,
-  uppercase: () => uppercase,
-  uuid: () => uuid,
-  uuid4: () => uuid4,
-  uuid6: () => uuid6,
+  xid: () => xid,
   uuid7: () => uuid7,
-  xid: () => xid
+  uuid6: () => uuid6,
+  uuid4: () => uuid4,
+  uuid: () => uuid,
+  uppercase: () => uppercase,
+  unicodeEmail: () => unicodeEmail,
+  undefined: () => _undefined,
+  ulid: () => ulid,
+  time: () => time,
+  string: () => string,
+  sha512_hex: () => sha512_hex,
+  sha512_base64url: () => sha512_base64url,
+  sha512_base64: () => sha512_base64,
+  sha384_hex: () => sha384_hex,
+  sha384_base64url: () => sha384_base64url,
+  sha384_base64: () => sha384_base64,
+  sha256_hex: () => sha256_hex,
+  sha256_base64url: () => sha256_base64url,
+  sha256_base64: () => sha256_base64,
+  sha1_hex: () => sha1_hex,
+  sha1_base64url: () => sha1_base64url,
+  sha1_base64: () => sha1_base64,
+  rfc5322Email: () => rfc5322Email,
+  number: () => number,
+  null: () => _null,
+  nanoidOfLength: () => nanoidOfLength,
+  nanoid: () => nanoid,
+  md5_hex: () => md5_hex,
+  md5_base64url: () => md5_base64url,
+  md5_base64: () => md5_base64,
+  mac: () => mac,
+  lowercase: () => lowercase,
+  ksuid: () => ksuid,
+  ipv6: () => ipv6,
+  ipv4: () => ipv4,
+  integer: () => integer,
+  idnEmail: () => idnEmail,
+  httpProtocol: () => httpProtocol,
+  html5Email: () => html5Email,
+  hostname: () => hostname,
+  hex: () => hex,
+  guid: () => guid,
+  extendedDuration: () => extendedDuration,
+  emoji: () => emoji,
+  email: () => email,
+  e164: () => e164,
+  duration: () => duration,
+  domain: () => domain,
+  datetime: () => datetime,
+  date: () => date,
+  cuid2: () => cuid2,
+  cuid: () => cuid,
+  creditCard: () => creditCard,
+  cidrv6: () => cidrv6,
+  cidrv4: () => cidrv4,
+  browserEmail: () => browserEmail,
+  boolean: () => boolean,
+  bigint: () => bigint,
+  base64url: () => base64url,
+  base64: () => base64
 });
 function nanoidOfLength(length) {
   return new RegExp(`^[a-zA-Z0-9_-]{${length}}$`);
@@ -12042,68 +12042,68 @@ var init_yo = __esm(() => {
 // node_modules/zod/v4/locales/index.js
 var exports_locales = {};
 __export(exports_locales, {
-  ar: () => ar_default,
-  az: () => az_default,
-  be: () => be_default,
-  bg: () => bg_default,
-  bn: () => bn_default,
-  ca: () => ca_default,
-  ckb: () => ckb_default,
-  cs: () => cs_default,
-  da: () => da_default,
-  de: () => de_default,
-  el: () => el_default,
-  en: () => en_default,
-  eo: () => eo_default,
-  es: () => es_default,
-  fa: () => fa_default,
-  fi: () => fi_default,
-  fr: () => fr_default,
-  frCA: () => fr_CA_default,
-  gu: () => gu_default,
-  he: () => he_default,
-  hi: () => hi_default,
-  hr: () => hr_default,
-  hu: () => hu_default,
-  hy: () => hy_default,
-  id: () => id_default,
-  is: () => is_default,
-  it: () => it_default,
-  ja: () => ja_default,
-  ka: () => ka_default,
-  kh: () => kh_default,
-  km: () => km_default,
-  kn: () => kn_default,
-  ko: () => ko_default,
-  lt: () => lt_default,
-  mk: () => mk_default,
-  ms: () => ms_default,
-  ne: () => ne_default,
-  nl: () => nl_default,
-  nn: () => nn_default,
-  no: () => no_default,
-  ota: () => ota_default,
-  pl: () => pl_default,
-  ps: () => ps_default,
-  pt: () => pt_default,
-  ptBR: () => pt_BR_default,
-  ro: () => ro_default,
-  ru: () => ru_default,
-  sk: () => sk_default,
-  sl: () => sl_default,
-  sv: () => sv_default,
-  ta: () => ta_default,
-  th: () => th_default,
-  tk: () => tk_default,
-  tr: () => tr_default,
-  ua: () => ua_default,
-  uk: () => uk_default,
-  ur: () => ur_default,
-  uz: () => uz_default,
-  vi: () => vi_default,
-  yo: () => yo_default,
+  zhTW: () => zh_TW_default,
   zhCN: () => zh_CN_default,
-  zhTW: () => zh_TW_default
+  yo: () => yo_default,
+  vi: () => vi_default,
+  uz: () => uz_default,
+  ur: () => ur_default,
+  uk: () => uk_default,
+  ua: () => ua_default,
+  tr: () => tr_default,
+  tk: () => tk_default,
+  th: () => th_default,
+  ta: () => ta_default,
+  sv: () => sv_default,
+  sl: () => sl_default,
+  sk: () => sk_default,
+  ru: () => ru_default,
+  ro: () => ro_default,
+  ptBR: () => pt_BR_default,
+  pt: () => pt_default,
+  ps: () => ps_default,
+  pl: () => pl_default,
+  ota: () => ota_default,
+  no: () => no_default,
+  nn: () => nn_default,
+  nl: () => nl_default,
+  ne: () => ne_default,
+  ms: () => ms_default,
+  mk: () => mk_default,
+  lt: () => lt_default,
+  ko: () => ko_default,
+  kn: () => kn_default,
+  km: () => km_default,
+  kh: () => kh_default,
+  ka: () => ka_default,
+  ja: () => ja_default,
+  it: () => it_default,
+  is: () => is_default,
+  id: () => id_default,
+  hy: () => hy_default,
+  hu: () => hu_default,
+  hr: () => hr_default,
+  hi: () => hi_default,
+  he: () => he_default,
+  gu: () => gu_default,
+  frCA: () => fr_CA_default,
+  fr: () => fr_default,
+  fi: () => fi_default,
+  fa: () => fa_default,
+  es: () => es_default,
+  eo: () => eo_default,
+  en: () => en_default,
+  el: () => el_default,
+  de: () => de_default,
+  da: () => da_default,
+  cs: () => cs_default,
+  ckb: () => ckb_default,
+  ca: () => ca_default,
+  bn: () => bn_default,
+  bg: () => bg_default,
+  be: () => be_default,
+  az: () => az_default,
+  ar: () => ar_default
 });
 var init_locales = __esm(() => {
   init_ar();
@@ -15933,308 +15933,308 @@ var init_json_schema = () => {};
 // node_modules/zod/v4/core/index.js
 var exports_core2 = {};
 __export(exports_core2, {
-  $ZodAny: () => $ZodAny,
-  $ZodArray: () => $ZodArray,
-  $ZodAsyncError: () => $ZodAsyncError,
-  $ZodBase64: () => $ZodBase64,
-  $ZodBase64URL: () => $ZodBase64URL,
-  $ZodBigInt: () => $ZodBigInt,
-  $ZodBigIntFormat: () => $ZodBigIntFormat,
-  $ZodBoolean: () => $ZodBoolean,
-  $ZodCIDRv4: () => $ZodCIDRv4,
-  $ZodCIDRv6: () => $ZodCIDRv6,
-  $ZodCUID: () => $ZodCUID,
-  $ZodCUID2: () => $ZodCUID2,
-  $ZodCatch: () => $ZodCatch,
-  $ZodCheck: () => $ZodCheck,
-  $ZodCheckBigIntFormat: () => $ZodCheckBigIntFormat,
-  $ZodCheckEndsWith: () => $ZodCheckEndsWith,
-  $ZodCheckGreaterThan: () => $ZodCheckGreaterThan,
-  $ZodCheckIncludes: () => $ZodCheckIncludes,
-  $ZodCheckLengthEquals: () => $ZodCheckLengthEquals,
-  $ZodCheckLessThan: () => $ZodCheckLessThan,
-  $ZodCheckLowerCase: () => $ZodCheckLowerCase,
-  $ZodCheckMaxLength: () => $ZodCheckMaxLength,
-  $ZodCheckMaxSize: () => $ZodCheckMaxSize,
-  $ZodCheckMimeType: () => $ZodCheckMimeType,
-  $ZodCheckMinLength: () => $ZodCheckMinLength,
-  $ZodCheckMinSize: () => $ZodCheckMinSize,
-  $ZodCheckMultipleOf: () => $ZodCheckMultipleOf,
-  $ZodCheckNumberFormat: () => $ZodCheckNumberFormat,
-  $ZodCheckOverwrite: () => $ZodCheckOverwrite,
-  $ZodCheckProperty: () => $ZodCheckProperty,
-  $ZodCheckRegex: () => $ZodCheckRegex,
-  $ZodCheckSizeEquals: () => $ZodCheckSizeEquals,
-  $ZodCheckStartsWith: () => $ZodCheckStartsWith,
-  $ZodCheckStringFormat: () => $ZodCheckStringFormat,
-  $ZodCheckUpperCase: () => $ZodCheckUpperCase,
-  $ZodCodec: () => $ZodCodec,
-  $ZodCreditCard: () => $ZodCreditCard,
-  $ZodCustom: () => $ZodCustom,
-  $ZodCustomStringFormat: () => $ZodCustomStringFormat,
-  $ZodCyclicError: () => $ZodCyclicError,
-  $ZodDate: () => $ZodDate,
-  $ZodDefault: () => $ZodDefault,
-  $ZodDiscriminatedUnion: () => $ZodDiscriminatedUnion,
-  $ZodE164: () => $ZodE164,
-  $ZodEmail: () => $ZodEmail,
-  $ZodEmoji: () => $ZodEmoji,
-  $ZodEncodeError: () => $ZodEncodeError,
-  $ZodEnum: () => $ZodEnum,
-  $ZodError: () => $ZodError,
-  $ZodExactOptional: () => $ZodExactOptional,
-  $ZodFile: () => $ZodFile,
-  $ZodFunction: () => $ZodFunction,
-  $ZodGUID: () => $ZodGUID,
-  $ZodIPv4: () => $ZodIPv4,
-  $ZodIPv6: () => $ZodIPv6,
-  $ZodISODate: () => $ZodISODate,
-  $ZodISODateTime: () => $ZodISODateTime,
-  $ZodISODuration: () => $ZodISODuration,
-  $ZodISOTime: () => $ZodISOTime,
-  $ZodIntersection: () => $ZodIntersection,
-  $ZodJWT: () => $ZodJWT,
-  $ZodKSUID: () => $ZodKSUID,
-  $ZodLazy: () => $ZodLazy,
-  $ZodLiteral: () => $ZodLiteral,
-  $ZodMAC: () => $ZodMAC,
-  $ZodMap: () => $ZodMap,
-  $ZodNaN: () => $ZodNaN,
-  $ZodNanoID: () => $ZodNanoID,
-  $ZodNever: () => $ZodNever,
-  $ZodNonOptional: () => $ZodNonOptional,
-  $ZodNull: () => $ZodNull,
-  $ZodNullable: () => $ZodNullable,
-  $ZodNumber: () => $ZodNumber,
-  $ZodNumberFormat: () => $ZodNumberFormat,
-  $ZodObject: () => $ZodObject,
-  $ZodObjectJIT: () => $ZodObjectJIT,
-  $ZodOptional: () => $ZodOptional,
-  $ZodPipe: () => $ZodPipe,
-  $ZodPrefault: () => $ZodPrefault,
-  $ZodPreprocess: () => $ZodPreprocess,
-  $ZodPromise: () => $ZodPromise,
-  $ZodReadonly: () => $ZodReadonly,
-  $ZodRealError: () => $ZodRealError,
-  $ZodRecord: () => $ZodRecord,
-  $ZodRegistry: () => $ZodRegistry,
-  $ZodSet: () => $ZodSet,
-  $ZodString: () => $ZodString,
-  $ZodStringFormat: () => $ZodStringFormat,
-  $ZodSuccess: () => $ZodSuccess,
-  $ZodSymbol: () => $ZodSymbol,
-  $ZodTemplateLiteral: () => $ZodTemplateLiteral,
-  $ZodTransform: () => $ZodTransform,
-  $ZodTuple: () => $ZodTuple,
-  $ZodType: () => $ZodType,
-  $ZodULID: () => $ZodULID,
-  $ZodURL: () => $ZodURL,
-  $ZodUUID: () => $ZodUUID,
-  $ZodUndefined: () => $ZodUndefined,
-  $ZodUnion: () => $ZodUnion,
-  $ZodUnknown: () => $ZodUnknown,
-  $ZodVoid: () => $ZodVoid,
-  $ZodXID: () => $ZodXID,
-  $ZodXor: () => $ZodXor,
-  $brand: () => $brand,
-  $constructor: () => $constructor,
-  $input: () => $input,
-  $output: () => $output,
-  Doc: () => Doc,
-  INVALID: () => INVALID,
-  JSONSchema: () => exports_json_schema,
-  JSONSchemaGenerator: () => JSONSchemaGenerator,
-  NEVER: () => NEVER,
-  TimePrecision: () => TimePrecision,
-  URL_BAD_FORMAT: () => URL_BAD_FORMAT,
-  URL_UNPARSEABLE: () => URL_UNPARSEABLE,
-  ZodCompileAsyncError: () => ZodCompileAsyncError,
-  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
-  _any: () => _any,
-  _array: () => _array,
-  _base64: () => _base64,
-  _base64url: () => _base64url,
-  _bigint: () => _bigint,
-  _boolean: () => _boolean,
-  _catch: () => _catch,
-  _check: () => _check,
-  _cidrv4: () => _cidrv4,
-  _cidrv6: () => _cidrv6,
-  _coercedBigint: () => _coercedBigint,
-  _coercedBoolean: () => _coercedBoolean,
-  _coercedDate: () => _coercedDate,
-  _coercedNumber: () => _coercedNumber,
-  _coercedString: () => _coercedString,
-  _creditCard: () => _creditCard,
-  _cuid: () => _cuid,
-  _cuid2: () => _cuid2,
-  _custom: () => _custom,
-  _date: () => _date,
-  _decode: () => _decode,
-  _decodeAsync: () => _decodeAsync,
-  _default: () => _default,
-  _discriminatedUnion: () => _discriminatedUnion,
-  _e164: () => _e164,
-  _email: () => _email,
-  _emoji: () => _emoji2,
-  _encode: () => _encode,
-  _encodeAsync: () => _encodeAsync,
-  _endsWith: () => _endsWith,
-  _enum: () => _enum,
-  _file: () => _file,
-  _float32: () => _float32,
-  _float64: () => _float64,
-  _gt: () => _gt,
-  _gte: () => _gte,
-  _guid: () => _guid,
-  _includes: () => _includes,
-  _int: () => _int,
-  _int32: () => _int32,
-  _int64: () => _int64,
-  _intersection: () => _intersection,
-  _ipv4: () => _ipv4,
-  _ipv6: () => _ipv6,
-  _isoDate: () => _isoDate,
-  _isoDateTime: () => _isoDateTime,
-  _isoDuration: () => _isoDuration,
-  _isoTime: () => _isoTime,
-  _jwt: () => _jwt,
-  _ksuid: () => _ksuid,
-  _lazy: () => _lazy,
-  _length: () => _length,
-  _literal: () => _literal,
-  _lowercase: () => _lowercase,
-  _lt: () => _lt,
-  _lte: () => _lte,
-  _mac: () => _mac,
-  _map: () => _map,
-  _max: () => _lte,
-  _maxLength: () => _maxLength,
-  _maxSize: () => _maxSize,
-  _mime: () => _mime,
-  _min: () => _gte,
-  _minLength: () => _minLength,
-  _minSize: () => _minSize,
-  _multipleOf: () => _multipleOf,
-  _nan: () => _nan,
-  _nanoid: () => _nanoid,
-  _nativeEnum: () => _nativeEnum,
-  _negative: () => _negative,
-  _never: () => _never,
-  _nonnegative: () => _nonnegative,
-  _nonoptional: () => _nonoptional,
-  _nonpositive: () => _nonpositive,
-  _normalize: () => _normalize,
-  _null: () => _null2,
-  _nullable: () => _nullable,
-  _number: () => _number,
-  _optional: () => _optional,
-  _overwrite: () => _overwrite,
-  _parse: () => _parse,
-  _parseAsync: () => _parseAsync,
-  _pipe: () => _pipe,
-  _positive: () => _positive,
-  _promise: () => _promise,
-  _properties: () => _properties,
-  _property: () => _property,
-  _readonly: () => _readonly,
-  _record: () => _record,
-  _refine: () => _refine,
-  _regex: () => _regex,
-  _safeDecode: () => _safeDecode,
-  _safeDecodeAsync: () => _safeDecodeAsync,
-  _safeEncode: () => _safeEncode,
-  _safeEncodeAsync: () => _safeEncodeAsync,
-  _safeParse: () => _safeParse,
-  _safeParseAsync: () => _safeParseAsync,
-  _set: () => _set,
-  _size: () => _size,
-  _slugify: () => _slugify,
-  _startsWith: () => _startsWith,
-  _string: () => _string,
-  _stringFormat: () => _stringFormat,
-  _stringbool: () => _stringbool,
-  _success: () => _success,
-  _superRefine: () => _superRefine,
-  _symbol: () => _symbol,
-  _templateLiteral: () => _templateLiteral,
-  _toLowerCase: () => _toLowerCase,
-  _toUpperCase: () => _toUpperCase,
-  _transform: () => _transform,
-  _trim: () => _trim,
-  _tuple: () => _tuple,
-  _uint32: () => _uint32,
-  _uint64: () => _uint64,
-  _ulid: () => _ulid,
-  _undefined: () => _undefined2,
-  _union: () => _union,
-  _unknown: () => _unknown,
-  _uppercase: () => _uppercase,
-  _url: () => _url,
-  _uuid: () => _uuid,
-  _uuidv4: () => _uuidv4,
-  _uuidv6: () => _uuidv6,
-  _uuidv7: () => _uuidv7,
-  _void: () => _void,
-  _xid: () => _xid,
-  _xor: () => _xor,
-  clone: () => clone,
-  compile: () => compile,
-  compileFn: () => compileFn,
-  config: () => config,
-  createStandardJSONSchemaMethod: () => createStandardJSONSchemaMethod,
-  createToJSONSchemaMethod: () => createToJSONSchemaMethod,
-  decode: () => decode,
-  decodeAsync: () => decodeAsync,
-  describe: () => describe,
-  encode: () => encode,
-  encodeAsync: () => encodeAsync,
-  extractDefs: () => extractDefs,
-  finalize: () => finalize,
-  flattenError: () => flattenError,
-  formatError: () => formatError,
-  getDiscriminatedOption: () => getDiscriminatedOption,
-  globalConfig: () => globalConfig,
-  globalRegistry: () => globalRegistry,
-  handleUnrepresentable: () => handleUnrepresentable,
-  initializeContext: () => initializeContext,
-  isBackEdge: () => isBackEdge,
-  isRecursiveSchema: () => isRecursiveSchema,
-  isValidBase64: () => isValidBase64,
-  isValidBase64URL: () => isValidBase64URL,
-  isValidCIDRv6: () => isValidCIDRv6,
-  isValidCreditCard: () => isValidCreditCard,
-  isValidIPv6: () => isValidIPv6,
-  isValidJWT: () => isValidJWT,
-  locales: () => exports_locales,
-  memoizer: () => memoizer,
-  mergeValues: () => mergeValues,
-  meta: () => meta,
-  parse: () => parse,
-  parseAsync: () => parseAsync,
-  parseURLObject: () => parseURLObject,
-  prettifyError: () => prettifyError,
-  process: () => process,
-  regexes: () => exports_regexes,
-  registry: () => registry,
-  safeDecode: () => safeDecode,
-  safeDecodeAsync: () => safeDecodeAsync,
-  safeEncode: () => safeEncode,
-  safeEncodeAsync: () => safeEncodeAsync,
-  safeParse: () => safeParse,
-  safeParseAsync: () => safeParseAsync,
-  standardProps: () => standardProps,
-  stripTabAndNewline: () => stripTabAndNewline,
-  toDotPath: () => toDotPath,
-  toJSONSchema: () => toJSONSchema,
-  toZod: () => toZod,
-  treeifyError: () => treeifyError,
-  urlHostnameOk: () => urlHostnameOk,
-  urlProtocolOk: () => urlProtocolOk,
-  util: () => exports_util,
-  validate: () => validate,
+  version: () => version,
   validateAsync: () => validateAsync,
-  version: () => version
+  validate: () => validate,
+  util: () => exports_util,
+  urlProtocolOk: () => urlProtocolOk,
+  urlHostnameOk: () => urlHostnameOk,
+  treeifyError: () => treeifyError,
+  toZod: () => toZod,
+  toJSONSchema: () => toJSONSchema,
+  toDotPath: () => toDotPath,
+  stripTabAndNewline: () => stripTabAndNewline,
+  standardProps: () => standardProps,
+  safeParseAsync: () => safeParseAsync,
+  safeParse: () => safeParse,
+  safeEncodeAsync: () => safeEncodeAsync,
+  safeEncode: () => safeEncode,
+  safeDecodeAsync: () => safeDecodeAsync,
+  safeDecode: () => safeDecode,
+  registry: () => registry,
+  regexes: () => exports_regexes,
+  process: () => process,
+  prettifyError: () => prettifyError,
+  parseURLObject: () => parseURLObject,
+  parseAsync: () => parseAsync,
+  parse: () => parse,
+  meta: () => meta,
+  mergeValues: () => mergeValues,
+  memoizer: () => memoizer,
+  locales: () => exports_locales,
+  isValidJWT: () => isValidJWT,
+  isValidIPv6: () => isValidIPv6,
+  isValidCreditCard: () => isValidCreditCard,
+  isValidCIDRv6: () => isValidCIDRv6,
+  isValidBase64URL: () => isValidBase64URL,
+  isValidBase64: () => isValidBase64,
+  isRecursiveSchema: () => isRecursiveSchema,
+  isBackEdge: () => isBackEdge,
+  initializeContext: () => initializeContext,
+  handleUnrepresentable: () => handleUnrepresentable,
+  globalRegistry: () => globalRegistry,
+  globalConfig: () => globalConfig,
+  getDiscriminatedOption: () => getDiscriminatedOption,
+  formatError: () => formatError,
+  flattenError: () => flattenError,
+  finalize: () => finalize,
+  extractDefs: () => extractDefs,
+  encodeAsync: () => encodeAsync,
+  encode: () => encode,
+  describe: () => describe,
+  decodeAsync: () => decodeAsync,
+  decode: () => decode,
+  createToJSONSchemaMethod: () => createToJSONSchemaMethod,
+  createStandardJSONSchemaMethod: () => createStandardJSONSchemaMethod,
+  config: () => config,
+  compileFn: () => compileFn,
+  compile: () => compile,
+  clone: () => clone,
+  _xor: () => _xor,
+  _xid: () => _xid,
+  _void: () => _void,
+  _uuidv7: () => _uuidv7,
+  _uuidv6: () => _uuidv6,
+  _uuidv4: () => _uuidv4,
+  _uuid: () => _uuid,
+  _url: () => _url,
+  _uppercase: () => _uppercase,
+  _unknown: () => _unknown,
+  _union: () => _union,
+  _undefined: () => _undefined2,
+  _ulid: () => _ulid,
+  _uint64: () => _uint64,
+  _uint32: () => _uint32,
+  _tuple: () => _tuple,
+  _trim: () => _trim,
+  _transform: () => _transform,
+  _toUpperCase: () => _toUpperCase,
+  _toLowerCase: () => _toLowerCase,
+  _templateLiteral: () => _templateLiteral,
+  _symbol: () => _symbol,
+  _superRefine: () => _superRefine,
+  _success: () => _success,
+  _stringbool: () => _stringbool,
+  _stringFormat: () => _stringFormat,
+  _string: () => _string,
+  _startsWith: () => _startsWith,
+  _slugify: () => _slugify,
+  _size: () => _size,
+  _set: () => _set,
+  _safeParseAsync: () => _safeParseAsync,
+  _safeParse: () => _safeParse,
+  _safeEncodeAsync: () => _safeEncodeAsync,
+  _safeEncode: () => _safeEncode,
+  _safeDecodeAsync: () => _safeDecodeAsync,
+  _safeDecode: () => _safeDecode,
+  _regex: () => _regex,
+  _refine: () => _refine,
+  _record: () => _record,
+  _readonly: () => _readonly,
+  _property: () => _property,
+  _properties: () => _properties,
+  _promise: () => _promise,
+  _positive: () => _positive,
+  _pipe: () => _pipe,
+  _parseAsync: () => _parseAsync,
+  _parse: () => _parse,
+  _overwrite: () => _overwrite,
+  _optional: () => _optional,
+  _number: () => _number,
+  _nullable: () => _nullable,
+  _null: () => _null2,
+  _normalize: () => _normalize,
+  _nonpositive: () => _nonpositive,
+  _nonoptional: () => _nonoptional,
+  _nonnegative: () => _nonnegative,
+  _never: () => _never,
+  _negative: () => _negative,
+  _nativeEnum: () => _nativeEnum,
+  _nanoid: () => _nanoid,
+  _nan: () => _nan,
+  _multipleOf: () => _multipleOf,
+  _minSize: () => _minSize,
+  _minLength: () => _minLength,
+  _min: () => _gte,
+  _mime: () => _mime,
+  _maxSize: () => _maxSize,
+  _maxLength: () => _maxLength,
+  _max: () => _lte,
+  _map: () => _map,
+  _mac: () => _mac,
+  _lte: () => _lte,
+  _lt: () => _lt,
+  _lowercase: () => _lowercase,
+  _literal: () => _literal,
+  _length: () => _length,
+  _lazy: () => _lazy,
+  _ksuid: () => _ksuid,
+  _jwt: () => _jwt,
+  _isoTime: () => _isoTime,
+  _isoDuration: () => _isoDuration,
+  _isoDateTime: () => _isoDateTime,
+  _isoDate: () => _isoDate,
+  _ipv6: () => _ipv6,
+  _ipv4: () => _ipv4,
+  _intersection: () => _intersection,
+  _int64: () => _int64,
+  _int32: () => _int32,
+  _int: () => _int,
+  _includes: () => _includes,
+  _guid: () => _guid,
+  _gte: () => _gte,
+  _gt: () => _gt,
+  _float64: () => _float64,
+  _float32: () => _float32,
+  _file: () => _file,
+  _enum: () => _enum,
+  _endsWith: () => _endsWith,
+  _encodeAsync: () => _encodeAsync,
+  _encode: () => _encode,
+  _emoji: () => _emoji2,
+  _email: () => _email,
+  _e164: () => _e164,
+  _discriminatedUnion: () => _discriminatedUnion,
+  _default: () => _default,
+  _decodeAsync: () => _decodeAsync,
+  _decode: () => _decode,
+  _date: () => _date,
+  _custom: () => _custom,
+  _cuid2: () => _cuid2,
+  _cuid: () => _cuid,
+  _creditCard: () => _creditCard,
+  _coercedString: () => _coercedString,
+  _coercedNumber: () => _coercedNumber,
+  _coercedDate: () => _coercedDate,
+  _coercedBoolean: () => _coercedBoolean,
+  _coercedBigint: () => _coercedBigint,
+  _cidrv6: () => _cidrv6,
+  _cidrv4: () => _cidrv4,
+  _check: () => _check,
+  _catch: () => _catch,
+  _boolean: () => _boolean,
+  _bigint: () => _bigint,
+  _base64url: () => _base64url,
+  _base64: () => _base64,
+  _array: () => _array,
+  _any: () => _any,
+  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
+  ZodCompileAsyncError: () => ZodCompileAsyncError,
+  URL_UNPARSEABLE: () => URL_UNPARSEABLE,
+  URL_BAD_FORMAT: () => URL_BAD_FORMAT,
+  TimePrecision: () => TimePrecision,
+  NEVER: () => NEVER,
+  JSONSchemaGenerator: () => JSONSchemaGenerator,
+  JSONSchema: () => exports_json_schema,
+  INVALID: () => INVALID,
+  Doc: () => Doc,
+  $output: () => $output,
+  $input: () => $input,
+  $constructor: () => $constructor,
+  $brand: () => $brand,
+  $ZodXor: () => $ZodXor,
+  $ZodXID: () => $ZodXID,
+  $ZodVoid: () => $ZodVoid,
+  $ZodUnknown: () => $ZodUnknown,
+  $ZodUnion: () => $ZodUnion,
+  $ZodUndefined: () => $ZodUndefined,
+  $ZodUUID: () => $ZodUUID,
+  $ZodURL: () => $ZodURL,
+  $ZodULID: () => $ZodULID,
+  $ZodType: () => $ZodType,
+  $ZodTuple: () => $ZodTuple,
+  $ZodTransform: () => $ZodTransform,
+  $ZodTemplateLiteral: () => $ZodTemplateLiteral,
+  $ZodSymbol: () => $ZodSymbol,
+  $ZodSuccess: () => $ZodSuccess,
+  $ZodStringFormat: () => $ZodStringFormat,
+  $ZodString: () => $ZodString,
+  $ZodSet: () => $ZodSet,
+  $ZodRegistry: () => $ZodRegistry,
+  $ZodRecord: () => $ZodRecord,
+  $ZodRealError: () => $ZodRealError,
+  $ZodReadonly: () => $ZodReadonly,
+  $ZodPromise: () => $ZodPromise,
+  $ZodPreprocess: () => $ZodPreprocess,
+  $ZodPrefault: () => $ZodPrefault,
+  $ZodPipe: () => $ZodPipe,
+  $ZodOptional: () => $ZodOptional,
+  $ZodObjectJIT: () => $ZodObjectJIT,
+  $ZodObject: () => $ZodObject,
+  $ZodNumberFormat: () => $ZodNumberFormat,
+  $ZodNumber: () => $ZodNumber,
+  $ZodNullable: () => $ZodNullable,
+  $ZodNull: () => $ZodNull,
+  $ZodNonOptional: () => $ZodNonOptional,
+  $ZodNever: () => $ZodNever,
+  $ZodNanoID: () => $ZodNanoID,
+  $ZodNaN: () => $ZodNaN,
+  $ZodMap: () => $ZodMap,
+  $ZodMAC: () => $ZodMAC,
+  $ZodLiteral: () => $ZodLiteral,
+  $ZodLazy: () => $ZodLazy,
+  $ZodKSUID: () => $ZodKSUID,
+  $ZodJWT: () => $ZodJWT,
+  $ZodIntersection: () => $ZodIntersection,
+  $ZodISOTime: () => $ZodISOTime,
+  $ZodISODuration: () => $ZodISODuration,
+  $ZodISODateTime: () => $ZodISODateTime,
+  $ZodISODate: () => $ZodISODate,
+  $ZodIPv6: () => $ZodIPv6,
+  $ZodIPv4: () => $ZodIPv4,
+  $ZodGUID: () => $ZodGUID,
+  $ZodFunction: () => $ZodFunction,
+  $ZodFile: () => $ZodFile,
+  $ZodExactOptional: () => $ZodExactOptional,
+  $ZodError: () => $ZodError,
+  $ZodEnum: () => $ZodEnum,
+  $ZodEncodeError: () => $ZodEncodeError,
+  $ZodEmoji: () => $ZodEmoji,
+  $ZodEmail: () => $ZodEmail,
+  $ZodE164: () => $ZodE164,
+  $ZodDiscriminatedUnion: () => $ZodDiscriminatedUnion,
+  $ZodDefault: () => $ZodDefault,
+  $ZodDate: () => $ZodDate,
+  $ZodCyclicError: () => $ZodCyclicError,
+  $ZodCustomStringFormat: () => $ZodCustomStringFormat,
+  $ZodCustom: () => $ZodCustom,
+  $ZodCreditCard: () => $ZodCreditCard,
+  $ZodCodec: () => $ZodCodec,
+  $ZodCheckUpperCase: () => $ZodCheckUpperCase,
+  $ZodCheckStringFormat: () => $ZodCheckStringFormat,
+  $ZodCheckStartsWith: () => $ZodCheckStartsWith,
+  $ZodCheckSizeEquals: () => $ZodCheckSizeEquals,
+  $ZodCheckRegex: () => $ZodCheckRegex,
+  $ZodCheckProperty: () => $ZodCheckProperty,
+  $ZodCheckOverwrite: () => $ZodCheckOverwrite,
+  $ZodCheckNumberFormat: () => $ZodCheckNumberFormat,
+  $ZodCheckMultipleOf: () => $ZodCheckMultipleOf,
+  $ZodCheckMinSize: () => $ZodCheckMinSize,
+  $ZodCheckMinLength: () => $ZodCheckMinLength,
+  $ZodCheckMimeType: () => $ZodCheckMimeType,
+  $ZodCheckMaxSize: () => $ZodCheckMaxSize,
+  $ZodCheckMaxLength: () => $ZodCheckMaxLength,
+  $ZodCheckLowerCase: () => $ZodCheckLowerCase,
+  $ZodCheckLessThan: () => $ZodCheckLessThan,
+  $ZodCheckLengthEquals: () => $ZodCheckLengthEquals,
+  $ZodCheckIncludes: () => $ZodCheckIncludes,
+  $ZodCheckGreaterThan: () => $ZodCheckGreaterThan,
+  $ZodCheckEndsWith: () => $ZodCheckEndsWith,
+  $ZodCheckBigIntFormat: () => $ZodCheckBigIntFormat,
+  $ZodCheck: () => $ZodCheck,
+  $ZodCatch: () => $ZodCatch,
+  $ZodCUID2: () => $ZodCUID2,
+  $ZodCUID: () => $ZodCUID,
+  $ZodCIDRv6: () => $ZodCIDRv6,
+  $ZodCIDRv4: () => $ZodCIDRv4,
+  $ZodBoolean: () => $ZodBoolean,
+  $ZodBigIntFormat: () => $ZodBigIntFormat,
+  $ZodBigInt: () => $ZodBigInt,
+  $ZodBase64URL: () => $ZodBase64URL,
+  $ZodBase64: () => $ZodBase64,
+  $ZodAsyncError: () => $ZodAsyncError,
+  $ZodArray: () => $ZodArray,
+  $ZodAny: () => $ZodAny
 });
 var init_core2 = __esm(() => {
   init_util();
@@ -16260,36 +16260,36 @@ var init_core2 = __esm(() => {
 // node_modules/zod/v4/classic/checks.js
 var exports_checks2 = {};
 __export(exports_checks2, {
-  endsWith: () => _endsWith,
-  gt: () => _gt,
-  gte: () => _gte,
-  includes: () => _includes,
-  length: () => _length,
-  lowercase: () => _lowercase,
-  lt: () => _lt,
-  lte: () => _lte,
-  maxLength: () => _maxLength,
-  maxSize: () => _maxSize,
-  mime: () => _mime,
-  minLength: () => _minLength,
-  minSize: () => _minSize,
-  multipleOf: () => _multipleOf,
-  negative: () => _negative,
-  nonnegative: () => _nonnegative,
-  nonpositive: () => _nonpositive,
-  normalize: () => _normalize,
-  overwrite: () => _overwrite,
-  positive: () => _positive,
-  properties: () => _properties,
-  property: () => _property,
-  regex: () => _regex,
-  size: () => _size,
-  slugify: () => _slugify,
-  startsWith: () => _startsWith,
-  toLowerCase: () => _toLowerCase,
-  toUpperCase: () => _toUpperCase,
+  uppercase: () => _uppercase,
   trim: () => _trim,
-  uppercase: () => _uppercase
+  toUpperCase: () => _toUpperCase,
+  toLowerCase: () => _toLowerCase,
+  startsWith: () => _startsWith,
+  slugify: () => _slugify,
+  size: () => _size,
+  regex: () => _regex,
+  property: () => _property,
+  properties: () => _properties,
+  positive: () => _positive,
+  overwrite: () => _overwrite,
+  normalize: () => _normalize,
+  nonpositive: () => _nonpositive,
+  nonnegative: () => _nonnegative,
+  negative: () => _negative,
+  multipleOf: () => _multipleOf,
+  minSize: () => _minSize,
+  minLength: () => _minLength,
+  mime: () => _mime,
+  maxSize: () => _maxSize,
+  maxLength: () => _maxLength,
+  lte: () => _lte,
+  lt: () => _lt,
+  lowercase: () => _lowercase,
+  length: () => _length,
+  includes: () => _includes,
+  gte: () => _gte,
+  gt: () => _gt,
+  endsWith: () => _endsWith
 });
 var init_checks2 = __esm(() => {
   init_core2();
@@ -16369,178 +16369,178 @@ var init_parse2 = __esm(() => {
 // node_modules/zod/v4/classic/schemas.js
 var exports_schemas2 = {};
 __export(exports_schemas2, {
-  ZodAny: () => ZodAny,
-  ZodArray: () => ZodArray,
-  ZodBase64: () => ZodBase64,
-  ZodBase64URL: () => ZodBase64URL,
-  ZodBigInt: () => ZodBigInt,
-  ZodBigIntFormat: () => ZodBigIntFormat,
-  ZodBoolean: () => ZodBoolean,
-  ZodCIDRv4: () => ZodCIDRv4,
-  ZodCIDRv6: () => ZodCIDRv6,
-  ZodCUID: () => ZodCUID,
-  ZodCUID2: () => ZodCUID2,
-  ZodCatch: () => ZodCatch,
-  ZodCodec: () => ZodCodec,
-  ZodCreditCard: () => ZodCreditCard,
-  ZodCustom: () => ZodCustom,
-  ZodCustomStringFormat: () => ZodCustomStringFormat,
-  ZodDate: () => ZodDate,
-  ZodDefault: () => ZodDefault,
-  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
-  ZodE164: () => ZodE164,
-  ZodEmail: () => ZodEmail,
-  ZodEmoji: () => ZodEmoji,
-  ZodEnum: () => ZodEnum,
-  ZodExactOptional: () => ZodExactOptional,
-  ZodFile: () => ZodFile,
-  ZodFunction: () => ZodFunction,
-  ZodGUID: () => ZodGUID,
-  ZodIPv4: () => ZodIPv4,
-  ZodIPv6: () => ZodIPv6,
-  ZodISODate: () => ZodISODate,
-  ZodISODateTime: () => ZodISODateTime,
-  ZodISODuration: () => ZodISODuration,
-  ZodISOTime: () => ZodISOTime,
-  ZodIntersection: () => ZodIntersection,
-  ZodJWT: () => ZodJWT,
-  ZodKSUID: () => ZodKSUID,
-  ZodLazy: () => ZodLazy,
-  ZodLiteral: () => ZodLiteral,
-  ZodMAC: () => ZodMAC,
-  ZodMap: () => ZodMap,
-  ZodNaN: () => ZodNaN,
-  ZodNanoID: () => ZodNanoID,
-  ZodNever: () => ZodNever,
-  ZodNonOptional: () => ZodNonOptional,
-  ZodNull: () => ZodNull,
-  ZodNullable: () => ZodNullable,
-  ZodNumber: () => ZodNumber,
-  ZodNumberFormat: () => ZodNumberFormat,
-  ZodObject: () => ZodObject,
-  ZodOptional: () => ZodOptional,
-  ZodPipe: () => ZodPipe,
-  ZodPrefault: () => ZodPrefault,
-  ZodPreprocess: () => ZodPreprocess,
-  ZodPromise: () => ZodPromise,
-  ZodReadonly: () => ZodReadonly,
-  ZodRecord: () => ZodRecord,
-  ZodSet: () => ZodSet,
-  ZodString: () => ZodString,
-  ZodStringFormat: () => ZodStringFormat,
-  ZodSuccess: () => ZodSuccess,
-  ZodSymbol: () => ZodSymbol,
-  ZodTemplateLiteral: () => ZodTemplateLiteral,
-  ZodTransform: () => ZodTransform,
-  ZodTuple: () => ZodTuple,
-  ZodType: () => ZodType,
-  ZodULID: () => ZodULID,
-  ZodURL: () => ZodURL,
-  ZodUUID: () => ZodUUID,
-  ZodUndefined: () => ZodUndefined,
-  ZodUnion: () => ZodUnion,
-  ZodUnknown: () => ZodUnknown,
-  ZodVoid: () => ZodVoid,
-  ZodXID: () => ZodXID,
-  ZodXor: () => ZodXor,
-  _ZodString: () => _ZodString,
-  _default: () => _default2,
-  _function: () => _function,
-  any: () => any,
-  array: () => array,
-  base64: () => base642,
-  base64url: () => base64url2,
-  bigint: () => bigint2,
-  boolean: () => boolean2,
-  catch: () => _catch2,
-  check: () => check,
-  cidrv4: () => cidrv42,
-  cidrv6: () => cidrv62,
-  codec: () => codec,
-  creditCard: () => creditCard2,
-  cuid: () => cuid3,
-  cuid2: () => cuid22,
-  custom: () => custom,
-  date: () => date2,
-  describe: () => describe2,
-  discriminatedUnion: () => discriminatedUnion,
-  e164: () => e1642,
-  email: () => email2,
-  emoji: () => emoji2,
-  enum: () => _enum2,
-  exactOptional: () => exactOptional,
-  file: () => file,
-  float32: () => float32,
-  float64: () => float64,
-  function: () => _function,
-  guid: () => guid2,
-  hash: () => hash,
-  hex: () => hex2,
-  hostname: () => hostname2,
-  httpUrl: () => httpUrl,
-  instanceof: () => _instanceof,
-  int: () => int,
-  int32: () => int32,
-  int64: () => int64,
-  intersection: () => intersection,
-  invertCodec: () => invertCodec,
-  ipv4: () => ipv42,
-  ipv6: () => ipv62,
-  json: () => json,
-  jwt: () => jwt,
-  keyof: () => keyof,
-  ksuid: () => ksuid2,
-  lazy: () => lazy,
-  literal: () => literal,
-  looseObject: () => looseObject,
-  looseRecord: () => looseRecord,
-  mac: () => mac2,
-  map: () => map,
-  meta: () => meta2,
-  nan: () => nan,
-  nanoid: () => nanoid2,
-  nativeEnum: () => nativeEnum,
-  never: () => never,
-  nonoptional: () => nonoptional,
-  null: () => _null3,
-  nullable: () => nullable,
-  nullish: () => nullish2,
-  number: () => number2,
-  object: () => object,
-  optional: () => optional,
-  partialRecord: () => partialRecord,
-  pipe: () => pipe,
-  prefault: () => prefault,
-  preprocess: () => preprocess,
-  promise: () => promise,
-  readonly: () => readonly,
-  record: () => record,
-  refine: () => refine,
-  set: () => set,
-  strictObject: () => strictObject,
-  string: () => string2,
-  stringFormat: () => stringFormat,
-  stringbool: () => stringbool,
-  success: () => success,
-  superRefine: () => superRefine,
-  symbol: () => symbol,
-  templateLiteral: () => templateLiteral,
-  transform: () => transform,
-  tuple: () => tuple,
-  uint32: () => uint32,
-  uint64: () => uint64,
-  ulid: () => ulid2,
-  undefined: () => _undefined3,
-  union: () => union,
-  unknown: () => unknown,
-  url: () => url,
-  uuid: () => uuid2,
-  uuidv4: () => uuidv4,
-  uuidv6: () => uuidv6,
-  uuidv7: () => uuidv7,
-  void: () => _void2,
+  xor: () => xor,
   xid: () => xid2,
-  xor: () => xor
+  void: () => _void2,
+  uuidv7: () => uuidv7,
+  uuidv6: () => uuidv6,
+  uuidv4: () => uuidv4,
+  uuid: () => uuid2,
+  url: () => url,
+  unknown: () => unknown,
+  union: () => union,
+  undefined: () => _undefined3,
+  ulid: () => ulid2,
+  uint64: () => uint64,
+  uint32: () => uint32,
+  tuple: () => tuple,
+  transform: () => transform,
+  templateLiteral: () => templateLiteral,
+  symbol: () => symbol,
+  superRefine: () => superRefine,
+  success: () => success,
+  stringbool: () => stringbool,
+  stringFormat: () => stringFormat,
+  string: () => string2,
+  strictObject: () => strictObject,
+  set: () => set,
+  refine: () => refine,
+  record: () => record,
+  readonly: () => readonly,
+  promise: () => promise,
+  preprocess: () => preprocess,
+  prefault: () => prefault,
+  pipe: () => pipe,
+  partialRecord: () => partialRecord,
+  optional: () => optional,
+  object: () => object,
+  number: () => number2,
+  nullish: () => nullish2,
+  nullable: () => nullable,
+  null: () => _null3,
+  nonoptional: () => nonoptional,
+  never: () => never,
+  nativeEnum: () => nativeEnum,
+  nanoid: () => nanoid2,
+  nan: () => nan,
+  meta: () => meta2,
+  map: () => map,
+  mac: () => mac2,
+  looseRecord: () => looseRecord,
+  looseObject: () => looseObject,
+  literal: () => literal,
+  lazy: () => lazy,
+  ksuid: () => ksuid2,
+  keyof: () => keyof,
+  jwt: () => jwt,
+  json: () => json,
+  ipv6: () => ipv62,
+  ipv4: () => ipv42,
+  invertCodec: () => invertCodec,
+  intersection: () => intersection,
+  int64: () => int64,
+  int32: () => int32,
+  int: () => int,
+  instanceof: () => _instanceof,
+  httpUrl: () => httpUrl,
+  hostname: () => hostname2,
+  hex: () => hex2,
+  hash: () => hash,
+  guid: () => guid2,
+  function: () => _function,
+  float64: () => float64,
+  float32: () => float32,
+  file: () => file,
+  exactOptional: () => exactOptional,
+  enum: () => _enum2,
+  emoji: () => emoji2,
+  email: () => email2,
+  e164: () => e1642,
+  discriminatedUnion: () => discriminatedUnion,
+  describe: () => describe2,
+  date: () => date2,
+  custom: () => custom,
+  cuid2: () => cuid22,
+  cuid: () => cuid3,
+  creditCard: () => creditCard2,
+  codec: () => codec,
+  cidrv6: () => cidrv62,
+  cidrv4: () => cidrv42,
+  check: () => check,
+  catch: () => _catch2,
+  boolean: () => boolean2,
+  bigint: () => bigint2,
+  base64url: () => base64url2,
+  base64: () => base642,
+  array: () => array,
+  any: () => any,
+  _function: () => _function,
+  _default: () => _default2,
+  _ZodString: () => _ZodString,
+  ZodXor: () => ZodXor,
+  ZodXID: () => ZodXID,
+  ZodVoid: () => ZodVoid,
+  ZodUnknown: () => ZodUnknown,
+  ZodUnion: () => ZodUnion,
+  ZodUndefined: () => ZodUndefined,
+  ZodUUID: () => ZodUUID,
+  ZodURL: () => ZodURL,
+  ZodULID: () => ZodULID,
+  ZodType: () => ZodType,
+  ZodTuple: () => ZodTuple,
+  ZodTransform: () => ZodTransform,
+  ZodTemplateLiteral: () => ZodTemplateLiteral,
+  ZodSymbol: () => ZodSymbol,
+  ZodSuccess: () => ZodSuccess,
+  ZodStringFormat: () => ZodStringFormat,
+  ZodString: () => ZodString,
+  ZodSet: () => ZodSet,
+  ZodRecord: () => ZodRecord,
+  ZodReadonly: () => ZodReadonly,
+  ZodPromise: () => ZodPromise,
+  ZodPreprocess: () => ZodPreprocess,
+  ZodPrefault: () => ZodPrefault,
+  ZodPipe: () => ZodPipe,
+  ZodOptional: () => ZodOptional,
+  ZodObject: () => ZodObject,
+  ZodNumberFormat: () => ZodNumberFormat,
+  ZodNumber: () => ZodNumber,
+  ZodNullable: () => ZodNullable,
+  ZodNull: () => ZodNull,
+  ZodNonOptional: () => ZodNonOptional,
+  ZodNever: () => ZodNever,
+  ZodNanoID: () => ZodNanoID,
+  ZodNaN: () => ZodNaN,
+  ZodMap: () => ZodMap,
+  ZodMAC: () => ZodMAC,
+  ZodLiteral: () => ZodLiteral,
+  ZodLazy: () => ZodLazy,
+  ZodKSUID: () => ZodKSUID,
+  ZodJWT: () => ZodJWT,
+  ZodIntersection: () => ZodIntersection,
+  ZodISOTime: () => ZodISOTime,
+  ZodISODuration: () => ZodISODuration,
+  ZodISODateTime: () => ZodISODateTime,
+  ZodISODate: () => ZodISODate,
+  ZodIPv6: () => ZodIPv6,
+  ZodIPv4: () => ZodIPv4,
+  ZodGUID: () => ZodGUID,
+  ZodFunction: () => ZodFunction,
+  ZodFile: () => ZodFile,
+  ZodExactOptional: () => ZodExactOptional,
+  ZodEnum: () => ZodEnum,
+  ZodEmoji: () => ZodEmoji,
+  ZodEmail: () => ZodEmail,
+  ZodE164: () => ZodE164,
+  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
+  ZodDefault: () => ZodDefault,
+  ZodDate: () => ZodDate,
+  ZodCustomStringFormat: () => ZodCustomStringFormat,
+  ZodCustom: () => ZodCustom,
+  ZodCreditCard: () => ZodCreditCard,
+  ZodCodec: () => ZodCodec,
+  ZodCatch: () => ZodCatch,
+  ZodCUID2: () => ZodCUID2,
+  ZodCUID: () => ZodCUID,
+  ZodCIDRv6: () => ZodCIDRv6,
+  ZodCIDRv4: () => ZodCIDRv4,
+  ZodBoolean: () => ZodBoolean,
+  ZodBigIntFormat: () => ZodBigIntFormat,
+  ZodBigInt: () => ZodBigInt,
+  ZodBase64URL: () => ZodBase64URL,
+  ZodBase64: () => ZodBase64,
+  ZodArray: () => ZodArray,
+  ZodAny: () => ZodAny
 });
 function _ensureDefaultLocale() {
   if (!globalConfig.localeError)
@@ -17986,14 +17986,14 @@ var init_compat = __esm(() => {
 // node_modules/zod/v4/classic/iso.js
 var exports_iso = {};
 __export(exports_iso, {
-  ZodISODate: () => ZodISODate,
-  ZodISODateTime: () => ZodISODateTime,
-  ZodISODuration: () => ZodISODuration,
-  ZodISOTime: () => ZodISOTime,
-  date: () => date3,
-  datetime: () => datetime2,
+  time: () => time2,
   duration: () => duration2,
-  time: () => time2
+  datetime: () => datetime2,
+  date: () => date3,
+  ZodISOTime: () => ZodISOTime,
+  ZodISODuration: () => ZodISODuration,
+  ZodISODateTime: () => ZodISODateTime,
+  ZodISODate: () => ZodISODate
 });
 function datetime2(params) {
   return _isoDateTime(ZodISODateTime, params);
@@ -18756,11 +18756,11 @@ var init_in_out = __esm(() => {
 // node_modules/zod/v4/classic/coerce.js
 var exports_coerce = {};
 __export(exports_coerce, {
-  bigint: () => bigint3,
-  boolean: () => boolean3,
-  date: () => date4,
+  string: () => string3,
   number: () => number3,
-  string: () => string3
+  date: () => date4,
+  boolean: () => boolean3,
+  bigint: () => bigint3
 });
 function string3(params) {
   return _coercedString(ZodString, params);
@@ -18785,258 +18785,258 @@ var init_coerce = __esm(() => {
 // node_modules/zod/v4/classic/external.js
 var exports_external = {};
 __export(exports_external, {
-  $brand: () => $brand,
-  $input: () => $input,
-  $output: () => $output,
-  NEVER: () => NEVER,
-  TimePrecision: () => TimePrecision,
-  ZodAny: () => ZodAny,
-  ZodArray: () => ZodArray,
-  ZodBase64: () => ZodBase64,
-  ZodBase64URL: () => ZodBase64URL,
-  ZodBigInt: () => ZodBigInt,
-  ZodBigIntFormat: () => ZodBigIntFormat,
-  ZodBoolean: () => ZodBoolean,
-  ZodCIDRv4: () => ZodCIDRv4,
-  ZodCIDRv6: () => ZodCIDRv6,
-  ZodCUID: () => ZodCUID,
-  ZodCUID2: () => ZodCUID2,
-  ZodCatch: () => ZodCatch,
-  ZodCodec: () => ZodCodec,
-  ZodCompileAsyncError: () => ZodCompileAsyncError,
-  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
-  ZodCreditCard: () => ZodCreditCard,
-  ZodCustom: () => ZodCustom,
-  ZodCustomStringFormat: () => ZodCustomStringFormat,
-  ZodDate: () => ZodDate,
-  ZodDefault: () => ZodDefault,
-  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
-  ZodE164: () => ZodE164,
-  ZodEmail: () => ZodEmail,
-  ZodEmoji: () => ZodEmoji,
-  ZodEnum: () => ZodEnum,
-  ZodError: () => ZodError,
-  ZodExactOptional: () => ZodExactOptional,
-  ZodFile: () => ZodFile,
-  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind,
-  ZodFunction: () => ZodFunction,
-  ZodGUID: () => ZodGUID,
-  ZodIPv4: () => ZodIPv4,
-  ZodIPv6: () => ZodIPv6,
-  ZodISODate: () => ZodISODate,
-  ZodISODateTime: () => ZodISODateTime,
-  ZodISODuration: () => ZodISODuration,
-  ZodISOTime: () => ZodISOTime,
-  ZodIntersection: () => ZodIntersection,
-  ZodIssueCode: () => ZodIssueCode,
-  ZodJWT: () => ZodJWT,
-  ZodKSUID: () => ZodKSUID,
-  ZodLazy: () => ZodLazy,
-  ZodLiteral: () => ZodLiteral,
-  ZodMAC: () => ZodMAC,
-  ZodMap: () => ZodMap,
-  ZodNaN: () => ZodNaN,
-  ZodNanoID: () => ZodNanoID,
-  ZodNever: () => ZodNever,
-  ZodNonOptional: () => ZodNonOptional,
-  ZodNull: () => ZodNull,
-  ZodNullable: () => ZodNullable,
-  ZodNumber: () => ZodNumber,
-  ZodNumberFormat: () => ZodNumberFormat,
-  ZodObject: () => ZodObject,
-  ZodOptional: () => ZodOptional,
-  ZodPipe: () => ZodPipe,
-  ZodPrefault: () => ZodPrefault,
-  ZodPreprocess: () => ZodPreprocess,
-  ZodPromise: () => ZodPromise,
-  ZodReadonly: () => ZodReadonly,
-  ZodRealError: () => ZodRealError,
-  ZodRecord: () => ZodRecord,
-  ZodSet: () => ZodSet,
-  ZodString: () => ZodString,
-  ZodStringFormat: () => ZodStringFormat,
-  ZodSuccess: () => ZodSuccess,
-  ZodSymbol: () => ZodSymbol,
-  ZodTemplateLiteral: () => ZodTemplateLiteral,
-  ZodTransform: () => ZodTransform,
-  ZodTuple: () => ZodTuple,
-  ZodType: () => ZodType,
-  ZodULID: () => ZodULID,
-  ZodURL: () => ZodURL,
-  ZodUUID: () => ZodUUID,
-  ZodUndefined: () => ZodUndefined,
-  ZodUnion: () => ZodUnion,
-  ZodUnknown: () => ZodUnknown,
-  ZodVoid: () => ZodVoid,
-  ZodXID: () => ZodXID,
-  ZodXor: () => ZodXor,
-  _ZodString: () => _ZodString,
-  _default: () => _default2,
-  _function: () => _function,
-  any: () => any,
-  array: () => array,
-  base64: () => base642,
-  base64url: () => base64url2,
-  bigint: () => bigint2,
-  boolean: () => boolean2,
-  catch: () => _catch2,
-  check: () => check,
-  cidrv4: () => cidrv42,
-  cidrv6: () => cidrv62,
-  clone: () => clone,
-  codec: () => codec,
-  coerce: () => exports_coerce,
-  compile: () => compile,
-  config: () => config,
-  core: () => exports_core2,
-  creditCard: () => creditCard2,
-  cuid: () => cuid3,
-  cuid2: () => cuid22,
-  custom: () => custom,
-  date: () => date2,
-  decode: () => decode2,
-  decodeAsync: () => decodeAsync2,
-  deepPartial: () => deepPartial,
-  describe: () => describe2,
-  discriminatedUnion: () => discriminatedUnion,
-  e164: () => e1642,
-  email: () => email2,
-  emoji: () => emoji2,
-  encode: () => encode2,
-  encodeAsync: () => encodeAsync2,
-  endsWith: () => _endsWith,
-  enum: () => _enum2,
-  exactOptional: () => exactOptional,
-  file: () => file,
-  flattenError: () => flattenError,
-  float32: () => float32,
-  float64: () => float64,
-  formatError: () => formatError,
-  fromJSONSchema: () => fromJSONSchema,
-  function: () => _function,
-  getDiscriminatedOption: () => getDiscriminatedOption,
-  getErrorMap: () => getErrorMap,
-  globalRegistry: () => globalRegistry,
-  gt: () => _gt,
-  gte: () => _gte,
-  guid: () => guid2,
-  hash: () => hash,
-  hex: () => hex2,
-  hostname: () => hostname2,
-  httpUrl: () => httpUrl,
-  includes: () => _includes,
-  input: () => input,
-  instanceof: () => _instanceof,
-  int: () => int,
-  int32: () => int32,
-  int64: () => int64,
-  intersection: () => intersection,
-  invertCodec: () => invertCodec,
-  ipv4: () => ipv42,
-  ipv6: () => ipv62,
-  iso: () => exports_iso,
-  json: () => json,
-  jwt: () => jwt,
-  keyof: () => keyof,
-  ksuid: () => ksuid2,
-  lazy: () => lazy,
-  length: () => _length,
-  literal: () => literal,
-  locales: () => exports_locales,
-  looseObject: () => looseObject,
-  looseRecord: () => looseRecord,
-  lowercase: () => _lowercase,
-  lt: () => _lt,
-  lte: () => _lte,
-  mac: () => mac2,
-  map: () => map,
-  maxLength: () => _maxLength,
-  maxSize: () => _maxSize,
-  memoizer: () => memoizer,
-  meta: () => meta2,
-  mime: () => _mime,
-  minLength: () => _minLength,
-  minSize: () => _minSize,
-  multipleOf: () => _multipleOf,
-  nan: () => nan,
-  nanoid: () => nanoid2,
-  nativeEnum: () => nativeEnum,
-  negative: () => _negative,
-  never: () => never,
-  nonnegative: () => _nonnegative,
-  nonoptional: () => nonoptional,
-  nonpositive: () => _nonpositive,
-  normalize: () => _normalize,
-  null: () => _null3,
-  nullable: () => nullable,
-  nullish: () => nullish2,
-  number: () => number2,
-  object: () => object,
-  optional: () => optional,
-  output: () => output,
-  overwrite: () => _overwrite,
-  parse: () => parse3,
-  parseAsync: () => parseAsync2,
-  partialRecord: () => partialRecord,
-  pipe: () => pipe,
-  positive: () => _positive,
-  prefault: () => prefault,
-  preprocess: () => preprocess,
-  prettifyError: () => prettifyError,
-  promise: () => promise,
-  properties: () => _properties,
-  property: () => _property,
-  readonly: () => readonly,
-  record: () => record,
-  refine: () => refine,
-  regex: () => _regex,
-  regexes: () => exports_regexes,
-  registry: () => registry,
-  safeDecode: () => safeDecode2,
-  safeDecodeAsync: () => safeDecodeAsync2,
-  safeEncode: () => safeEncode2,
-  safeEncodeAsync: () => safeEncodeAsync2,
-  safeParse: () => safeParse2,
-  safeParseAsync: () => safeParseAsync2,
-  set: () => set,
-  setErrorMap: () => setErrorMap,
-  size: () => _size,
-  slugify: () => _slugify,
-  startsWith: () => _startsWith,
-  strictObject: () => strictObject,
-  string: () => string2,
-  stringFormat: () => stringFormat,
-  stringbool: () => stringbool,
-  success: () => success,
-  superRefine: () => superRefine,
-  symbol: () => symbol,
-  templateLiteral: () => templateLiteral,
-  toJSONSchema: () => toJSONSchema,
-  toLowerCase: () => _toLowerCase,
-  toUpperCase: () => _toUpperCase,
-  toZod: () => toZod,
-  transform: () => transform,
-  treeifyError: () => treeifyError,
-  trim: () => _trim,
-  tuple: () => tuple,
-  uint32: () => uint32,
-  uint64: () => uint64,
-  ulid: () => ulid2,
-  undefined: () => _undefined3,
-  union: () => union,
-  unknown: () => unknown,
-  uppercase: () => _uppercase,
-  url: () => url,
-  util: () => exports_util,
-  uuid: () => uuid2,
-  uuidv4: () => uuidv4,
-  uuidv6: () => uuidv6,
-  uuidv7: () => uuidv7,
-  validate: () => validate,
-  validateAsync: () => validateAsync,
-  void: () => _void2,
+  xor: () => xor,
   xid: () => xid2,
-  xor: () => xor
+  void: () => _void2,
+  validateAsync: () => validateAsync,
+  validate: () => validate,
+  uuidv7: () => uuidv7,
+  uuidv6: () => uuidv6,
+  uuidv4: () => uuidv4,
+  uuid: () => uuid2,
+  util: () => exports_util,
+  url: () => url,
+  uppercase: () => _uppercase,
+  unknown: () => unknown,
+  union: () => union,
+  undefined: () => _undefined3,
+  ulid: () => ulid2,
+  uint64: () => uint64,
+  uint32: () => uint32,
+  tuple: () => tuple,
+  trim: () => _trim,
+  treeifyError: () => treeifyError,
+  transform: () => transform,
+  toZod: () => toZod,
+  toUpperCase: () => _toUpperCase,
+  toLowerCase: () => _toLowerCase,
+  toJSONSchema: () => toJSONSchema,
+  templateLiteral: () => templateLiteral,
+  symbol: () => symbol,
+  superRefine: () => superRefine,
+  success: () => success,
+  stringbool: () => stringbool,
+  stringFormat: () => stringFormat,
+  string: () => string2,
+  strictObject: () => strictObject,
+  startsWith: () => _startsWith,
+  slugify: () => _slugify,
+  size: () => _size,
+  setErrorMap: () => setErrorMap,
+  set: () => set,
+  safeParseAsync: () => safeParseAsync2,
+  safeParse: () => safeParse2,
+  safeEncodeAsync: () => safeEncodeAsync2,
+  safeEncode: () => safeEncode2,
+  safeDecodeAsync: () => safeDecodeAsync2,
+  safeDecode: () => safeDecode2,
+  registry: () => registry,
+  regexes: () => exports_regexes,
+  regex: () => _regex,
+  refine: () => refine,
+  record: () => record,
+  readonly: () => readonly,
+  property: () => _property,
+  properties: () => _properties,
+  promise: () => promise,
+  prettifyError: () => prettifyError,
+  preprocess: () => preprocess,
+  prefault: () => prefault,
+  positive: () => _positive,
+  pipe: () => pipe,
+  partialRecord: () => partialRecord,
+  parseAsync: () => parseAsync2,
+  parse: () => parse3,
+  overwrite: () => _overwrite,
+  output: () => output,
+  optional: () => optional,
+  object: () => object,
+  number: () => number2,
+  nullish: () => nullish2,
+  nullable: () => nullable,
+  null: () => _null3,
+  normalize: () => _normalize,
+  nonpositive: () => _nonpositive,
+  nonoptional: () => nonoptional,
+  nonnegative: () => _nonnegative,
+  never: () => never,
+  negative: () => _negative,
+  nativeEnum: () => nativeEnum,
+  nanoid: () => nanoid2,
+  nan: () => nan,
+  multipleOf: () => _multipleOf,
+  minSize: () => _minSize,
+  minLength: () => _minLength,
+  mime: () => _mime,
+  meta: () => meta2,
+  memoizer: () => memoizer,
+  maxSize: () => _maxSize,
+  maxLength: () => _maxLength,
+  map: () => map,
+  mac: () => mac2,
+  lte: () => _lte,
+  lt: () => _lt,
+  lowercase: () => _lowercase,
+  looseRecord: () => looseRecord,
+  looseObject: () => looseObject,
+  locales: () => exports_locales,
+  literal: () => literal,
+  length: () => _length,
+  lazy: () => lazy,
+  ksuid: () => ksuid2,
+  keyof: () => keyof,
+  jwt: () => jwt,
+  json: () => json,
+  iso: () => exports_iso,
+  ipv6: () => ipv62,
+  ipv4: () => ipv42,
+  invertCodec: () => invertCodec,
+  intersection: () => intersection,
+  int64: () => int64,
+  int32: () => int32,
+  int: () => int,
+  instanceof: () => _instanceof,
+  input: () => input,
+  includes: () => _includes,
+  httpUrl: () => httpUrl,
+  hostname: () => hostname2,
+  hex: () => hex2,
+  hash: () => hash,
+  guid: () => guid2,
+  gte: () => _gte,
+  gt: () => _gt,
+  globalRegistry: () => globalRegistry,
+  getErrorMap: () => getErrorMap,
+  getDiscriminatedOption: () => getDiscriminatedOption,
+  function: () => _function,
+  fromJSONSchema: () => fromJSONSchema,
+  formatError: () => formatError,
+  float64: () => float64,
+  float32: () => float32,
+  flattenError: () => flattenError,
+  file: () => file,
+  exactOptional: () => exactOptional,
+  enum: () => _enum2,
+  endsWith: () => _endsWith,
+  encodeAsync: () => encodeAsync2,
+  encode: () => encode2,
+  emoji: () => emoji2,
+  email: () => email2,
+  e164: () => e1642,
+  discriminatedUnion: () => discriminatedUnion,
+  describe: () => describe2,
+  deepPartial: () => deepPartial,
+  decodeAsync: () => decodeAsync2,
+  decode: () => decode2,
+  date: () => date2,
+  custom: () => custom,
+  cuid2: () => cuid22,
+  cuid: () => cuid3,
+  creditCard: () => creditCard2,
+  core: () => exports_core2,
+  config: () => config,
+  compile: () => compile,
+  coerce: () => exports_coerce,
+  codec: () => codec,
+  clone: () => clone,
+  cidrv6: () => cidrv62,
+  cidrv4: () => cidrv42,
+  check: () => check,
+  catch: () => _catch2,
+  boolean: () => boolean2,
+  bigint: () => bigint2,
+  base64url: () => base64url2,
+  base64: () => base642,
+  array: () => array,
+  any: () => any,
+  _function: () => _function,
+  _default: () => _default2,
+  _ZodString: () => _ZodString,
+  ZodXor: () => ZodXor,
+  ZodXID: () => ZodXID,
+  ZodVoid: () => ZodVoid,
+  ZodUnknown: () => ZodUnknown,
+  ZodUnion: () => ZodUnion,
+  ZodUndefined: () => ZodUndefined,
+  ZodUUID: () => ZodUUID,
+  ZodURL: () => ZodURL,
+  ZodULID: () => ZodULID,
+  ZodType: () => ZodType,
+  ZodTuple: () => ZodTuple,
+  ZodTransform: () => ZodTransform,
+  ZodTemplateLiteral: () => ZodTemplateLiteral,
+  ZodSymbol: () => ZodSymbol,
+  ZodSuccess: () => ZodSuccess,
+  ZodStringFormat: () => ZodStringFormat,
+  ZodString: () => ZodString,
+  ZodSet: () => ZodSet,
+  ZodRecord: () => ZodRecord,
+  ZodRealError: () => ZodRealError,
+  ZodReadonly: () => ZodReadonly,
+  ZodPromise: () => ZodPromise,
+  ZodPreprocess: () => ZodPreprocess,
+  ZodPrefault: () => ZodPrefault,
+  ZodPipe: () => ZodPipe,
+  ZodOptional: () => ZodOptional,
+  ZodObject: () => ZodObject,
+  ZodNumberFormat: () => ZodNumberFormat,
+  ZodNumber: () => ZodNumber,
+  ZodNullable: () => ZodNullable,
+  ZodNull: () => ZodNull,
+  ZodNonOptional: () => ZodNonOptional,
+  ZodNever: () => ZodNever,
+  ZodNanoID: () => ZodNanoID,
+  ZodNaN: () => ZodNaN,
+  ZodMap: () => ZodMap,
+  ZodMAC: () => ZodMAC,
+  ZodLiteral: () => ZodLiteral,
+  ZodLazy: () => ZodLazy,
+  ZodKSUID: () => ZodKSUID,
+  ZodJWT: () => ZodJWT,
+  ZodIssueCode: () => ZodIssueCode,
+  ZodIntersection: () => ZodIntersection,
+  ZodISOTime: () => ZodISOTime,
+  ZodISODuration: () => ZodISODuration,
+  ZodISODateTime: () => ZodISODateTime,
+  ZodISODate: () => ZodISODate,
+  ZodIPv6: () => ZodIPv6,
+  ZodIPv4: () => ZodIPv4,
+  ZodGUID: () => ZodGUID,
+  ZodFunction: () => ZodFunction,
+  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind,
+  ZodFile: () => ZodFile,
+  ZodExactOptional: () => ZodExactOptional,
+  ZodError: () => ZodError,
+  ZodEnum: () => ZodEnum,
+  ZodEmoji: () => ZodEmoji,
+  ZodEmail: () => ZodEmail,
+  ZodE164: () => ZodE164,
+  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
+  ZodDefault: () => ZodDefault,
+  ZodDate: () => ZodDate,
+  ZodCustomStringFormat: () => ZodCustomStringFormat,
+  ZodCustom: () => ZodCustom,
+  ZodCreditCard: () => ZodCreditCard,
+  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
+  ZodCompileAsyncError: () => ZodCompileAsyncError,
+  ZodCodec: () => ZodCodec,
+  ZodCatch: () => ZodCatch,
+  ZodCUID2: () => ZodCUID2,
+  ZodCUID: () => ZodCUID,
+  ZodCIDRv6: () => ZodCIDRv6,
+  ZodCIDRv4: () => ZodCIDRv4,
+  ZodBoolean: () => ZodBoolean,
+  ZodBigIntFormat: () => ZodBigIntFormat,
+  ZodBigInt: () => ZodBigInt,
+  ZodBase64URL: () => ZodBase64URL,
+  ZodBase64: () => ZodBase64,
+  ZodArray: () => ZodArray,
+  ZodAny: () => ZodAny,
+  TimePrecision: () => TimePrecision,
+  NEVER: () => NEVER,
+  $output: () => $output,
+  $input: () => $input,
+  $brand: () => $brand
 });
 var init_external = __esm(() => {
   init_core2();
@@ -23826,7 +23826,13 @@ var init_image_templates = __esm(() => {
     referencePolicy: exports_external.enum(["character", "none"]),
     sources: exports_external.array(exports_external.string().max(300)).max(24),
     conflicts: exports_external.array(exports_external.string().max(1000)).max(16),
-    subjectPreparation: SubjectPreparationSchema.optional()
+    subjectPreparation: SubjectPreparationSchema.optional(),
+    ensembleCast: exports_external.array(exports_external.object({
+      name: exports_external.string().max(256),
+      appearance: exports_external.string().max(4000),
+      attire: exports_external.string().max(4000).optional(),
+      persona: exports_external.boolean().optional()
+    }).strict()).max(16).optional()
   }).strict();
   ImagePromptMetadataSchema = exports_external.object({
     template: ImageTemplateSnapshotSchema,
@@ -26526,7 +26532,7 @@ var init_character_dna_store = __esm(() => {
 });
 
 // node_modules/yaml/dist/nodes/identity.js
-var require_identity = __commonJS(function(exports) {
+var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
   var MAP = Symbol.for("yaml.map");
@@ -26580,7 +26586,7 @@ var require_identity = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/visit.js
-var require_visit = __commonJS(function(exports) {
+var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -26735,7 +26741,7 @@ var require_visit = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/doc/directives.js
-var require_directives = __commonJS(function(exports) {
+var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit2 = require_visit();
   var escapeChars = {
@@ -26887,7 +26893,7 @@ var require_directives = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/doc/anchors.js
-var require_anchors = __commonJS(function(exports) {
+var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit2 = require_visit();
   function anchorIsValid(anchor2) {
@@ -26949,7 +26955,7 @@ var require_anchors = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/doc/applyReviver.js
-var require_applyReviver = __commonJS(function(exports) {
+var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
       if (Array.isArray(val)) {
@@ -26996,7 +27002,7 @@ var require_applyReviver = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/toJS.js
-var require_toJS = __commonJS(function(exports) {
+var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
     if (Array.isArray(value))
@@ -27023,7 +27029,7 @@ var require_toJS = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/Node.js
-var require_Node = __commonJS(function(exports) {
+var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
   var toJS = require_toJS();
@@ -27060,7 +27066,7 @@ var require_Node = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/Alias.js
-var require_Alias = __commonJS(function(exports) {
+var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit2 = require_visit();
   var identity = require_identity();
@@ -27172,7 +27178,7 @@ var require_Alias = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/Scalar.js
-var require_Scalar = __commonJS(function(exports) {
+var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
   var toJS = require_toJS();
@@ -27200,7 +27206,7 @@ var require_Scalar = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/doc/createNode.js
-var require_createNode = __commonJS(function(exports) {
+var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -27272,7 +27278,7 @@ var require_createNode = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/Collection.js
-var require_Collection = __commonJS(function(exports) {
+var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
   var Node = require_Node();
@@ -27387,7 +27393,7 @@ var require_Collection = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/stringify/stringifyComment.js
-var require_stringifyComment = __commonJS(function(exports) {
+var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
     if (/^\n+$/.test(comment))
@@ -27404,7 +27410,7 @@ var require_stringifyComment = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/stringify/foldFlowLines.js
-var require_foldFlowLines = __commonJS(function(exports) {
+var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
   var FOLD_QUOTED = "quoted";
@@ -27541,7 +27547,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
 });
 
 // node_modules/yaml/dist/stringify/stringifyString.js
-var require_stringifyString = __commonJS(function(exports) {
+var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
   var getFoldOptions = (ctx, isBlock) => ({
@@ -27839,7 +27845,7 @@ ${indent}`);
 });
 
 // node_modules/yaml/dist/stringify/stringify.js
-var require_stringify = __commonJS(function(exports) {
+var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
   var stringifyComment = require_stringifyComment();
@@ -27960,7 +27966,7 @@ ${ctx.indent}${str}`;
 });
 
 // node_modules/yaml/dist/stringify/stringifyPair.js
-var require_stringifyPair = __commonJS(function(exports) {
+var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var stringify = require_stringify();
@@ -28096,7 +28102,7 @@ ${ctx.indent}`;
 });
 
 // node_modules/yaml/dist/log.js
-var require_log = __commonJS(function(exports) {
+var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
     if (logLevel === "debug")
@@ -28115,7 +28121,7 @@ var require_log = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/merge.js
-var require_merge = __commonJS(function(exports) {
+var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var MERGE_KEY = "<<";
@@ -28172,7 +28178,7 @@ var require_merge = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/addPairToJSMap.js
-var require_addPairToJSMap = __commonJS(function(exports) {
+var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge2 = require_merge();
   var stringify = require_stringify();
@@ -28233,7 +28239,7 @@ var require_addPairToJSMap = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/Pair.js
-var require_Pair = __commonJS(function(exports) {
+var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
   var addPairToJSMap = require_addPairToJSMap();
@@ -28271,7 +28277,7 @@ var require_Pair = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/stringify/stringifyCollection.js
-var require_stringifyCollection = __commonJS(function(exports) {
+var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify = require_stringify();
   var stringifyComment = require_stringifyComment();
@@ -28423,7 +28429,7 @@ ${indent}${end}`;
 });
 
 // node_modules/yaml/dist/nodes/YAMLMap.js
-var require_YAMLMap = __commonJS(function(exports) {
+var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
   var Collection = require_Collection();
@@ -28550,7 +28556,7 @@ var require_YAMLMap = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/common/map.js
-var require_map = __commonJS(function(exports) {
+var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
   var map2 = {
@@ -28569,7 +28575,7 @@ var require_map = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/nodes/YAMLSeq.js
-var require_YAMLSeq = __commonJS(function(exports) {
+var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
   var Collection = require_Collection();
@@ -28662,7 +28668,7 @@ var require_YAMLSeq = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/common/seq.js
-var require_seq = __commonJS(function(exports) {
+var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
   var seq = {
@@ -28681,7 +28687,7 @@ var require_seq = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/common/string.js
-var require_string = __commonJS(function(exports) {
+var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string4 = {
     identify: (value) => typeof value === "string",
@@ -28697,7 +28703,7 @@ var require_string = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/common/null.js
-var require_null = __commonJS(function(exports) {
+var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
     identify: (value) => value == null,
@@ -28712,7 +28718,7 @@ var require_null = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/core/bool.js
-var require_bool = __commonJS(function(exports) {
+var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
     identify: (value) => typeof value === "boolean",
@@ -28733,7 +28739,7 @@ var require_bool = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/stringify/stringifyNumber.js
-var require_stringifyNumber = __commonJS(function(exports) {
+var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
       return String(value);
@@ -28757,7 +28763,7 @@ var require_stringifyNumber = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/core/float.js
-var require_float = __commonJS(function(exports) {
+var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
   var floatNaN = {
@@ -28800,7 +28806,7 @@ var require_float = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/core/int.js
-var require_int = __commonJS(function(exports) {
+var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
   var intResolve = (str, offset, radix, { intAsBigInt }) => intAsBigInt ? BigInt(str) : parseInt(str.substring(offset), radix);
@@ -28842,7 +28848,7 @@ var require_int = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/core/schema.js
-var require_schema = __commonJS(function(exports) {
+var require_schema = __commonJS((exports) => {
   var map2 = require_map();
   var _null4 = require_null();
   var seq = require_seq();
@@ -28867,7 +28873,7 @@ var require_schema = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/json/schema.js
-var require_schema2 = __commonJS(function(exports) {
+var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map2 = require_map();
   var seq = require_seq();
@@ -28931,7 +28937,7 @@ var require_schema2 = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/binary.js
-var require_binary = __commonJS(function(exports) {
+var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
   var stringifyString = require_stringifyString();
@@ -28986,7 +28992,7 @@ var require_binary = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/pairs.js
-var require_pairs = __commonJS(function(exports) {
+var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
   var Scalar = require_Scalar();
@@ -29061,7 +29067,7 @@ ${cn.comment}` : item.comment;
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/omap.js
-var require_omap = __commonJS(function(exports) {
+var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
   var YAMLMap = require_YAMLMap();
@@ -29133,7 +29139,7 @@ var require_omap = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/bool.js
-var require_bool2 = __commonJS(function(exports) {
+var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
     const boolObj = value ? trueTag : falseTag;
@@ -29162,7 +29168,7 @@ var require_bool2 = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/float.js
-var require_float2 = __commonJS(function(exports) {
+var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
   var floatNaN = {
@@ -29208,7 +29214,7 @@ var require_float2 = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/int.js
-var require_int2 = __commonJS(function(exports) {
+var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
   function intResolve(str, offset, radix, { intAsBigInt }) {
@@ -29284,7 +29290,7 @@ var require_int2 = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/set.js
-var require_set = __commonJS(function(exports) {
+var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -29367,7 +29373,7 @@ var require_set = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
-var require_timestamp = __commonJS(function(exports) {
+var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
     const sign = str[0];
@@ -29449,7 +29455,7 @@ var require_timestamp = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/schema.js
-var require_schema3 = __commonJS(function(exports) {
+var require_schema3 = __commonJS((exports) => {
   var map2 = require_map();
   var _null4 = require_null();
   var seq = require_seq();
@@ -29490,7 +29496,7 @@ var require_schema3 = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/tags.js
-var require_tags = __commonJS(function(exports) {
+var require_tags = __commonJS((exports) => {
   var map2 = require_map();
   var _null4 = require_null();
   var seq = require_seq();
@@ -29581,7 +29587,7 @@ var require_tags = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/schema/Schema.js
-var require_Schema = __commonJS(function(exports) {
+var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map2 = require_map();
   var seq = require_seq();
@@ -29611,7 +29617,7 @@ var require_Schema = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/stringify/stringifyDocument.js
-var require_stringifyDocument = __commonJS(function(exports) {
+var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify = require_stringify();
   var stringifyComment = require_stringifyComment();
@@ -29691,7 +29697,7 @@ var require_stringifyDocument = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/doc/Document.js
-var require_Document = __commonJS(function(exports) {
+var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
   var identity = require_identity();
@@ -29926,7 +29932,7 @@ var require_Document = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/errors.js
-var require_errors = __commonJS(function(exports) {
+var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
       super();
@@ -29991,7 +29997,7 @@ ${pointer}
 });
 
 // node_modules/yaml/dist/compose/resolve-props.js
-var require_resolve_props = __commonJS(function(exports) {
+var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
     let atNewline = startOnNewline;
@@ -30121,7 +30127,7 @@ var require_resolve_props = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/util-contains-newline.js
-var require_util_contains_newline = __commonJS(function(exports) {
+var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
       return null;
@@ -30161,7 +30167,7 @@ var require_util_contains_newline = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/util-flow-indent-check.js
-var require_util_flow_indent_check = __commonJS(function(exports) {
+var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
     if (fc?.type === "flow-collection") {
@@ -30176,7 +30182,7 @@ var require_util_flow_indent_check = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/util-map-includes.js
-var require_util_map_includes = __commonJS(function(exports) {
+var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
     const { uniqueKeys } = ctx.options;
@@ -30189,7 +30195,7 @@ var require_util_map_includes = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/resolve-block-map.js
-var require_resolve_block_map = __commonJS(function(exports) {
+var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
   var resolveProps = require_resolve_props();
@@ -30296,7 +30302,7 @@ var require_resolve_block_map = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/resolve-block-seq.js
-var require_resolve_block_seq = __commonJS(function(exports) {
+var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
   var utilFlowIndentCheck = require_util_flow_indent_check();
@@ -30344,7 +30350,7 @@ var require_resolve_block_seq = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/resolve-end.js
-var require_resolve_end = __commonJS(function(exports) {
+var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
     if (end) {
@@ -30384,7 +30390,7 @@ var require_resolve_end = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/resolve-flow-collection.js
-var require_resolve_flow_collection = __commonJS(function(exports) {
+var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -30575,7 +30581,7 @@ var require_resolve_flow_collection = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/compose-collection.js
-var require_compose_collection = __commonJS(function(exports) {
+var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var YAMLMap = require_YAMLMap();
@@ -30637,7 +30643,7 @@ var require_compose_collection = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/resolve-block-scalar.js
-var require_resolve_block_scalar = __commonJS(function(exports) {
+var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
     const start = scalar.offset;
@@ -30830,7 +30836,7 @@ var require_resolve_block_scalar = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/resolve-flow-scalar.js
-var require_resolve_flow_scalar = __commonJS(function(exports) {
+var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
   function resolveFlowScalar(scalar, strict, onError) {
@@ -31046,7 +31052,7 @@ var require_resolve_flow_scalar = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/compose-scalar.js
-var require_compose_scalar = __commonJS(function(exports) {
+var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var resolveBlockScalar = require_resolve_block_scalar();
@@ -31124,7 +31130,7 @@ var require_compose_scalar = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/util-empty-scalar-position.js
-var require_util_empty_scalar_position = __commonJS(function(exports) {
+var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
       pos ?? (pos = before.length);
@@ -31151,7 +31157,7 @@ var require_util_empty_scalar_position = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/compose-node.js
-var require_compose_node = __commonJS(function(exports) {
+var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
   var composeCollection = require_compose_collection();
@@ -31254,7 +31260,7 @@ var require_compose_node = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/compose-doc.js
-var require_compose_doc = __commonJS(function(exports) {
+var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
   var resolveEnd = require_resolve_end();
@@ -31294,7 +31300,7 @@ var require_compose_doc = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/compose/composer.js
-var require_composer = __commonJS(function(exports) {
+var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
   var Document = require_Document();
@@ -31485,7 +31491,7 @@ ${end.comment}` : end.comment;
 });
 
 // node_modules/yaml/dist/parse/cst-scalar.js
-var require_cst_scalar = __commonJS(function(exports) {
+var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
   var errors3 = require_errors();
@@ -31675,7 +31681,7 @@ var require_cst_scalar = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/parse/cst-stringify.js
-var require_cst_stringify = __commonJS(function(exports) {
+var require_cst_stringify = __commonJS((exports) => {
   var stringify = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
     switch (token.type) {
@@ -31733,7 +31739,7 @@ var require_cst_stringify = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/parse/cst-visit.js
-var require_cst_visit = __commonJS(function(exports) {
+var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
   var REMOVE = Symbol("remove item");
@@ -31792,7 +31798,7 @@ var require_cst_visit = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/parse/cst.js
-var require_cst = __commonJS(function(exports) {
+var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
   var cstVisit = require_cst_visit();
@@ -31893,7 +31899,7 @@ var require_cst = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/parse/lexer.js
-var require_lexer = __commonJS(function(exports) {
+var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
     switch (ch) {
@@ -32490,7 +32496,7 @@ var require_lexer = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/parse/line-counter.js
-var require_line_counter = __commonJS(function(exports) {
+var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
       this.lineStarts = [];
@@ -32518,7 +32524,7 @@ var require_line_counter = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/parse/parser.js
-var require_parser = __commonJS(function(exports) {
+var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
   var lexer = require_lexer();
@@ -33374,7 +33380,7 @@ var require_parser = __commonJS(function(exports) {
 });
 
 // node_modules/yaml/dist/public-api.js
-var require_public_api = __commonJS(function(exports) {
+var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
   var errors3 = require_errors();
@@ -37631,6 +37637,940 @@ function fitPromptToBudget(prompt, negative = "", maxCharacters = IMAGE_PROMPT_M
 }
 var IMAGE_PROMPT_MAX_CHARS = 3000;
 
+// src/shared/character.ts
+function isNegatedInClause(text2, matchIndex) {
+  const prefix = text2.slice(0, matchIndex);
+  const lastBoundary = Math.max(prefix.lastIndexOf("."), prefix.lastIndexOf(","), prefix.lastIndexOf(";"), prefix.lastIndexOf("!"), prefix.lastIndexOf("?"), prefix.search(/\b(?:but|however|although)\b[^.]*$/i));
+  const clausePrefix = lastBoundary >= 0 ? prefix.slice(lastBoundary) : prefix;
+  return /\b(?:not|n't|never|hardly|scarcely|barely|without|no)\b/i.test(clausePrefix);
+}
+function firstEntry(catalogue) {
+  return catalogue[0] ?? FALLBACK_POSE;
+}
+function selectPoseExpression(catalogue, paragraphIndex, text2, preferredExpression) {
+  if (preferredExpression && preferredExpression.trim()) {
+    const raw = preferredExpression.trim();
+    if (!/\b(?:not|never|no|un-)\b/i.test(raw)) {
+      const norm = raw.toLowerCase().replace(/[\s-]+/g, "_");
+      const direct = catalogue.find((entry) => entry.id === norm || entry.id === raw.toLowerCase());
+      if (direct)
+        return direct;
+      const aliasTarget = EXPRESSION_ALIASES[norm] || EXPRESSION_ALIASES[raw.toLowerCase()];
+      if (aliasTarget) {
+        const aliased = catalogue.find((entry) => entry.id === aliasTarget);
+        if (aliased)
+          return aliased;
+      }
+    }
+  }
+  if (text2 && text2.trim()) {
+    let earliestMatch = null;
+    for (const [regex, id6] of KEYWORD_PATTERNS) {
+      const m = regex.exec(text2);
+      if (m && !isNegatedInClause(text2, m.index)) {
+        if (!earliestMatch || m.index < earliestMatch.index) {
+          earliestMatch = { index: m.index, id: id6 };
+        }
+      }
+    }
+    if (earliestMatch) {
+      const found = catalogue.find((entry) => entry.id === earliestMatch.id);
+      if (found)
+        return found;
+    }
+    const idlePose = catalogue.find((entry) => entry.id === "idle");
+    return idlePose ?? firstEntry(catalogue);
+  }
+  if (catalogue.length === 0)
+    return FALLBACK_POSE;
+  return catalogue[paragraphIndex % catalogue.length] ?? firstEntry(catalogue);
+}
+function poseById(catalogue, id6) {
+  if (!id6)
+    return firstEntry(catalogue);
+  const norm = id6.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const found = catalogue.find((entry) => entry.id === norm || entry.id === id6.trim().toLowerCase());
+  if (found)
+    return found;
+  const aliasTarget = EXPRESSION_ALIASES[norm] || EXPRESSION_ALIASES[id6.trim().toLowerCase()];
+  if (aliasTarget) {
+    const aliased = catalogue.find((entry) => entry.id === aliasTarget);
+    if (aliased)
+      return aliased;
+  }
+  return firstEntry(catalogue);
+}
+function tagBlockFor(identity2) {
+  return identity2.tags.join(", ");
+}
+function sanitizePoseExpression(rawSuffix, options = {}) {
+  if (!rawSuffix || !rawSuffix.trim())
+    return "";
+  const {
+    keepWeightBrackets = false,
+    stripAnimeTropes = true,
+    hasActiveSceneAction = false
+  } = options;
+  const unwrapped = keepWeightBrackets ? rawSuffix : rawSuffix.replace(/[\{\}\[\]]+/g, "");
+  const seen = new Set;
+  const cleaned = [];
+  for (const part of unwrapped.split(",")) {
+    const token = part.replace(/[\{\}\[\]]+/g, "").trim();
+    if (!token)
+      continue;
+    if (ANIME_EMOTICON_TAG_RE.test(token))
+      continue;
+    if (stripAnimeTropes && ANIME_TROPES_FOR_PROSE_RE.test(token))
+      continue;
+    if (hasActiveSceneAction && /^looking at viewer$/i.test(token))
+      continue;
+    const norm = token.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(norm))
+      continue;
+    seen.add(norm);
+    cleaned.push(keepWeightBrackets ? part.trim() : token);
+  }
+  return cleaned.join(", ");
+}
+var POSE_EXPRESSION_CATALOGUE, FALLBACK_POSE, EXPRESSION_ALIASES, KEYWORD_PATTERNS, SINGLE_CHARACTER_SCHEMA_VERSION = 2, ANIME_EMOTICON_TAG_RE, ANIME_TROPES_FOR_PROSE_RE;
+var init_character = __esm(() => {
+  POSE_EXPRESSION_CATALOGUE = [
+    {
+      id: "idle",
+      suffix: "standing, relaxed posture, neutral expression"
+    },
+    {
+      id: "speak",
+      suffix: "talking, mouth slightly open, looking at viewer"
+    },
+    {
+      id: "smile",
+      suffix: "gentle smile, eyes relaxed"
+    },
+    {
+      id: "laugh",
+      suffix: "laughing, eyes closed, cheerful"
+    },
+    {
+      id: "think",
+      suffix: "hand on chin, looking off to the side, thoughtful"
+    },
+    {
+      id: "sad",
+      suffix: "sad expression, downcast eyes"
+    },
+    {
+      id: "angry",
+      suffix: "furrowed brow, angry expression"
+    },
+    {
+      id: "surprise",
+      suffix: "wide eyes, surprised expression"
+    },
+    {
+      id: "wave",
+      suffix: "one hand raised in a small wave, smiling"
+    },
+    {
+      id: "shy",
+      suffix: "blushing, glancing away, shy"
+    },
+    {
+      id: "listen",
+      suffix: "attentive listening expression, softly focused eyes"
+    },
+    {
+      id: "contempl",
+      suffix: "subtle contemplative gaze, slight tilt of the head"
+    },
+    {
+      id: "default",
+      suffix: "looking at viewer"
+    },
+    {
+      id: "standing",
+      suffix: "looking at viewer, arms at sides"
+    },
+    {
+      id: "acting_coy",
+      suffix: "looking at viewer, [[turning head, facing to the side]], {{blush}}, {{happy}}, shy, open mouth, raised eyebrows, half-closed eyes, {{hands on own cheeks, hands on own face, hands up}}"
+    },
+    {
+      id: "acting_cute",
+      suffix: "looking at viewer, fingers to cheeks, pointing at self, {{{happy}}}, tareme, puckered lips, puffy cheeks"
+    },
+    {
+      id: "admiring",
+      suffix: "looking at viewer, happy, smile, open mouth, head tilt, {{{{{{{{own hands together, own hands clasped}}}}}}}}, {{{hand on own face, hand on own cheek}}}"
+    },
+    {
+      id: "angry_smiling",
+      suffix: "{{{{closed eyes, ^ ^, >:)}}}}, {{angry}}, {{{{{{{shaded face}}}}}}}, furrowed brow, raised eyebrows, anger vein"
+    },
+    {
+      id: "annoyed",
+      suffix: "looking at viewer, {{half-closed eyes, {{annoyed}}, frown, {{parted lips}}}}, v-shaped eyebrows"
+    },
+    {
+      id: "aroused",
+      suffix: "looking at viewer, {{{{aroused}}}}, heavy breathing, {{{{blush}}}}, half-closed eyes, parted lips, {{furrowed brow}}"
+    },
+    {
+      id: "blushing_shyly",
+      suffix: "looking at viewer, embarrassed, full-face blush, half-closed eyes, {{raised eyebrows}}, {{{{{covering mouth, hand over own mouth, own hands together}}, clenched hands}}}"
+    },
+    {
+      id: "bored",
+      suffix: "looking at viewer, bored, hand on own cheek, {{annoyed}}, frown, {{{{disappointed, raised eyebrows, one eye closed}}}}, open mouth, jitome"
+    },
+    {
+      id: "bridling",
+      suffix: "looking at viewer, {{angry}}, shaded face, {{{{half-closed eyes}}}}, parted lips, clenched teeth, {{frown, sulking, v-shaped eyebrows, veins, arms at sides}}"
+    },
+    {
+      id: "childlike_whining",
+      suffix: "{{{{{{{{closed eyes}}}}}, {{{> <}}}}}}, :<, clenched hands, flying sweatdrops, blush, furrowed brow, [[own hands together]]"
+    },
+    {
+      id: "chuunibyou",
+      suffix: "looking at viewer, {{{{chuunibyou}}}}, {{{double \\m/, crossed wrists, hands up}}}, v-shaped eyebrows, :d, open mouth"
+    },
+    {
+      id: "confused",
+      suffix: "looking at viewer, confused, !?, {{parted lips, :o, furrowed brow, frown, {{raised eyebrows}}, hand on own chest}}, sweat"
+    },
+    {
+      id: "contemptuous",
+      suffix: "looking at viewer, {{{{disgust, expressionless, frown, {{shaded face}}, half-closed eyes, parted lips}}}}, {{arms at sides}}"
+    },
+    {
+      id: "coughing",
+      suffix: "{{{{{{{{closed eyes}}}}}}}}, frown, coughing, sick, {{{{{hand to own mouth}}}}}, open mouth, {{furrowed brow, raised eyebrows}}, {{wavy mouth}}"
+    },
+    {
+      id: "cozy",
+      suffix: "{{{{{{closed eyes}}}}}}, {{{{{{{= =}}}}}}}, happy, {{open mouth, :d}} {{{blush stickers}}}, flower symbol"
+    },
+    {
+      id: "crazy_smiling",
+      suffix: "looking at viewer, {{{{{{shaded face}}}}, crazy smile, constricted pupils, happy, crazy eyes, {{ringed eyes}}}}, open mouth, {{leaning forward}}"
+    },
+    {
+      id: "crying_with_eyes_closed",
+      suffix: "looking down, {{{{{{{{closed eyes}}}}, sad}}}}, frown, crying, tears, {{{{rubbing eyes, wiping tears, open mouth, wavy mouth}}}}, clenched hand"
+    },
+    {
+      id: "crying_with_eyes_open",
+      suffix: "looking at viewer, {{crying, crying with eyes open, tears}}, wavy mouth, {{parted lips, hand on own chest, {{raised eyebrows}}}}"
+    },
+    {
+      id: "curious",
+      suffix: "looking at viewer, curious, ?, :o, {{finger to mouth}}"
+    },
+    {
+      id: "depressed",
+      suffix: "{{looking down}}, half-closed eyes, depressed, frown, {{{{parted lips}}}}, {{shaded face}}, triangle mouth, wavy mouth, raised eyebrows, sad, {{hand to own arm, arm under breasts}}, arm at side, {{{{spoken squiggle}}}}"
+    },
+    {
+      id: "determined",
+      suffix: "looking at viewer, v-shaped eyebrows, smile, {{open mouth}}, clenched hand, arm at side"
+    },
+    {
+      id: "disappointed",
+      suffix: "looking at viewer, disappointed, {{raised eyebrows}}, sigh, {{half-closed eyes}}, annoyed, parted lips, wavy mouth, {{{hand on own arm, holding own arm, hand in own hair}}}, {{squiggle}}"
+    },
+    {
+      id: "disgusted",
+      suffix: "looking at viewer, {{{{{{{shaded face}}}, disgust}}}}, frown, {{{{half-closed eye, uneven eyes}}}}, {{{{{{{hand over own mouth, covering mouth}}}}}}}, {{furrowed brow, raised eyebrows}}, sweat"
+    },
+    {
+      id: "dozing_off",
+      suffix: "{{{{{{{{closed eyes}}}}}}}}, parted lips, drooling, mouth drool"
+    },
+    {
+      id: "embarrassed",
+      suffix: "looking at viewer, {{{embarrassed, @_@, raised eyebrows}}}, furrowed brow, blush, half-closed eyes, wavy mouth, open mouth, {{{{hand to own mouth}}}}"
+    },
+    {
+      id: "enraged",
+      suffix: "looking at viewer, shaded face, {{{{{tsurime}}, furious, constricted pupils, veins, narrowed eyes}}}, {{v-shaped eyebrows, {{furrowed brow}}}}, parted lips, wavy mouth, {{{{scowl}}}}, teeth"
+    },
+    {
+      id: "eureka",
+      suffix: "looking at viewer, {{{{spoken light bulb, sparkle}}}}, open mouth, happy, index finger raised, hand up"
+    },
+    {
+      id: "evil_smiling",
+      suffix: "looking at viewer, {{head down, {{shaded face}}, evil smile, half-closed eyes}}, parted lips, hand on own chin, clenched hand, head tilt"
+    },
+    {
+      id: "excited",
+      suffix: "looking at viewer, {{{{+_+, sparkling eyes}}}}, happy, smile, {{open mouth, :D}}, {{{{{{clenched hands, own hands together}}}}}}, [[hands on own chest]], excited, wide-eyed"
+    },
+    {
+      id: "exhausted",
+      suffix: "looking at viewer, {{exhausted}}, {{{{{bags under eyes}}}}}, [[shded face]], parted lips, wavy mouth, mouth drool, {{{{{sanpaku}}, half-closed eyes}}}, frown, raised eyebrows, messy hair"
+    },
+    {
+      id: "fidgeting_shyly",
+      suffix: "looking down, half-closed eyes, blush, embarrassed, closed mouth, {{{{{index fingers together, fidgeting}}}}}"
+    },
+    {
+      id: "flustered",
+      suffix: "looking at viewer, surprised, {{flustered, embarrassed, shy, blush, raised eyebrows, chestnut mouth}}, {{{{hand in own hair, playing with own hair, twirling hair}}}}, sweat, [[[from side]]]"
+    },
+    {
+      id: "forced_smiling",
+      suffix: "looking at viewer, half-closed eyes, {{closed mouth}}, {{frown, {{furrowed brow}}}}, raised eyebrows, {{{{{{{{smile, :>}}}}}}}}, sweat, nervous, nervous smile"
+    },
+    {
+      id: "full_face_blush",
+      suffix: "looking down, {{full-face blush}}, parted lips, wavy mouth, embarrassed, sweat, @_@, flying sweatdrops, {{{{{{hands on own face, covering face, head steam, steam}}}}}}"
+    },
+    {
+      id: "giggling",
+      suffix: "{{{happy, smile}}}, {{{closed eyes, {{^ ^, hand over own mouth, covering mouth}}}}}, {{+++}}"
+    },
+    {
+      id: "grudging",
+      suffix: "{{{looking to the side}}}, averting eyes, shaded face, sigh, raised eyebrows, jitome, frown, parted lips, {{false smile}}"
+    },
+    {
+      id: "guilty",
+      suffix: "{{looking down}}, half-closed eyes, {{{{{{sad}}, v arms}}}}"
+    },
+    {
+      id: "happy_smiling",
+      suffix: "looking at viewer, {{happy, open mouth, smile, closed eyes}}, {{{hand on own stomach}}}, happy aura"
+    },
+    {
+      id: "happy_tears",
+      suffix: "{{{{{closed eyes}}}}}, happy tears, tears, {{{{rubbing eyes, wiping tears, open mouth, happy, smile}}}}"
+    },
+    {
+      id: "head_bump",
+      suffix: "closed eyes, teardrop, open mouth, wavy mouth, furrowed brow, raised eyebrows, hands on own head, {{{{head bump}}}}, crossed bandaids, injury, head steam"
+    },
+    {
+      id: "indifferent",
+      suffix: "looking at viewer, expressionless, :/, {{{jitome}}}, arms at sides"
+    },
+    {
+      id: "jealous",
+      suffix: "looking at viewer, {{jealous}}, shaded face, anger vein, {{angry}}, expressionless, :<, crossed arms, {{{half-closed eyes}}}, from side, uneven eyes"
+    },
+    {
+      id: "joyful",
+      suffix: "{{{happy}}, closed eyes, smile}, open mouth, {{own hands together, {{palms together, praying}}}}, {{{{{{^ ^}}}}}}"
+    },
+    {
+      id: "laughing",
+      suffix: "{{happy, smile, laughing, closed eyes}}, open mouth, hand over own mouth, {{+++}}"
+    },
+    {
+      id: "looking_away_shyly",
+      suffix: "{{averting eyes}}, looking to the side, embarrassed, blush, closed mouth, shy, {{{finger to cheek, half-closed eyes}}}, averting eyes, raised eyebrows, arm at side"
+    },
+    {
+      id: "lovestruck",
+      suffix: "looking at viewer, blush, happy, smile, tareme, {{{{{{heart-shaped pupils}}}}}}, seductive smile, hand on own chest, {{spoken heart}}, open mouth, loving aura"
+    },
+    {
+      id: "lustful",
+      suffix: "looking at viewer, {{{{shaded face}}, half-closed eyes, glowing eyes}}, {{{{heart-shaped pupils}}}}, naughty face, closed mouth, licking lips, :p, seductive smile, finger to mouth, heavy breathing, arm at side, blush"
+    },
+    {
+      id: "melancholic",
+      suffix: "looking down, head rest, hand on own chin, {{{:<, sad}}}, narrowed eyes"
+    },
+    {
+      id: "middle_finger",
+      suffix: "looking at viewer, {{{{{middle finger}}}}}, furrowed brow, clenched teeth, parted lips, frown, angry, anger vein"
+    },
+    {
+      id: "nervous",
+      suffix: "looking at viewer, half-closed eyes, nervous, sweat, :<, raised eyebrows"
+    },
+    {
+      id: "nervous_pouting",
+      suffix: "looking at viewer, nervous, {{{clenched hands}}}, open mouth, wavy mouth, [[[[v-shaped eyebrows]]]], {{{{@ @}}}}, {{{{sweat}}}}, [[own hands together]]"
+    },
+    {
+      id: "overwhelmed",
+      suffix: "[[looking up]], {{{{@_@}}}}, :o, furrowed brow, {{half-closed eyes, raised eyebrows, drooling, aroused}}"
+    },
+    {
+      id: "play_dumb",
+      suffix: "{{{{looking to the side}}}}, {{wide-eyed}}, {{{{{puckered lips}}}}}, nervous, {{{{sweat}}}}"
+    },
+    {
+      id: "playful_winking",
+      suffix: "looking at viewer, one eye closed, open mouth, happy, smile, raised eyebrows, {{{{{{v over eye, peace sign, > o}}}}}}"
+    },
+    {
+      id: "pleading",
+      suffix: "{{{{palms together, own hands together, praying, {{closed eyes}}}}}}, furrowed brow, {{{{raised eyebrows}}}}, wavy mouth, head down, flying sweatdrops"
+    },
+    {
+      id: "pouting",
+      suffix: "looking at viewer, {{pout, crossed arms}}"
+    },
+    {
+      id: "proud",
+      suffix: "{{{{{{closed eyes}}}}}}, {{smug}}, v-shaped eyebrows, closed mouth, {{{{{hands on own hips}}}}}"
+    },
+    {
+      id: "relieved",
+      suffix: "{{{{{{closed eyes}}}}}}, {{{{{{u u}}}}}}, hands on own chest, own hands together, open mouth"
+    },
+    {
+      id: "scared",
+      suffix: "looking at viewer, {{{{turn pale, scared}}}}, shaded face, {{wavy mouth, open mouth}}, {{{own hands together, hands on own face}}}"
+    },
+    {
+      id: "scared_screaming",
+      suffix: "looking at viewer, {{{{{scared, turn pale, wide-eyed, constricted pupils, tears, teardrop, open mouth, rectangular mouth, jaw drop}}}}}, shaded face, wavy mouth, hands on own face"
+    },
+    {
+      id: "seductive_smiling",
+      suffix: "looking at viewer, seductive smile, {{blush, naughty face}}, {{{finger to mouth, half-closed eyes}}}"
+    },
+    {
+      id: "serious",
+      suffix: "looking at viewer, {{{serious}}}, closed mouth, v-shaped eyebrows, furrowed brow, expressionless"
+    },
+    {
+      id: "shocked",
+      suffix: "looking at viewer, furrowed brow, {{surprised, wide-eyed, confused, {{constricted pupils, hands up}}, open mouth, rectangular mouth, wavy mouth, shaded face, constricted pupils, ^^^, !?}}"
+    },
+    {
+      id: "sleepy",
+      suffix: "looking at viewer, {{{sleepy, rubbing eyes, :o, one eye closed, half-closed eyes}}}, arm at side"
+    },
+    {
+      id: "smiling",
+      suffix: "looking at viewer, smile, closed mouth, tareme"
+    },
+    {
+      id: "smirk",
+      suffix: "looking at viewer, {{smirk}}, furrowed brow, closed mouth, {{jitome}}"
+    },
+    {
+      id: "smug",
+      suffix: "looking at viewer, {{smug}}, smirk, :3, closed mouth, {{{crossed arms}}}, [[from side]]"
+    },
+    {
+      id: "sniggering",
+      suffix: "looking at viewer, smirk, {{{smile, {{wavy mouth}}}}}, half-closed eyes, tareme, closed mouth, hand over own mouth, covering mouth, raised eyebrows"
+    },
+    {
+      id: "spacey",
+      suffix: "looking at viewer, expressionless, {{{{o_o, white eyes, no pupils, blank eyes}}}}, :o, jitome, {{arms at sides}}"
+    },
+    {
+      id: "stretching",
+      suffix: "closed eyes, {{{{stretching, arms up}}, arm behind head}}, furrowed brow"
+    },
+    {
+      id: "stupefied",
+      suffix: "looking at viewer, {{open mouth, rectangular mouth, {{{mouth drool, jaw drop}}}, {{no pupils, white eyes, wide-eyed}}, {{furrowed brow}}}}, frown, confused, !?"
+    },
+    {
+      id: "surprised",
+      suffix: "looking at viewer, surprised, open mouth, {{wide-eyed, hand to own mouth, hand on own face, ^^^}}"
+    },
+    {
+      id: "suspicious",
+      suffix: "{{looking at viewer}}, {{{{jitome}}}}, :<, closed mouth, raised eyebrow, uneven eyes, frown, v-shaped eyebrows, furrowed brow, {{{stroking own chin}}}, hand on own chin"
+    },
+    {
+      id: "taunting",
+      suffix: "looking at viewer, doyagao, {{akanbe, eyelid pull, {{:p}}, tongue out}}, raised eyebrows"
+    },
+    {
+      id: "teary_pouting",
+      suffix: "looking at viewer, , tearing up, pout, :i, furrowed brow, raised eyebrows, {{{clenched hands, own hands together}}}"
+    },
+    {
+      id: "thinking",
+      suffix: "{{{looking up}}}, frown, {{{{hand on own chin}}, stroking own chin, thinking, furrowed brow}}, ..."
+    },
+    {
+      id: "tormented",
+      suffix: "{{black eyes, wavy eyes, {{squiggle eyes}}}}, constricted pupils, looking down, furrowed brow, {{{{shaded face, scared, trembling}}}}, {{hands on own face}}, parted lips, despair, {{tears, streaming tears, sweat}}, gloom (expression)"
+    },
+    {
+      id: "worried",
+      suffix: "looking at viewer, worried, confused, sweat, parted lips, wavy mouth, furrowed brow, {{{raised eyebrows, own hands together, {{{clenched hands}}}}}}"
+    }
+  ];
+  FALLBACK_POSE = POSE_EXPRESSION_CATALOGUE[0];
+  EXPRESSION_ALIASES = {
+    neutral: "idle",
+    normal: "idle",
+    relaxed: "idle",
+    calm: "idle",
+    talking: "speak",
+    speaking: "speak",
+    happy: "smile",
+    crying: "sad",
+    sadness: "sad",
+    anger: "angry",
+    annoyance: "annoyed",
+    shock: "surprise",
+    sleep: "sleepy",
+    fluster: "flustered",
+    pout: "pouting",
+    giggle: "giggling",
+    laughing: "laugh",
+    thinking: "think",
+    curiosity: "curious",
+    relieved: "relieved",
+    confused: "confused",
+    frightened: "scared"
+  };
+  KEYWORD_PATTERNS = [
+    [/\b(?:laughs?|laughing|laughter|chuckle|chuckles|chuckling)\b/i, "laugh"],
+    [/\b(?:smiles?|smiling)\b/i, "smile"],
+    [/\b(?:smirks?|smirking)\b/i, "smirk"],
+    [/\b(?:sad|cries|crying|cried|tears|sob|sobbing|weep|weeping)\b/i, "sad"],
+    [/\b(?:angry|anger|shouts?|shouting|yells?|yelling|furious|rage)\b/i, "angry"],
+    [/\b(?:surprised?|surprising|shocked?|astonished?|gasps?|gasping)\b/i, "surprise"],
+    [/\b(?:thinks?|thinking|thoughtful|ponder|ponders|pondering|wonders?|wondering)\b/i, "think"],
+    [/\b(?:waves?|waving|waved|greet|greets|greeting)\b/i, "wave"],
+    [/\b(?:shy|blush|blushes|blushing)\b/i, "shy"],
+    [/\b(?:talks?|talking|talked|speaks?|speaking|spoke)\b/i, "speak"],
+    [/\b(?:listens?|listening|listened)\b/i, "listen"],
+    [/\b(?:pouts?|pouting|pouted)\b/i, "pouting"],
+    [/\b(?:excited?|exciting|excitement)\b/i, "excited"],
+    [/\b(?:giggles?|giggling|giggled)\b/i, "giggling"],
+    [/\b(?:sleepy|asleep|dozing|yawning)\b/i, "sleepy"],
+    [/\b(?:proud|proudly)\b/i, "proud"],
+    [/\b(?:curious|curiously)\b/i, "curious"],
+    [/\b(?:bored|boring)\b/i, "bored"],
+    [/\b(?:confused?|confusing|confusion)\b/i, "confused"],
+    [/\b(?:disappointed?|disappointing|disappointment)\b/i, "disappointed"],
+    [/\b(?:disgusted?|disgusting|disgust)\b/i, "disgusted"],
+    [/\b(?:embarrassed?|embarrassing|embarrassment)\b/i, "embarrassed"],
+    [/\b(?:flustered?|flustering)\b/i, "flustered"],
+    [/\b(?:jealous|jealousy)\b/i, "jealous"],
+    [/\b(?:joy|joyful|joyous)\b/i, "joyful"],
+    [/\b(?:nervous|nervously|anxious|anxiously)\b/i, "nervous"],
+    [/\b(?:relieved?|relief)\b/i, "relieved"],
+    [/\b(?:scared?|scary|terrified|frightened)\b/i, "scared"],
+    [/\b(?:smug|smugly)\b/i, "smug"],
+    [/\b(?:worried?|worries|worry|worrying)\b/i, "worried"],
+    [/\b(?:cozy|cosy)\b/i, "cozy"],
+    [/\b(?:exhausted?|exhaustion)\b/i, "exhausted"],
+    [/\b(?:lovestruck)\b/i, "lovestruck"],
+    [/\b(?:lustful)\b/i, "lustful"],
+    [/\b(?:aroused)\b/i, "aroused"]
+  ];
+  ANIME_EMOTICON_TAG_RE = /^(?:\^+(?:\s*\^+)*|!+\?+|\?+!+|!+|\?+|>+\s*<+|>+:\(|>+:\)|:<|;\)|:\)|:\(|~+|\*+|@_@|o_o|x_x)$/i;
+  ANIME_TROPES_FOR_PROSE_RE = /^(?:rectangular mouth|wavy mouth|dot mouth|triangle mouth|cat mouth|chestnut mouth|split mouth|sideways mouth|shaded face|anger vein|veins|flying sweatdrops|sweatdrop|sweat|tareme|jitome|tsurime|sanpaku|eyeball|constricted pupils|sparkling eyes|star-shaped pupils|heart-shaped pupils|symbol-shaped pupils|blank eyes|empty eyes|white pupils|horizontal pupils|slit pupils|ringed eyes|full-face blush|nosebleed|chibi)$/i;
+});
+
+// src/backend/runtime/prompt-serializers/helpers.ts
+function cleanActionAndDirection(rawAction, rawDirection) {
+  let act = (rawAction ?? "").trim();
+  const dir = (rawDirection ?? "").trim();
+  if (/\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(act)) {
+    const segments = act.split(/\s*;\s*/).filter(Boolean);
+    const cleanedSegments = [];
+    const seenSegs = new Set;
+    for (const seg of segments) {
+      const cleanedSeg = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(seg) ? sanitizePoseExpression(seg, {
+        keepWeightBrackets: false,
+        stripAnimeTropes: true,
+        hasActiveSceneAction: segments.length > 1 && segments[0].length > 40
+      }) : seg.trim();
+      if (!cleanedSeg)
+        continue;
+      const norm = cleanedSeg.toLowerCase();
+      if (seenSegs.has(norm))
+        continue;
+      seenSegs.add(norm);
+      cleanedSegments.push(cleanedSeg);
+    }
+    act = cleanedSegments.join("; ");
+  }
+  const cleanDir = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(dir) ? sanitizePoseExpression(dir, {
+    keepWeightBrackets: false,
+    stripAnimeTropes: true,
+    hasActiveSceneAction: act.length > 40
+  }) : dir;
+  if (!act && !cleanDir)
+    return;
+  if (!cleanDir)
+    return act;
+  if (!act)
+    return cleanDir;
+  const actLower = act.toLowerCase();
+  const dirLower = cleanDir.toLowerCase();
+  if (actLower === dirLower || actLower.endsWith(`; ${dirLower}`) || actLower.endsWith(`, ${dirLower}`)) {
+    return act;
+  }
+  return `${act}, ${cleanDir}`;
+}
+function sanitizeQuoteAndUnitNotation(text2) {
+  if (!text2)
+    return "";
+  return text2.replace(/\b(\d+)'\s*(\d+)(?:"|''|\u2019\u2019)?\b/g, "$1 ft $2 in").replace(/\b(\d+)'\b/g, "$1 ft").replace(/\b(\d+)"\b/g, "$1 inches").replace(/"/g, "'").replace(/,\s*\./g, ".").replace(/;\s*\./g, ".").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").trim();
+}
+function formatSceneProse(sceneText) {
+  if (!sceneText)
+    return "";
+  return sanitizeQuoteAndUnitNotation(sceneText).split(/\s*;\s*/).map((part) => part.trim().replace(/\.+$/, "")).filter(Boolean).join(", ").replace(/,\s*\./g, ".").replace(/\s+/g, " ").trim();
+}
+function parseSubjectsFromBrief(brief, cue) {
+  if (brief.subjectMode === "none")
+    return [];
+  const isNarrativeUndressed = /\b(?:naked|nude|undressed|bare skin|unclothed|topless|stripping|in the bath|in the shower)\b/i.test(`${brief.action} ${brief.scene}`);
+  if (brief.subjectMode === "ensemble") {
+    const lines = brief.subjects.split(`
+`).filter((line2) => line2.includes(":"));
+    if (lines.length > 0) {
+      return lines.map((line2) => {
+        const colon = line2.indexOf(":");
+        const name2 = line2.slice(0, colon).trim();
+        const rawRest = line2.slice(colon + 1).trim();
+        const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
+        const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
+        let appearance = sanitizedRest;
+        let attire2 = undefined;
+        if (wearingMatch) {
+          appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
+          attire2 = wearingMatch[1].trim();
+        } else {
+          const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
+          if (!hasClothing && !isNarrativeUndressed) {
+            attire2 = "scene-appropriate casual clothing";
+          }
+        }
+        return {
+          name: name2,
+          appearance,
+          attire: attire2
+        };
+      });
+    }
+    if (brief.subjects.trim()) {
+      const names = brief.subjects.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+      if (names.length > 0) {
+        return names.map((name2) => ({
+          name: name2,
+          appearance: "distinct physical features",
+          attire: isNarrativeUndressed ? undefined : "scene-appropriate casual clothing"
+        }));
+      }
+    }
+  }
+  const name = brief.subjectPreparation?.name || cue?.character || "Subject";
+  const rawAppearance = brief.subjectPreparation?.identity || cue?.resolvedIdentity || brief.subjects;
+  const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
+  let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
+  if (!attire) {
+    const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedAppearance);
+    if (!hasClothing && !isNarrativeUndressed) {
+      attire = "everyday clothing suitable for the scene";
+    }
+  }
+  const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
+  return [{
+    name,
+    appearance: sanitizedAppearance,
+    attire,
+    action: action ? sanitizeQuoteAndUnitNotation(action) : undefined
+  }];
+}
+function formatCameraFraming(shotSpec, styleDNA) {
+  const parts = [];
+  const customStyleText = [styleDNA?.prefix, styleDNA?.suffix].filter(Boolean).join(" ").toLowerCase();
+  const hasCustomLens = Boolean(customStyleText && /\b(?:\d+mm|wide-angle|wide angle|smartphone lens|telephoto|fisheye)\b/i.test(customStyleText));
+  const hasCustomDof = Boolean(customStyleText && /\b(?:depth of field|deep focus|shallow focus|background remains in focus|without cinematic lens blur|no bokeh)\b/i.test(customStyleText));
+  const hasCustomAngle = Boolean(customStyleText && /\b(?:eye-level|eye level|tilted horizon|off-center framing|low-angle|high-angle|overhead)\b/i.test(customStyleText));
+  const sizeMap = {
+    "extreme-close-up": "extreme close-up shot",
+    "close-up": "close-up shot",
+    "medium-close-up": "medium close-up framing",
+    medium: "medium shot",
+    "medium-wide": "medium-wide shot",
+    "full-body": "full-body shot",
+    wide: "wide shot",
+    establishing: "wide establishing shot",
+    macro: "macro detail close-up"
+  };
+  parts.push(sizeMap[shotSpec.camera.shotSize] || `${shotSpec.camera.shotSize} shot`);
+  if (!hasCustomAngle) {
+    const angleMap = {
+      "eye-level": "eye-level angle",
+      "low-angle": "low-angle viewpoint",
+      "high-angle": "high-angle viewpoint",
+      overhead: "overhead bird's-eye view",
+      "ground-level": "ground-level low perspective",
+      "three-quarter": "three-quarter view",
+      profile: "side profile view",
+      "over-the-shoulder": "over-the-shoulder perspective"
+    };
+    parts.push(angleMap[shotSpec.camera.angle] || shotSpec.camera.angle);
+  }
+  if (!hasCustomLens && shotSpec.camera.lens && shotSpec.camera.lens !== "unspecified") {
+    const lensMap = {
+      ultrawide: "ultrawide lens feel",
+      wide: "wide-angle lens",
+      normal: "natural 50mm lens perspective",
+      portrait: "portrait focal length",
+      telephoto: "telephoto lens compression",
+      macro: "macro lens magnification"
+    };
+    parts.push(lensMap[shotSpec.camera.lens] || `${shotSpec.camera.lens} lens`);
+  }
+  if (!hasCustomDof && shotSpec.camera.depthOfField) {
+    const dofMap = {
+      shallow: "shallow depth of field with gentle background blur",
+      moderate: "moderate depth of field",
+      deep: "deep focus across all layers",
+      selective: "selective crisp focus on the main subject"
+    };
+    parts.push(dofMap[shotSpec.camera.depthOfField] || `${shotSpec.camera.depthOfField} depth of field`);
+  }
+  if (shotSpec.crop) {
+    parts.push(shotSpec.crop);
+  }
+  return parts.join(", ");
+}
+function formatSpatialPlacements(shotSpec) {
+  const placements = shotSpec.composition.subjectPlacements;
+  if (!placements || placements.length <= 1) {
+    return "";
+  }
+  const hasRichBlocking = Boolean(shotSpec.composition.stagingNote) || placements.some((p) => Boolean(p.blocking));
+  if (!hasRichBlocking) {
+    const descriptions2 = placements.map((p) => {
+      const posParts = [];
+      if (p.depth)
+        posParts.push(`in the ${p.depth}`);
+      if (p.horizontal)
+        posParts.push(`on the ${p.horizontal.replace("-", " ")}`);
+      return `${p.subject} positioned ${posParts.join(", ")}`;
+    });
+    return descriptions2.join("; ");
+  }
+  const descriptions = placements.map((p) => {
+    const depthText = p.depth ? `in the ${p.depth}` : "in the scene";
+    const horizText = p.horizontal ? ` (${p.horizontal.replace("-", " ")})` : "";
+    const blockingText = p.blocking ? `: ${p.blocking.replace(/\.+$/, "")}` : "";
+    return `${p.subject} ${depthText}${horizText}${blockingText}`;
+  });
+  const staging = shotSpec.composition.stagingNote ? `. ${shotSpec.composition.stagingNote.replace(/\.+$/, "")}` : "";
+  return `${descriptions.join("; ")}${staging}`;
+}
+function formatDialogueSafeArea(shotSpec) {
+  if (!shotSpec.safeArea)
+    return null;
+  const edge = shotSpec.safeArea.edge;
+  const pct = Math.round(shotSpec.safeArea.fraction * 100);
+  return `Keep faces, hands and key focal action above the ${edge} ${pct}% of the frame; reserve that region as quiet visual space for the dialogue overlay.`;
+}
+function formatStyleDNAProse(styleDNA) {
+  const parts = [];
+  const cleanMedium = styleDNA.medium?.replace(/[,;:\s]+$/, "").trim();
+  const cleanPrefix = styleDNA.prefix?.replace(/[,;:\s]+$/, "").trim();
+  if (cleanMedium && cleanMedium !== cleanPrefix) {
+    parts.push(cleanMedium);
+  }
+  if (styleDNA.rendering && styleDNA.rendering.length > 0)
+    parts.push(...styleDNA.rendering);
+  if (styleDNA.linework && styleDNA.linework.length > 0)
+    parts.push(...styleDNA.linework);
+  if (styleDNA.shading && styleDNA.shading.length > 0)
+    parts.push(...styleDNA.shading);
+  if (styleDNA.realism && styleDNA.realism.length > 0)
+    parts.push(...styleDNA.realism);
+  if (styleDNA.surface && styleDNA.surface.length > 0)
+    parts.push(...styleDNA.surface);
+  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0)
+    parts.push(...styleDNA.atmosphere);
+  if (styleDNA.lightingOverlay?.type)
+    parts.push(styleDNA.lightingOverlay.type);
+  if (styleDNA.palette && styleDNA.palette.length > 0)
+    parts.push(`palette of ${styleDNA.palette.join(", ")}`);
+  if (styleDNA.texture && styleDNA.texture.length > 0)
+    parts.push(...styleDNA.texture);
+  return parts.join(", ");
+}
+function formatReferenceDirectives(referencePlan) {
+  if (!referencePlan || !referencePlan.references || referencePlan.references.length === 0) {
+    return [];
+  }
+  const hasWireIndices = referencePlan.references.some((ref) => typeof ref.wireIndex === "number");
+  const activeRefs = hasWireIndices ? referencePlan.references.filter((ref) => typeof ref.wireIndex === "number") : referencePlan.references;
+  return activeRefs.map((ref, idx) => {
+    const num = typeof ref.wireIndex === "number" ? ref.wireIndex : idx + 1;
+    if (ref.role === "identity" && ref.subject) {
+      return `Use reference image ${num} specifically for ${ref.subject}'s facial identity and hair; follow the scene prompt for current pose, outfit, and setting.`;
+    }
+    if (ref.role === "clothing" && ref.subject) {
+      return `Use reference image ${num} for ${ref.subject}'s clothing details.`;
+    }
+    if (ref.role === "style") {
+      return `Use reference image ${num} for overall artistic rendering style.`;
+    }
+    return `Use reference image ${num} as a visual reference.`;
+  });
+}
+var init_helpers = __esm(() => {
+  init_character();
+});
+
+// src/backend/runtime/prompt-protection.ts
+function containsTokenSequence(haystack, needle) {
+  if (!needle.length || needle.length > haystack.length)
+    return false;
+  outer:
+    for (let start = 0;start <= haystack.length - needle.length; start += 1) {
+      for (let offset = 0;offset < needle.length; offset += 1) {
+        if (haystack[start + offset] !== needle[offset])
+          continue outer;
+      }
+      return true;
+    }
+  return false;
+}
+function startsWithTokenSequence(haystack, prefix) {
+  if (!prefix.length || prefix.length > haystack.length)
+    return false;
+  return prefix.every((token, index) => haystack[index] === token);
+}
+function promptProtection(prompt, metadata, compactSingle = false) {
+  const source = metadata?.brief.subjects.trim() ?? "";
+  const empty = { exact: "", facts: [], subjects: [], minimumCharacters: 0 };
+  if (!source)
+    return empty;
+  const original = canonical(prompt), paddedOriginal = ` ${original} `;
+  if (metadata?.brief.subjectMode !== "ensemble") {
+    const tagSource = source.replace(/;\s*|\n+/g, ", ").replace(/\s+/g, " ").trim();
+    const exact = prompt.includes(source) ? source : tagSource && prompt.includes(tagSource) ? tagSource : "";
+    if (!compactSingle && exact) {
+      return { ...empty, exact, minimumCharacters: exact.length };
+    }
+    if (compactSingle || !exact) {
+      const promptTokens = tokenize(prompt);
+      const facts = [...new Map(source.split(/[,;\n]+/).map((value) => value.trim()).filter((value) => containsTokenSequence(promptTokens, tokenize(value))).map((value) => {
+        const bare = value.replace(/^wearing\s+/i, "");
+        return [canonical(bare), bare];
+      })).values()];
+      return { ...empty, facts, minimumCharacters: facts.reduce((sum, fact) => sum + fact.length + 2, 0) };
+    }
+    return { ...empty, exact, minimumCharacters: exact.length };
+  }
+  const originalTokens = tokenize(prompt), subjects = [];
+  const rows = source.split(/\r?\n/).filter((row) => row.indexOf(":") > 0);
+  const declarations = [];
+  for (const row of rows) {
+    const name = row.slice(0, row.indexOf(":")).trim();
+    if (name.length > 160 || !canonical(name))
+      continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const match of prompt.matchAll(new RegExp(escaped + "\\s*:", "giu"))) {
+      if (match.index > 0 && /[\p{L}\p{N}]/u.test(prompt[match.index - 1]))
+        continue;
+      declarations.push({ name, index: match.index, end: match.index + match[0].length });
+    }
+  }
+  declarations.sort((a, b) => a.index - b.index);
+  for (const row of rows) {
+    const colon = row.indexOf(":");
+    if (colon < 1)
+      continue;
+    const name = row.slice(0, colon).trim();
+    if (name.length > 160 || !canonical(name) || !containsTokenSequence(originalTokens, tokenize(name)))
+      continue;
+    const declared = declarations.find((d) => d.name === name);
+    const next = declared ? declarations.find((d) => d.index > declared.index) : undefined;
+    const newline = declared ? prompt.indexOf(`
+`, declared.end) : -1;
+    const current = declared ? prompt.slice(declared.end, Math.min(next?.index ?? prompt.length, newline < 0 ? prompt.length : newline)).trim() : "";
+    const unchanged = declared && startsWithTokenSequence(tokenize(current), tokenize(row.slice(colon + 1)));
+    const values = declared && !unchanged ? current : row.slice(colon + 1);
+    const scopeTokens = declared ? tokenize(current) : originalTokens;
+    const facts = [...new Set(values.split(/[,;\n]+/).map((value) => value.trim()).filter((value) => Boolean(canonical(value)) && containsTokenSequence(scopeTokens, tokenize(value))))];
+    subjects.push({ name, facts });
+  }
+  if (!subjects.length)
+    return { ...empty, exact: prompt.includes(source) ? source : "", minimumCharacters: prompt.includes(source) ? source.length : 0 };
+  return { ...empty, subjects, minimumCharacters: subjects.reduce((sum, s) => sum + s.name.length + 2 + s.facts.reduce((n, f) => n + f.length + 2, 0), 0) };
+}
+function assertPromptProtection(prompt, protection) {
+  if (protection.exact && !prompt.includes(protection.exact))
+    throw new Error("The protected identity/outfit phrase was changed or omitted.");
+  const promptTokens = tokenize(prompt);
+  if (!protection.facts.every((fact) => containsTokenSequence(promptTokens, tokenize(fact))))
+    throw new Error("Required subject appearance or outfit details were omitted or changed. Keep every supplied appearance fact.");
+  const mentions = [];
+  for (const [subject, lock] of protection.subjects.entries()) {
+    const nameTokens = tokenize(lock.name);
+    for (let start = 0;start + nameTokens.length <= promptTokens.length; start += 1) {
+      if (nameTokens.every((token, offset) => promptTokens[start + offset] === token))
+        mentions.push({ index: start, subject });
+    }
+  }
+  mentions.sort((a, b) => a.index - b.index);
+  for (const [index, lock] of protection.subjects.entries()) {
+    const owned = mentions.filter((m) => m.subject === index);
+    if (!owned.length)
+      throw new Error(`A required cast member was omitted from the rewritten prompt: "${lock.name}".`);
+    const valid = owned.some((mention) => {
+      const next = mentions.find((m) => m.index > mention.index && m.subject !== index);
+      const section = promptTokens.slice(mention.index, next?.index ?? promptTokens.length);
+      return lock.facts.every((fact) => containsTokenSequence(section, tokenize(fact)));
+    });
+    if (!valid)
+      throw new Error(`Required cast appearance details for "${lock.name}" were omitted, changed, or assigned to another person. Keep each supplied appearance fact with its named subject.`);
+  }
+}
+function assertEnsembleAppearance(cast, positive, characterTags) {
+  if (!cast)
+    return;
+  if (!cast.length)
+    throw new Error("No visible cast was resolved for this ensemble. Replan or choose another picture template.");
+  const captions = Array.isArray(characterTags) ? characterTags : [];
+  if (captions.length && captions.length !== cast.length)
+    throw new Error("The image payload is missing a positioned cast caption. Prepare this picture again.");
+  const appearances = cast.map((member) => sanitizeQuoteAndUnitNotation(member.appearance));
+  const tokens = appearances.map(tokenize);
+  const subjects = cast.map((member, index) => {
+    const facts = appearances[index].split(/[,;\n]+/).map((fact) => fact.trim()).filter((fact) => tokenize(fact).length);
+    const physical = facts.filter((fact) => /\b(?:hair|eyes?|skin|fur|scales|feathers|horns?|freckles|scars?|beard|face|ears?|wings?)\b/i.test(fact));
+    const distinguish = (fact) => !tokens.some((other, i) => i !== index && containsTokenSequence(other, tokenize(fact)));
+    const trait = physical.find(distinguish) ?? facts.find(distinguish) ?? physical[0] ?? facts[0];
+    if (!trait)
+      throw new Error(`No usable appearance was resolved for "${member.name}". Add appearance details in Character Folio and prepare this picture again.`);
+    return { name: member.name, facts: [trait] };
+  });
+  if (captions.length) {
+    for (const [index, { name, facts }] of subjects.entries()) {
+      const tags = captions[index]?.tags;
+      if (typeof tags !== "string" || !containsTokenSequence(tokenize(tags), tokenize(facts[0]))) {
+        throw new Error(`The positioned caption for "${name}" is missing its appearance. Prepare this picture again.`);
+      }
+    }
+    return;
+  }
+  try {
+    assertPromptProtection(positive, { exact: "", facts: [], minimumCharacters: 0, subjects });
+  } catch (error61) {
+    throw new Error("The ensemble prompt is missing a named cast member or their appearance. Restore the cast descriptions in this picture's preview before generating.", { cause: error61 });
+  }
+}
+var canonical = (value) => value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " "), tokenize = (value) => {
+  const text2 = canonical(value);
+  return text2 ? text2.split(" ") : [];
+};
+var init_prompt_protection = __esm(() => {
+  init_helpers();
+});
+
 // src/backend/runtime/image-review.ts
 function safeImageParameters(parameters) {
   const visit3 = (value, depth) => {
@@ -37807,6 +38747,7 @@ class ImageReviewGate {
     const request = compactImageRequest(structuredClone(input2));
     try {
       assertPromptLengths(request.prompt, request.negativePrompt, request.promptProfile);
+      assertEnsembleAppearance(request.ensembleCast, request.prompt, request.parameters?.characterTags);
     } catch {
       review = true;
     }
@@ -37957,6 +38898,7 @@ class ImageReviewGate {
     }
     const edited = applyImageEdits(item.request, edits);
     assertPromptLengths(edited.prompt, edited.negativePrompt, edited.promptProfile);
+    assertEnsembleAppearance(edited.ensembleCast, edited.prompt, edited.parameters?.characterTags);
     if (edited.promptProfile?.output)
       assertCapabilityOutput(edited.promptProfile.output, edited.parameters ?? {});
     this.pending.delete(requestId);
@@ -37970,6 +38912,7 @@ var init_image_review = __esm(() => {
   init_model_output_capabilities();
   init_template_output();
   init_image_templates();
+  init_prompt_protection();
   blocked2 = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^_lumiglyphics|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
 });
 
@@ -38498,9 +39441,9 @@ function beatDigestOf(identity2) {
   return sceneIdentityDigest(identity2);
 }
 function sceneImageCacheKey(identity2) {
-  const canonical = canonicalJson(identity2);
-  const fnvPair = `${fnv1a(canonical)}${fnv1aReverse(canonical)}`;
-  return `${SCENE_CACHE_KEY_VERSION}:${fnvPair}:${canonical.length.toString(16)}:${cyrb53(canonical)}`;
+  const canonical2 = canonicalJson(identity2);
+  const fnvPair = `${fnv1a(canonical2)}${fnv1aReverse(canonical2)}`;
+  return `${SCENE_CACHE_KEY_VERSION}:${fnvPair}:${canonical2.length.toString(16)}:${cyrb53(canonical2)}`;
 }
 function entryBytes(scope, key, episode, imageId, imageUrl, provenance) {
   return (scope.length + key.length + episode.length + imageId.length + imageUrl.length + canonicalJson(provenance).length) * 2;
@@ -39897,539 +40840,6 @@ var init_config = __esm(() => {
     speech: DEFAULT_SPEECH_SETTINGS
   };
   configMemo = new Map;
-});
-
-// src/shared/character.ts
-function isNegatedInClause(text2, matchIndex) {
-  const prefix = text2.slice(0, matchIndex);
-  const lastBoundary = Math.max(prefix.lastIndexOf("."), prefix.lastIndexOf(","), prefix.lastIndexOf(";"), prefix.lastIndexOf("!"), prefix.lastIndexOf("?"), prefix.search(/\b(?:but|however|although)\b[^.]*$/i));
-  const clausePrefix = lastBoundary >= 0 ? prefix.slice(lastBoundary) : prefix;
-  return /\b(?:not|n't|never|hardly|scarcely|barely|without|no)\b/i.test(clausePrefix);
-}
-function firstEntry(catalogue) {
-  return catalogue[0] ?? FALLBACK_POSE;
-}
-function selectPoseExpression(catalogue, paragraphIndex, text2, preferredExpression) {
-  if (preferredExpression && preferredExpression.trim()) {
-    const raw = preferredExpression.trim();
-    if (!/\b(?:not|never|no|un-)\b/i.test(raw)) {
-      const norm = raw.toLowerCase().replace(/[\s-]+/g, "_");
-      const direct = catalogue.find((entry) => entry.id === norm || entry.id === raw.toLowerCase());
-      if (direct)
-        return direct;
-      const aliasTarget = EXPRESSION_ALIASES[norm] || EXPRESSION_ALIASES[raw.toLowerCase()];
-      if (aliasTarget) {
-        const aliased = catalogue.find((entry) => entry.id === aliasTarget);
-        if (aliased)
-          return aliased;
-      }
-    }
-  }
-  if (text2 && text2.trim()) {
-    let earliestMatch = null;
-    for (const [regex, id8] of KEYWORD_PATTERNS) {
-      const m = regex.exec(text2);
-      if (m && !isNegatedInClause(text2, m.index)) {
-        if (!earliestMatch || m.index < earliestMatch.index) {
-          earliestMatch = { index: m.index, id: id8 };
-        }
-      }
-    }
-    if (earliestMatch) {
-      const found = catalogue.find((entry) => entry.id === earliestMatch.id);
-      if (found)
-        return found;
-    }
-    const idlePose = catalogue.find((entry) => entry.id === "idle");
-    return idlePose ?? firstEntry(catalogue);
-  }
-  if (catalogue.length === 0)
-    return FALLBACK_POSE;
-  return catalogue[paragraphIndex % catalogue.length] ?? firstEntry(catalogue);
-}
-function poseById(catalogue, id8) {
-  if (!id8)
-    return firstEntry(catalogue);
-  const norm = id8.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  const found = catalogue.find((entry) => entry.id === norm || entry.id === id8.trim().toLowerCase());
-  if (found)
-    return found;
-  const aliasTarget = EXPRESSION_ALIASES[norm] || EXPRESSION_ALIASES[id8.trim().toLowerCase()];
-  if (aliasTarget) {
-    const aliased = catalogue.find((entry) => entry.id === aliasTarget);
-    if (aliased)
-      return aliased;
-  }
-  return firstEntry(catalogue);
-}
-function tagBlockFor(identity2) {
-  return identity2.tags.join(", ");
-}
-function sanitizePoseExpression(rawSuffix, options2 = {}) {
-  if (!rawSuffix || !rawSuffix.trim())
-    return "";
-  const {
-    keepWeightBrackets = false,
-    stripAnimeTropes = true,
-    hasActiveSceneAction = false
-  } = options2;
-  const unwrapped = keepWeightBrackets ? rawSuffix : rawSuffix.replace(/[\{\}\[\]]+/g, "");
-  const seen = new Set;
-  const cleaned = [];
-  for (const part of unwrapped.split(",")) {
-    const token = part.replace(/[\{\}\[\]]+/g, "").trim();
-    if (!token)
-      continue;
-    if (ANIME_EMOTICON_TAG_RE.test(token))
-      continue;
-    if (stripAnimeTropes && ANIME_TROPES_FOR_PROSE_RE.test(token))
-      continue;
-    if (hasActiveSceneAction && /^looking at viewer$/i.test(token))
-      continue;
-    const norm = token.toLowerCase().replace(/\s+/g, " ");
-    if (seen.has(norm))
-      continue;
-    seen.add(norm);
-    cleaned.push(keepWeightBrackets ? part.trim() : token);
-  }
-  return cleaned.join(", ");
-}
-var POSE_EXPRESSION_CATALOGUE, FALLBACK_POSE, EXPRESSION_ALIASES, KEYWORD_PATTERNS, SINGLE_CHARACTER_SCHEMA_VERSION = 2, ANIME_EMOTICON_TAG_RE, ANIME_TROPES_FOR_PROSE_RE;
-var init_character = __esm(() => {
-  POSE_EXPRESSION_CATALOGUE = [
-    {
-      id: "idle",
-      suffix: "standing, relaxed posture, neutral expression"
-    },
-    {
-      id: "speak",
-      suffix: "talking, mouth slightly open, looking at viewer"
-    },
-    {
-      id: "smile",
-      suffix: "gentle smile, eyes relaxed"
-    },
-    {
-      id: "laugh",
-      suffix: "laughing, eyes closed, cheerful"
-    },
-    {
-      id: "think",
-      suffix: "hand on chin, looking off to the side, thoughtful"
-    },
-    {
-      id: "sad",
-      suffix: "sad expression, downcast eyes"
-    },
-    {
-      id: "angry",
-      suffix: "furrowed brow, angry expression"
-    },
-    {
-      id: "surprise",
-      suffix: "wide eyes, surprised expression"
-    },
-    {
-      id: "wave",
-      suffix: "one hand raised in a small wave, smiling"
-    },
-    {
-      id: "shy",
-      suffix: "blushing, glancing away, shy"
-    },
-    {
-      id: "listen",
-      suffix: "attentive listening expression, softly focused eyes"
-    },
-    {
-      id: "contempl",
-      suffix: "subtle contemplative gaze, slight tilt of the head"
-    },
-    {
-      id: "default",
-      suffix: "looking at viewer"
-    },
-    {
-      id: "standing",
-      suffix: "looking at viewer, arms at sides"
-    },
-    {
-      id: "acting_coy",
-      suffix: "looking at viewer, [[turning head, facing to the side]], {{blush}}, {{happy}}, shy, open mouth, raised eyebrows, half-closed eyes, {{hands on own cheeks, hands on own face, hands up}}"
-    },
-    {
-      id: "acting_cute",
-      suffix: "looking at viewer, fingers to cheeks, pointing at self, {{{happy}}}, tareme, puckered lips, puffy cheeks"
-    },
-    {
-      id: "admiring",
-      suffix: "looking at viewer, happy, smile, open mouth, head tilt, {{{{{{{{own hands together, own hands clasped}}}}}}}}, {{{hand on own face, hand on own cheek}}}"
-    },
-    {
-      id: "angry_smiling",
-      suffix: "{{{{closed eyes, ^ ^, >:)}}}}, {{angry}}, {{{{{{{shaded face}}}}}}}, furrowed brow, raised eyebrows, anger vein"
-    },
-    {
-      id: "annoyed",
-      suffix: "looking at viewer, {{half-closed eyes, {{annoyed}}, frown, {{parted lips}}}}, v-shaped eyebrows"
-    },
-    {
-      id: "aroused",
-      suffix: "looking at viewer, {{{{aroused}}}}, heavy breathing, {{{{blush}}}}, half-closed eyes, parted lips, {{furrowed brow}}"
-    },
-    {
-      id: "blushing_shyly",
-      suffix: "looking at viewer, embarrassed, full-face blush, half-closed eyes, {{raised eyebrows}}, {{{{{covering mouth, hand over own mouth, own hands together}}, clenched hands}}}"
-    },
-    {
-      id: "bored",
-      suffix: "looking at viewer, bored, hand on own cheek, {{annoyed}}, frown, {{{{disappointed, raised eyebrows, one eye closed}}}}, open mouth, jitome"
-    },
-    {
-      id: "bridling",
-      suffix: "looking at viewer, {{angry}}, shaded face, {{{{half-closed eyes}}}}, parted lips, clenched teeth, {{frown, sulking, v-shaped eyebrows, veins, arms at sides}}"
-    },
-    {
-      id: "childlike_whining",
-      suffix: "{{{{{{{{closed eyes}}}}}, {{{> <}}}}}}, :<, clenched hands, flying sweatdrops, blush, furrowed brow, [[own hands together]]"
-    },
-    {
-      id: "chuunibyou",
-      suffix: "looking at viewer, {{{{chuunibyou}}}}, {{{double \\m/, crossed wrists, hands up}}}, v-shaped eyebrows, :d, open mouth"
-    },
-    {
-      id: "confused",
-      suffix: "looking at viewer, confused, !?, {{parted lips, :o, furrowed brow, frown, {{raised eyebrows}}, hand on own chest}}, sweat"
-    },
-    {
-      id: "contemptuous",
-      suffix: "looking at viewer, {{{{disgust, expressionless, frown, {{shaded face}}, half-closed eyes, parted lips}}}}, {{arms at sides}}"
-    },
-    {
-      id: "coughing",
-      suffix: "{{{{{{{{closed eyes}}}}}}}}, frown, coughing, sick, {{{{{hand to own mouth}}}}}, open mouth, {{furrowed brow, raised eyebrows}}, {{wavy mouth}}"
-    },
-    {
-      id: "cozy",
-      suffix: "{{{{{{closed eyes}}}}}}, {{{{{{{= =}}}}}}}, happy, {{open mouth, :d}} {{{blush stickers}}}, flower symbol"
-    },
-    {
-      id: "crazy_smiling",
-      suffix: "looking at viewer, {{{{{{shaded face}}}}, crazy smile, constricted pupils, happy, crazy eyes, {{ringed eyes}}}}, open mouth, {{leaning forward}}"
-    },
-    {
-      id: "crying_with_eyes_closed",
-      suffix: "looking down, {{{{{{{{closed eyes}}}}, sad}}}}, frown, crying, tears, {{{{rubbing eyes, wiping tears, open mouth, wavy mouth}}}}, clenched hand"
-    },
-    {
-      id: "crying_with_eyes_open",
-      suffix: "looking at viewer, {{crying, crying with eyes open, tears}}, wavy mouth, {{parted lips, hand on own chest, {{raised eyebrows}}}}"
-    },
-    {
-      id: "curious",
-      suffix: "looking at viewer, curious, ?, :o, {{finger to mouth}}"
-    },
-    {
-      id: "depressed",
-      suffix: "{{looking down}}, half-closed eyes, depressed, frown, {{{{parted lips}}}}, {{shaded face}}, triangle mouth, wavy mouth, raised eyebrows, sad, {{hand to own arm, arm under breasts}}, arm at side, {{{{spoken squiggle}}}}"
-    },
-    {
-      id: "determined",
-      suffix: "looking at viewer, v-shaped eyebrows, smile, {{open mouth}}, clenched hand, arm at side"
-    },
-    {
-      id: "disappointed",
-      suffix: "looking at viewer, disappointed, {{raised eyebrows}}, sigh, {{half-closed eyes}}, annoyed, parted lips, wavy mouth, {{{hand on own arm, holding own arm, hand in own hair}}}, {{squiggle}}"
-    },
-    {
-      id: "disgusted",
-      suffix: "looking at viewer, {{{{{{{shaded face}}}, disgust}}}}, frown, {{{{half-closed eye, uneven eyes}}}}, {{{{{{{hand over own mouth, covering mouth}}}}}}}, {{furrowed brow, raised eyebrows}}, sweat"
-    },
-    {
-      id: "dozing_off",
-      suffix: "{{{{{{{{closed eyes}}}}}}}}, parted lips, drooling, mouth drool"
-    },
-    {
-      id: "embarrassed",
-      suffix: "looking at viewer, {{{embarrassed, @_@, raised eyebrows}}}, furrowed brow, blush, half-closed eyes, wavy mouth, open mouth, {{{{hand to own mouth}}}}"
-    },
-    {
-      id: "enraged",
-      suffix: "looking at viewer, shaded face, {{{{{tsurime}}, furious, constricted pupils, veins, narrowed eyes}}}, {{v-shaped eyebrows, {{furrowed brow}}}}, parted lips, wavy mouth, {{{{scowl}}}}, teeth"
-    },
-    {
-      id: "eureka",
-      suffix: "looking at viewer, {{{{spoken light bulb, sparkle}}}}, open mouth, happy, index finger raised, hand up"
-    },
-    {
-      id: "evil_smiling",
-      suffix: "looking at viewer, {{head down, {{shaded face}}, evil smile, half-closed eyes}}, parted lips, hand on own chin, clenched hand, head tilt"
-    },
-    {
-      id: "excited",
-      suffix: "looking at viewer, {{{{+_+, sparkling eyes}}}}, happy, smile, {{open mouth, :D}}, {{{{{{clenched hands, own hands together}}}}}}, [[hands on own chest]], excited, wide-eyed"
-    },
-    {
-      id: "exhausted",
-      suffix: "looking at viewer, {{exhausted}}, {{{{{bags under eyes}}}}}, [[shded face]], parted lips, wavy mouth, mouth drool, {{{{{sanpaku}}, half-closed eyes}}}, frown, raised eyebrows, messy hair"
-    },
-    {
-      id: "fidgeting_shyly",
-      suffix: "looking down, half-closed eyes, blush, embarrassed, closed mouth, {{{{{index fingers together, fidgeting}}}}}"
-    },
-    {
-      id: "flustered",
-      suffix: "looking at viewer, surprised, {{flustered, embarrassed, shy, blush, raised eyebrows, chestnut mouth}}, {{{{hand in own hair, playing with own hair, twirling hair}}}}, sweat, [[[from side]]]"
-    },
-    {
-      id: "forced_smiling",
-      suffix: "looking at viewer, half-closed eyes, {{closed mouth}}, {{frown, {{furrowed brow}}}}, raised eyebrows, {{{{{{{{smile, :>}}}}}}}}, sweat, nervous, nervous smile"
-    },
-    {
-      id: "full_face_blush",
-      suffix: "looking down, {{full-face blush}}, parted lips, wavy mouth, embarrassed, sweat, @_@, flying sweatdrops, {{{{{{hands on own face, covering face, head steam, steam}}}}}}"
-    },
-    {
-      id: "giggling",
-      suffix: "{{{happy, smile}}}, {{{closed eyes, {{^ ^, hand over own mouth, covering mouth}}}}}, {{+++}}"
-    },
-    {
-      id: "grudging",
-      suffix: "{{{looking to the side}}}, averting eyes, shaded face, sigh, raised eyebrows, jitome, frown, parted lips, {{false smile}}"
-    },
-    {
-      id: "guilty",
-      suffix: "{{looking down}}, half-closed eyes, {{{{{{sad}}, v arms}}}}"
-    },
-    {
-      id: "happy_smiling",
-      suffix: "looking at viewer, {{happy, open mouth, smile, closed eyes}}, {{{hand on own stomach}}}, happy aura"
-    },
-    {
-      id: "happy_tears",
-      suffix: "{{{{{closed eyes}}}}}, happy tears, tears, {{{{rubbing eyes, wiping tears, open mouth, happy, smile}}}}"
-    },
-    {
-      id: "head_bump",
-      suffix: "closed eyes, teardrop, open mouth, wavy mouth, furrowed brow, raised eyebrows, hands on own head, {{{{head bump}}}}, crossed bandaids, injury, head steam"
-    },
-    {
-      id: "indifferent",
-      suffix: "looking at viewer, expressionless, :/, {{{jitome}}}, arms at sides"
-    },
-    {
-      id: "jealous",
-      suffix: "looking at viewer, {{jealous}}, shaded face, anger vein, {{angry}}, expressionless, :<, crossed arms, {{{half-closed eyes}}}, from side, uneven eyes"
-    },
-    {
-      id: "joyful",
-      suffix: "{{{happy}}, closed eyes, smile}, open mouth, {{own hands together, {{palms together, praying}}}}, {{{{{{^ ^}}}}}}"
-    },
-    {
-      id: "laughing",
-      suffix: "{{happy, smile, laughing, closed eyes}}, open mouth, hand over own mouth, {{+++}}"
-    },
-    {
-      id: "looking_away_shyly",
-      suffix: "{{averting eyes}}, looking to the side, embarrassed, blush, closed mouth, shy, {{{finger to cheek, half-closed eyes}}}, averting eyes, raised eyebrows, arm at side"
-    },
-    {
-      id: "lovestruck",
-      suffix: "looking at viewer, blush, happy, smile, tareme, {{{{{{heart-shaped pupils}}}}}}, seductive smile, hand on own chest, {{spoken heart}}, open mouth, loving aura"
-    },
-    {
-      id: "lustful",
-      suffix: "looking at viewer, {{{{shaded face}}, half-closed eyes, glowing eyes}}, {{{{heart-shaped pupils}}}}, naughty face, closed mouth, licking lips, :p, seductive smile, finger to mouth, heavy breathing, arm at side, blush"
-    },
-    {
-      id: "melancholic",
-      suffix: "looking down, head rest, hand on own chin, {{{:<, sad}}}, narrowed eyes"
-    },
-    {
-      id: "middle_finger",
-      suffix: "looking at viewer, {{{{{middle finger}}}}}, furrowed brow, clenched teeth, parted lips, frown, angry, anger vein"
-    },
-    {
-      id: "nervous",
-      suffix: "looking at viewer, half-closed eyes, nervous, sweat, :<, raised eyebrows"
-    },
-    {
-      id: "nervous_pouting",
-      suffix: "looking at viewer, nervous, {{{clenched hands}}}, open mouth, wavy mouth, [[[[v-shaped eyebrows]]]], {{{{@ @}}}}, {{{{sweat}}}}, [[own hands together]]"
-    },
-    {
-      id: "overwhelmed",
-      suffix: "[[looking up]], {{{{@_@}}}}, :o, furrowed brow, {{half-closed eyes, raised eyebrows, drooling, aroused}}"
-    },
-    {
-      id: "play_dumb",
-      suffix: "{{{{looking to the side}}}}, {{wide-eyed}}, {{{{{puckered lips}}}}}, nervous, {{{{sweat}}}}"
-    },
-    {
-      id: "playful_winking",
-      suffix: "looking at viewer, one eye closed, open mouth, happy, smile, raised eyebrows, {{{{{{v over eye, peace sign, > o}}}}}}"
-    },
-    {
-      id: "pleading",
-      suffix: "{{{{palms together, own hands together, praying, {{closed eyes}}}}}}, furrowed brow, {{{{raised eyebrows}}}}, wavy mouth, head down, flying sweatdrops"
-    },
-    {
-      id: "pouting",
-      suffix: "looking at viewer, {{pout, crossed arms}}"
-    },
-    {
-      id: "proud",
-      suffix: "{{{{{{closed eyes}}}}}}, {{smug}}, v-shaped eyebrows, closed mouth, {{{{{hands on own hips}}}}}"
-    },
-    {
-      id: "relieved",
-      suffix: "{{{{{{closed eyes}}}}}}, {{{{{{u u}}}}}}, hands on own chest, own hands together, open mouth"
-    },
-    {
-      id: "scared",
-      suffix: "looking at viewer, {{{{turn pale, scared}}}}, shaded face, {{wavy mouth, open mouth}}, {{{own hands together, hands on own face}}}"
-    },
-    {
-      id: "scared_screaming",
-      suffix: "looking at viewer, {{{{{scared, turn pale, wide-eyed, constricted pupils, tears, teardrop, open mouth, rectangular mouth, jaw drop}}}}}, shaded face, wavy mouth, hands on own face"
-    },
-    {
-      id: "seductive_smiling",
-      suffix: "looking at viewer, seductive smile, {{blush, naughty face}}, {{{finger to mouth, half-closed eyes}}}"
-    },
-    {
-      id: "serious",
-      suffix: "looking at viewer, {{{serious}}}, closed mouth, v-shaped eyebrows, furrowed brow, expressionless"
-    },
-    {
-      id: "shocked",
-      suffix: "looking at viewer, furrowed brow, {{surprised, wide-eyed, confused, {{constricted pupils, hands up}}, open mouth, rectangular mouth, wavy mouth, shaded face, constricted pupils, ^^^, !?}}"
-    },
-    {
-      id: "sleepy",
-      suffix: "looking at viewer, {{{sleepy, rubbing eyes, :o, one eye closed, half-closed eyes}}}, arm at side"
-    },
-    {
-      id: "smiling",
-      suffix: "looking at viewer, smile, closed mouth, tareme"
-    },
-    {
-      id: "smirk",
-      suffix: "looking at viewer, {{smirk}}, furrowed brow, closed mouth, {{jitome}}"
-    },
-    {
-      id: "smug",
-      suffix: "looking at viewer, {{smug}}, smirk, :3, closed mouth, {{{crossed arms}}}, [[from side]]"
-    },
-    {
-      id: "sniggering",
-      suffix: "looking at viewer, smirk, {{{smile, {{wavy mouth}}}}}, half-closed eyes, tareme, closed mouth, hand over own mouth, covering mouth, raised eyebrows"
-    },
-    {
-      id: "spacey",
-      suffix: "looking at viewer, expressionless, {{{{o_o, white eyes, no pupils, blank eyes}}}}, :o, jitome, {{arms at sides}}"
-    },
-    {
-      id: "stretching",
-      suffix: "closed eyes, {{{{stretching, arms up}}, arm behind head}}, furrowed brow"
-    },
-    {
-      id: "stupefied",
-      suffix: "looking at viewer, {{open mouth, rectangular mouth, {{{mouth drool, jaw drop}}}, {{no pupils, white eyes, wide-eyed}}, {{furrowed brow}}}}, frown, confused, !?"
-    },
-    {
-      id: "surprised",
-      suffix: "looking at viewer, surprised, open mouth, {{wide-eyed, hand to own mouth, hand on own face, ^^^}}"
-    },
-    {
-      id: "suspicious",
-      suffix: "{{looking at viewer}}, {{{{jitome}}}}, :<, closed mouth, raised eyebrow, uneven eyes, frown, v-shaped eyebrows, furrowed brow, {{{stroking own chin}}}, hand on own chin"
-    },
-    {
-      id: "taunting",
-      suffix: "looking at viewer, doyagao, {{akanbe, eyelid pull, {{:p}}, tongue out}}, raised eyebrows"
-    },
-    {
-      id: "teary_pouting",
-      suffix: "looking at viewer, , tearing up, pout, :i, furrowed brow, raised eyebrows, {{{clenched hands, own hands together}}}"
-    },
-    {
-      id: "thinking",
-      suffix: "{{{looking up}}}, frown, {{{{hand on own chin}}, stroking own chin, thinking, furrowed brow}}, ..."
-    },
-    {
-      id: "tormented",
-      suffix: "{{black eyes, wavy eyes, {{squiggle eyes}}}}, constricted pupils, looking down, furrowed brow, {{{{shaded face, scared, trembling}}}}, {{hands on own face}}, parted lips, despair, {{tears, streaming tears, sweat}}, gloom (expression)"
-    },
-    {
-      id: "worried",
-      suffix: "looking at viewer, worried, confused, sweat, parted lips, wavy mouth, furrowed brow, {{{raised eyebrows, own hands together, {{{clenched hands}}}}}}"
-    }
-  ];
-  FALLBACK_POSE = POSE_EXPRESSION_CATALOGUE[0];
-  EXPRESSION_ALIASES = {
-    neutral: "idle",
-    normal: "idle",
-    relaxed: "idle",
-    calm: "idle",
-    talking: "speak",
-    speaking: "speak",
-    happy: "smile",
-    crying: "sad",
-    sadness: "sad",
-    anger: "angry",
-    annoyance: "annoyed",
-    shock: "surprise",
-    sleep: "sleepy",
-    fluster: "flustered",
-    pout: "pouting",
-    giggle: "giggling",
-    laughing: "laugh",
-    thinking: "think",
-    curiosity: "curious",
-    relieved: "relieved",
-    confused: "confused",
-    frightened: "scared"
-  };
-  KEYWORD_PATTERNS = [
-    [/\b(?:laughs?|laughing|laughter|chuckle|chuckles|chuckling)\b/i, "laugh"],
-    [/\b(?:smiles?|smiling)\b/i, "smile"],
-    [/\b(?:smirks?|smirking)\b/i, "smirk"],
-    [/\b(?:sad|cries|crying|cried|tears|sob|sobbing|weep|weeping)\b/i, "sad"],
-    [/\b(?:angry|anger|shouts?|shouting|yells?|yelling|furious|rage)\b/i, "angry"],
-    [/\b(?:surprised?|surprising|shocked?|astonished?|gasps?|gasping)\b/i, "surprise"],
-    [/\b(?:thinks?|thinking|thoughtful|ponder|ponders|pondering|wonders?|wondering)\b/i, "think"],
-    [/\b(?:waves?|waving|waved|greet|greets|greeting)\b/i, "wave"],
-    [/\b(?:shy|blush|blushes|blushing)\b/i, "shy"],
-    [/\b(?:talks?|talking|talked|speaks?|speaking|spoke)\b/i, "speak"],
-    [/\b(?:listens?|listening|listened)\b/i, "listen"],
-    [/\b(?:pouts?|pouting|pouted)\b/i, "pouting"],
-    [/\b(?:excited?|exciting|excitement)\b/i, "excited"],
-    [/\b(?:giggles?|giggling|giggled)\b/i, "giggling"],
-    [/\b(?:sleepy|asleep|dozing|yawning)\b/i, "sleepy"],
-    [/\b(?:proud|proudly)\b/i, "proud"],
-    [/\b(?:curious|curiously)\b/i, "curious"],
-    [/\b(?:bored|boring)\b/i, "bored"],
-    [/\b(?:confused?|confusing|confusion)\b/i, "confused"],
-    [/\b(?:disappointed?|disappointing|disappointment)\b/i, "disappointed"],
-    [/\b(?:disgusted?|disgusting|disgust)\b/i, "disgusted"],
-    [/\b(?:embarrassed?|embarrassing|embarrassment)\b/i, "embarrassed"],
-    [/\b(?:flustered?|flustering)\b/i, "flustered"],
-    [/\b(?:jealous|jealousy)\b/i, "jealous"],
-    [/\b(?:joy|joyful|joyous)\b/i, "joyful"],
-    [/\b(?:nervous|nervously|anxious|anxiously)\b/i, "nervous"],
-    [/\b(?:relieved?|relief)\b/i, "relieved"],
-    [/\b(?:scared?|scary|terrified|frightened)\b/i, "scared"],
-    [/\b(?:smug|smugly)\b/i, "smug"],
-    [/\b(?:worried?|worries|worry|worrying)\b/i, "worried"],
-    [/\b(?:cozy|cosy)\b/i, "cozy"],
-    [/\b(?:exhausted?|exhaustion)\b/i, "exhausted"],
-    [/\b(?:lovestruck)\b/i, "lovestruck"],
-    [/\b(?:lustful)\b/i, "lustful"],
-    [/\b(?:aroused)\b/i, "aroused"]
-  ];
-  ANIME_EMOTICON_TAG_RE = /^(?:\^+(?:\s*\^+)*|!+\?+|\?+!+|!+|\?+|>+\s*<+|>+:\(|>+:\)|:<|;\)|:\)|:\(|~+|\*+|@_@|o_o|x_x)$/i;
-  ANIME_TROPES_FOR_PROSE_RE = /^(?:rectangular mouth|wavy mouth|dot mouth|triangle mouth|cat mouth|chestnut mouth|split mouth|sideways mouth|shaded face|anger vein|veins|flying sweatdrops|sweatdrop|sweat|tareme|jitome|tsurime|sanpaku|eyeball|constricted pupils|sparkling eyes|star-shaped pupils|heart-shaped pupils|symbol-shaped pupils|blank eyes|empty eyes|white pupils|horizontal pupils|slit pupils|ringed eyes|full-face blush|nosebleed|chibi)$/i;
 });
 
 // src/backend/core/visual-state.ts
@@ -43224,6 +43634,66 @@ var init_attire = __esm(() => {
   PHYSICAL_TRAIT_REGEX = /\b(?:hair|twin-?tails?|ponytail|braids?|bangs|eyes?|skin|tall|short|slender|petite|muscular|curvy|build|face|ears?|horns?|wings?|tail|freckles|scars?|glasses)\b/i;
 });
 
+// src/backend/runtime/ensemble-cast.ts
+function recoverStagedCast(visible, relationships, roster) {
+  const recovered = [...visible];
+  if (!relationships?.length)
+    return recovered;
+  const names = new Map;
+  for (const member of roster) {
+    for (const name2 of [member.name, ...member.aliases ?? []]) {
+      const key = characterAppearanceKey(name2);
+      if (!key)
+        continue;
+      const previous = names.get(key);
+      names.set(key, previous === undefined || previous?.member === member ? { name: name2, member } : null);
+    }
+  }
+  const matchers = [...names.values()].filter((entry) => entry !== null).sort((left, right) => right.name.length - left.name.length).map(({ name: name2, member }) => ({ member, pattern: new RegExp(`^${escapeRegex2(name2)}(?=$|[^\\p{L}\\p{N}'\u2019])`, "iu") }));
+  const matchNamedMember = (line2) => {
+    for (const { member, pattern } of matchers) {
+      const match = pattern.exec(line2);
+      if (match)
+        return { member, next: line2.slice(match[0].length).replace(/^[\s:,\u2014-]+/, "") };
+    }
+    return null;
+  };
+  const staged = new Set;
+  for (const relationship of relationships) {
+    if (nonVisible.test(relationship))
+      continue;
+    const text2 = relationship.trim();
+    const prefix = positionPrefix.exec(text2);
+    const match = matchNamedMember(text2.slice(prefix?.[0].length ?? 0));
+    if (!match)
+      continue;
+    const paired = /^and\s+/i.exec(match.next);
+    const second = paired ? matchNamedMember(match.next.slice(paired[0].length)) : null;
+    const blocking = second?.next ?? match.next;
+    if (!physicalStaging.test(blocking) && !(prefix && !blocking))
+      continue;
+    staged.add(match.member.name);
+    if (second)
+      staged.add(second.member.name);
+  }
+  const included = new Set(visible.map((name2) => {
+    const key = characterAppearanceKey(name2);
+    return characterAppearanceKey(names.get(key)?.member.name ?? name2);
+  }));
+  for (const name2 of staged) {
+    if (!included.has(characterAppearanceKey(name2)))
+      recovered.push(name2);
+  }
+  return recovered;
+}
+var nonVisible, physicalStaging, positionPrefix, escapeRegex2 = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var init_ensemble_cast = __esm(() => {
+  init_identity();
+  nonVisible = /\b(?:off[ -]?screen|off[ -]?camera|out of (?:frame|view)|not (?:visible|present|in frame)|absent|(?:only |merely )?mentioned|remembered|imagined|pictured|behind (?:the )?camera)\b/i;
+  physicalStaging = /^(?:is\s+|are\s+)?(?:stands?|standing|sits?|sitting|seated|kneels?|kneeling|crouch(?:es|ing)?|leans?|leaning|lies|lying|walks?|walking|runs?|running|enters?|entering|faces?|facing|holds?|holding|waits?|waiting|occupies|occupying|at\b|in\b|on\b|beside\b|behind\b|near\b|(?:foreground|midground|background)\b)\b/i;
+  positionPrefix = /^(?:(?:in|at|on)\s+(?:the\s+)?)?(?:foreground|midground|background|(?:far[- ])?left|(?:far[- ])?right|center)(?:[- ](?:left|right|center))?\s*[:,\u2014-]\s*/i;
+});
+
 // src/backend/runtime/visual-brief.ts
 function sanitizeVisualNarrativeDescription(raw) {
   if (!raw || !raw.trim())
@@ -43419,7 +43889,17 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
   const chars = characterDNALibrary ? "characters" in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary : undefined;
   const deletedLibrary = characterDNALibrary && "deleted" in characterDNALibrary ? characterDNALibrary.deleted : undefined;
   const isMemberExcluded = (n) => isScenarioTitle(n) || Boolean(deletedLibrary && (findCharacterDNA(deletedLibrary, n) || findMatchingCharacterId(deletedLibrary, n)));
-  const members2 = (cue.ensembleSubjects ?? scene.cast.map((name3) => ({ name: name3, appearance: "" }))).filter((m) => !isMemberExcluded(m.name)).map((member) => {
+  const plannedMembers = ensemble ? cue.ensembleSubjects ?? scene.cast.map((name3) => ({ name: name3, appearance: "" })) : [];
+  const candidates = [...plannedMembers];
+  if (ensemble && cue.shotHint?.spatialRelationships?.length) {
+    const folio = Object.values(chars ?? {}).filter((member) => !isMemberExcluded(member.name));
+    const otherRoster = [...new Set([...scene.cast, ...Object.keys(appearances ?? {})])].filter((name3) => !isMemberExcluded(name3) && !(chars && findMatchingCharacterId(chars, name3))).map((name3) => ({ name: name3 }));
+    const visibleNames = plannedMembers.map((member) => member.name);
+    const staged = recoverStagedCast(visibleNames, cue.shotHint.spatialRelationships, [...folio, ...otherRoster]);
+    candidates.push(...staged.slice(visibleNames.length).map((name3) => ({ name: name3, appearance: "" })));
+  }
+  const seen = new Set;
+  const members2 = candidates.filter((member) => !isMemberExcluded(member.name)).flatMap((member) => {
     let dnaAppearance;
     let memberDna;
     if (chars) {
@@ -43429,32 +43909,58 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
         dnaAppearance = formatCharacterDNAForImagePrompt(memberDna, { includeOutfit: false });
       }
     }
-    const saved2 = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
-    const cont = scene.continuity?.characters ? Object.entries(scene.continuity.characters).find(([k]) => areNamesEquivalent(k, member.name))?.[1] : undefined;
+    const canonicalName = memberDna?.name ?? member.name;
+    const key = characterAppearanceKey(canonicalName);
+    if (seen.has(key))
+      return [];
+    seen.add(key);
+    const matchesMember = (name3) => {
+      if (characterAppearanceKey(name3) === key)
+        return true;
+      return memberDna && chars ? findMatchingCharacterId(chars, name3) === memberDna.id : areNamesEquivalent(name3, canonicalName);
+    };
+    const entries = Object.entries(appearances ?? {});
+    const saved2 = entries.find(([name3]) => characterAppearanceKey(name3) === key)?.[1] ?? entries.find(([name3]) => matchesMember(name3))?.[1];
+    const cont = Object.entries(scene.continuity?.characters ?? {}).find(([name3]) => matchesMember(name3))?.[1];
     const contAppearance = cont?.appearance ? Object.values(cont.appearance).filter(Boolean).join(", ") : undefined;
     const contWardrobe = cont?.wardrobe ? Object.values(cont.wardrobe).filter(Boolean).join(", ") : undefined;
     const isCuratedDna = memberDna && (memberDna.locked || !memberDna.autoDiscovered);
-    const fallbackAppearance = isCuratedDna ? dnaAppearance || saved2 || (member.appearance?.trim() ? member.appearance : contAppearance) : saved2 || dnaAppearance || (member.appearance?.trim() ? member.appearance : contAppearance);
+    const currentIdentity = cue.character && matchesMember(cue.character) ? cue.resolvedIdentity : undefined;
+    const sceneIdentity = scene.character && matchesMember(scene.character) ? scene.identityPrompt : undefined;
+    const localAppearance = [member.appearance, currentIdentity, contAppearance, sceneIdentity];
+    const appearancesInOrder = manual ? [member.appearance] : [
+      ...isCuratedDna ? [dnaAppearance, saved2] : [saved2, dnaAppearance],
+      ...localAppearance
+    ];
     const memberDnaWardrobe = memberDna?.activeWardrobeKey && memberDna.wardrobeStates?.[memberDna.activeWardrobeKey] || memberDna?.activeOutfit || memberDna?.signatureOutfit;
-    const memberAttire = memberDna?.lockActiveWardrobe && memberDnaWardrobe ? memberDnaWardrobe : ("attire" in member) && member.attire ? String(member.attire) : memberDnaWardrobe || contWardrobe || undefined;
-    const appearanceBase = manual ? member.appearance : fallbackAppearance || member.appearance;
-    const appearance2 = memberAttire ? applyAttireOverride(appearanceBase, "") : appearanceBase;
-    return { ...member, appearance: appearance2, attire: memberAttire };
+    const memberAttire = memberDna?.lockActiveWardrobe && memberDnaWardrobe ? memberDnaWardrobe : member.attire ? member.attire : memberDnaWardrobe || contWardrobe || undefined;
+    const appearance2 = appearancesInOrder.map((value) => optimizeAppearanceTextForImagePrompt(memberAttire ? applyAttireOverride(value ?? "", "") : value ?? "")).find((value) => isUsableIdentity(canonicalName, value.split(/[,;\n]/))) ?? "";
+    return [{ ...member, appearance: appearance2, ...memberAttire ? { attire: memberAttire } : {} }];
   });
+  if (members2.length > 16)
+    throw new Error("This shot has more than 16 visible cast members. Choose a smaller group before generating it.");
   const nameBudget = members2.reduce((total, member) => total + member.name.length + 4, 0);
   if (ensemble && nameBudget > 4000)
     throw new Error("The ensemble names exceed the prompt preview limit. Shorten cast display names before preparing this picture.");
   const isHighCap = Boolean(config2.imageModel && /ideogram|recraft|grok|flux|nano-banana|seedream|midjourney|gpt-image/i.test(config2.imageModel)) || Boolean(config2.imagePromptBudgetOverride);
   const baseBudget = isHighCap ? config2.imagePromptBudgetOverride ? config2.imagePromptBudget : 4000 : 1800;
-  const descriptionBudget = Math.max(0, Math.floor((Math.max(baseBudget, nameBudget) - nameBudget) / Math.max(1, members2.length)));
-  const group = members2.map((member) => {
-    const look = optimizeAppearanceTextForImagePrompt(member.appearance.trim());
-    const attireText = "attire" in member && member.attire ? `; wearing ${member.attire}` : "";
-    const remainingForLook = Math.max(0, descriptionBudget - attireText.length);
-    const boundedLook = look.length > remainingForLook ? look.slice(0, remainingForLook).replace(/\s+\S*$/, "") : look;
-    const description = boundedLook ? `${boundedLook}${attireText}` : attireText ? attireText.replace(/^;\s*/, "") : "appearance not established";
-    return `${member.name}: ${description}`;
-  }).join(`
+  const descriptionBudget = Math.max(0, Math.floor((Math.max(Math.min(baseBudget, 4000), nameBudget) - nameBudget) / Math.max(1, members2.length)));
+  const boundClause = (value, limit) => {
+    if (value.length <= limit)
+      return value;
+    const clipped = value.slice(0, limit);
+    const boundary = Math.max(clipped.lastIndexOf(","), clipped.lastIndexOf(";"));
+    return (boundary > 0 ? clipped.slice(0, boundary) : clipped.replace(/\s+\S*$/, "")).trim();
+  };
+  const outfitLead = "; wearing ";
+  const boundedCast = members2.map(({ name: name3, appearance: appearance2, attire: attire2, persona }) => {
+    const identityAllowance = Math.min(descriptionBudget, Math.max(80, Math.ceil(descriptionBudget / 2)));
+    const wardrobeAllowance = Math.max(0, descriptionBudget - Math.min(appearance2.length, identityAllowance) - outfitLead.length);
+    const boundedAttire = boundClause(attire2 ?? "", wardrobeAllowance);
+    const boundedAppearance = boundClause(appearance2, descriptionBudget - (boundedAttire ? outfitLead.length + boundedAttire.length : 0));
+    return { name: name3, appearance: boundedAppearance, ...boundedAttire ? { attire: boundedAttire } : {}, ...persona ? { persona } : {} };
+  });
+  const group = boundedCast.map((member) => `${member.name}: ${member.appearance || "appearance not established"}${member.attire ? outfitLead + member.attire : ""}`).join(`
 `);
   const rawLocDNA = storyDNASet?.locations ? findMatchingLocation(storyDNASet.locations, environment.location) : undefined;
   const locDNA = rawLocDNA && (!rawLocDNA.autoDiscovered || rawLocDNA.locked || Boolean(rawLocDNA.architecture?.trim())) ? rawLocDNA : undefined;
@@ -43475,6 +43981,7 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
     }
   }
   return {
+    ...ensemble ? { ensembleCast: boundedCast } : {},
     ...!noPeople ? { subjectPreparation: {
       name: ensemble ? "Named ensemble" : name2.slice(0, 256),
       identity: ensemble ? "" : (attire ? applyAttireOverride(identity2, "") : identity2).slice(0, 4000),
@@ -43503,7 +44010,7 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
     framing: template.framing,
     referencePolicy: noPeople || ensemble ? "none" : template.referencePolicy,
     sources: [...cue.visualSources ?? [], "scene context", ...locDNA ? ["location DNA"] : [], ...activeItemClauses.length > 0 ? ["item DNA"] : [], ...lockedDNA?.locked ? ["character DNA matrix"] : [], ...ensemble ? ["named cast and persona appearance snapshot"] : !noPeople && saved && !manual ? ["saved appearance"] : []].slice(0, 24),
-    conflicts: [...conflicts, ...ensemble && members2.some((member) => member.appearance.length > descriptionBudget) ? ["Ensemble appearance descriptions are condensed to share the prompt budget; all listed names are retained."] : [], ...sharedStyleWarnings(template, config2.promptPrefix, config2.promptSuffix, config2.negativePrompt)].slice(0, 16)
+    conflicts: [...conflicts, ...ensemble && members2.some((member, index) => member.appearance !== boundedCast[index]?.appearance || member.attire !== boundedCast[index]?.attire) ? ["Ensemble appearance descriptions or outfits are condensed to share the prompt budget."] : [], ...sharedStyleWarnings(template, config2.promptPrefix, config2.promptSuffix, config2.negativePrompt)].slice(0, 16)
   };
 }
 var text2 = (values, max = 4000) => [...new Set(values.map((value) => value?.trim()).filter(Boolean))].join("; ").slice(0, max), PROP_STOP_WORDS;
@@ -43519,6 +44026,7 @@ var init_visual_brief = __esm(() => {
   init_nicknames();
   init_story_dna();
   init_scene_atmosphere();
+  init_ensemble_cast();
   PROP_STOP_WORDS = new Set([
     "the",
     "a",
@@ -43864,10 +44372,10 @@ function resolveCueTimeline(input2) {
   const wardrobe = new Map;
   const names = new Map;
   for (const [name2, state] of Object.entries(input2.continuity.characters)) {
-    const canonical = canon(name2) || name2;
-    const key = characterAppearanceKey(canonical);
+    const canonical2 = canon(name2) || name2;
+    const key = characterAppearanceKey(canonical2);
     if (!names.has(key))
-      names.set(key, canonical);
+      names.set(key, canonical2);
     const attire = state.wardrobe.attire ?? null;
     if (!wardrobe.has(key) || wardrobe.get(key) === null && attire !== null)
       wardrobe.set(key, attire);
@@ -48762,15 +49270,17 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   const peakSelection = !classifierVisuals && cueLimit > 0 ? selectDramaticPeakCues(distinctCues, cueLimit, promptParagraphs) : null;
   const selectedCues = peakSelection ? peakSelection.selected : distinctCues;
   const cacheCandidates = peakSelection ? peakSelection.overflow.slice(0, MAX_CACHE_CUES_PER_TURN) : [];
+  const castRoster = [...Object.values(registry2), ...personaName ? [{ name: personaName, aliases: ["User", "Player", "Persona"] }] : []];
   const materializeCue = (cue, index) => {
     const scene = sceneForParagraph(scenes, cue.paragraphIndex);
     const paragraph = promptParagraphs.find((candidate) => candidate.index === cue.paragraphIndex);
+    const stagedCast = recoverStagedCast(cue.visibleCharacters ?? [], cue.shotHint?.spatialRelationships, castRoster);
     const cueIsUser = isPersona(cue.character);
     const pose = cueIsUser ? selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, "", "listen") : selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, paragraph?.text ?? "", cue.expression);
     let selection = resolveImageTemplate(input2.config, input2.config.dynamicImageTemplates ? cue.templateId : undefined);
     if (input2.config.dynamicImageTemplates && input2.config.readerPreferences?.directorAi !== false && !cue.templateId) {
       const pLower = `${paragraph?.text ?? ""} ${cue.visualDescription ?? ""}`.toLowerCase();
-      const visibleCount = Array.isArray(cue.visibleCharacters) ? cue.visibleCharacters.length : 0;
+      const visibleCount = stagedCast.length;
       const hasClimax = /\b(explodes?|shatters?|unleashes?|betrayal|devastating|catastrophic|awakens?|climaxes?|standoff)\b/i.test(pLower);
       const hasAction = /\b(strikes?|slashes?|dodges?|sprints?|grabs?|leaps?|clashes?|punches?|tackles?|shoots?|firing|defends?|parr(y|ies)|lunges?)\b/i.test(pLower);
       const hasPeakEmotion = /\b(sobbing|weeps?|terrified|horrified|gasps?|wide-eyed|tears?|stunned|trembl(es?|ing)|whispered? threat|stares? in shock)\b/i.test(pLower);
@@ -48821,20 +49331,20 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
       if (environmentTemplate)
         selection = { template: templateSnapshot(environmentTemplate), fallbackReason: "No drawable character appearance was resolved for this scenario. Showing the established setting without people; correct the subject to draw a character." };
     }
-    const visible = cue.visibleCharacters ?? [...scene.cast, ...personaName ? [personaName] : []];
+    const visible = selection.template.subjectMode === "ensemble" ? cue.visibleCharacters || stagedCast.length ? stagedCast : scene.cast : cue.visibleCharacters ?? [...scene.cast, ...personaName ? [personaName] : []];
     const ensembleSubjects = [];
     for (const name2 of visible) {
       const person = resolveCharacterReference(registry2, { name: name2 });
       const persona = isPersona(name2);
-      const canonical = persona ? personaName : person?.name ?? normalizeCharacterName(name2);
-      if (!canonical || ensembleSubjects.some((item) => characterAppearanceKey(item.name) === characterAppearanceKey(canonical)))
+      const canonical2 = persona ? personaName : person?.name ?? normalizeCharacterName(name2);
+      if (!canonical2 || ensembleSubjects.some((item) => characterAppearanceKey(item.name) === characterAppearanceKey(canonical2)))
         continue;
-      const savedKey = appearanceMapKeyFor(input2.characterAppearance, canonical);
-      const saved = savedKey ? input2.characterAppearance[savedKey] : "";
+      const savedKey = appearanceMapKeyFor(turnAppearances, canonical2);
+      const saved = savedKey ? turnAppearances[savedKey] : "";
       const description = saved || (persona ? distillVisualTags(visualContext.personaIdentity?.description ?? "").join(", ") : person?.tags ?? "");
       const current = timeline.snapshots[cue.paragraphIndex];
-      const outfit = characterAppearanceKey(canonical) === characterAppearanceKey(current.character ?? "") ? current.attire : timeline.snapshots.find((s) => characterAppearanceKey(canonical) === characterAppearanceKey(s.character ?? ""))?.attire ?? null;
-      ensembleSubjects.push({ name: canonical, appearance: description.slice(0, 1200), ...outfit ? { attire: outfit.slice(0, 600) } : {}, ...persona ? { persona: true } : {} });
+      const outfit = characterAppearanceKey(canonical2) === characterAppearanceKey(current.character ?? "") ? current.attire : timeline.snapshots.find((s) => characterAppearanceKey(canonical2) === characterAppearanceKey(s.character ?? ""))?.attire ?? null;
+      ensembleSubjects.push({ name: canonical2, appearance: description.slice(0, 1200), ...outfit ? { attire: outfit.slice(0, 600) } : {}, ...persona ? { persona: true } : {} });
     }
     return VisualCueSchema.parse({
       cueId: id8("cue", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
@@ -49006,15 +49516,15 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
         paragraphSpeakerByIndex.set(entry.paragraphIndex, personaDisplayName);
       continue;
     }
-    const canonical = canonicalNames.get(claimed.toLowerCase());
-    if (canonical)
-      paragraphSpeakerByIndex.set(entry.paragraphIndex, canonical);
+    const canonical2 = canonicalNames.get(claimed.toLowerCase());
+    if (canonical2)
+      paragraphSpeakerByIndex.set(entry.paragraphIndex, canonical2);
   }
   if (narrative.detectedSpeakers) {
     for (const detected of narrative.detectedSpeakers) {
       if (!paragraphSpeakerByIndex.has(detected.paragraphIndex) && detected.speaker) {
-        const canonical = canonicalNames.get(detected.speaker.toLowerCase()) || detected.speaker;
-        paragraphSpeakerByIndex.set(detected.paragraphIndex, canonical);
+        const canonical2 = canonicalNames.get(detected.speaker.toLowerCase()) || detected.speaker;
+        paragraphSpeakerByIndex.set(detected.paragraphIndex, canonical2);
       }
     }
   }
@@ -49429,6 +49939,7 @@ var init_planner = __esm(() => {
   init_continuity();
   init_cue_state();
   init_scenario_subjects();
+  init_ensemble_cast();
   init_scenario_persona();
   init_paragraphs();
   init_turn_plan();
@@ -50084,7 +50595,7 @@ function stringHash(str) {
   }
   return hash2 >>> 0;
 }
-function escapeRegex2(value) {
+function escapeRegex3(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function matchesCharacterToken(candidate, target2) {
@@ -50094,10 +50605,10 @@ function matchesCharacterToken(candidate, target2) {
     return false;
   if (cleanCandidate.toLowerCase() === cleanTarget.toLowerCase())
     return true;
-  if (cleanTarget.length >= 2 && new RegExp(`\\b${escapeRegex2(cleanTarget)}\\b`, "i").test(cleanCandidate))
+  if (cleanTarget.length >= 2 && new RegExp(`\\b${escapeRegex3(cleanTarget)}\\b`, "i").test(cleanCandidate))
     return true;
   const firstToken = cleanTarget.split(/\s+/)[0] || cleanTarget;
-  if (firstToken.length >= 2 && new RegExp(`\\b${escapeRegex2(firstToken)}\\b`, "i").test(cleanCandidate))
+  if (firstToken.length >= 2 && new RegExp(`\\b${escapeRegex3(firstToken)}\\b`, "i").test(cleanCandidate))
     return true;
   return false;
 }
@@ -50105,9 +50616,9 @@ function findSubjectClue(subjectName, spatialRelationships, narrativeClauses) {
   const fullName = subjectName.trim();
   const firstName = fullName.split(/\s+/)[0] || fullName;
   const matchName = (text3) => {
-    if (fullName.length >= 2 && new RegExp(`\\b${escapeRegex2(fullName)}\\b`, "i").test(text3))
+    if (fullName.length >= 2 && new RegExp(`\\b${escapeRegex3(fullName)}\\b`, "i").test(text3))
       return true;
-    if (firstName.length >= 2 && new RegExp(`\\b${escapeRegex2(firstName)}\\b`, "i").test(text3))
+    if (firstName.length >= 2 && new RegExp(`\\b${escapeRegex3(firstName)}\\b`, "i").test(text3))
       return true;
     return false;
   };
@@ -50924,259 +51435,6 @@ var init_prompt_document = __esm(() => {
     parameterHints: exports_external.record(exports_external.string(), exports_external.unknown()).optional(),
     warnings: exports_external.array(exports_external.string().max(1000)).max(64)
   }).strict();
-});
-
-// src/backend/runtime/prompt-serializers/helpers.ts
-function cleanActionAndDirection(rawAction, rawDirection) {
-  let act = (rawAction ?? "").trim();
-  const dir = (rawDirection ?? "").trim();
-  if (/\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(act)) {
-    const segments = act.split(/\s*;\s*/).filter(Boolean);
-    const cleanedSegments = [];
-    const seenSegs = new Set;
-    for (const seg of segments) {
-      const cleanedSeg = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(seg) ? sanitizePoseExpression(seg, {
-        keepWeightBrackets: false,
-        stripAnimeTropes: true,
-        hasActiveSceneAction: segments.length > 1 && segments[0].length > 40
-      }) : seg.trim();
-      if (!cleanedSeg)
-        continue;
-      const norm = cleanedSeg.toLowerCase();
-      if (seenSegs.has(norm))
-        continue;
-      seenSegs.add(norm);
-      cleanedSegments.push(cleanedSeg);
-    }
-    act = cleanedSegments.join("; ");
-  }
-  const cleanDir = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(dir) ? sanitizePoseExpression(dir, {
-    keepWeightBrackets: false,
-    stripAnimeTropes: true,
-    hasActiveSceneAction: act.length > 40
-  }) : dir;
-  if (!act && !cleanDir)
-    return;
-  if (!cleanDir)
-    return act;
-  if (!act)
-    return cleanDir;
-  const actLower = act.toLowerCase();
-  const dirLower = cleanDir.toLowerCase();
-  if (actLower === dirLower || actLower.endsWith(`; ${dirLower}`) || actLower.endsWith(`, ${dirLower}`)) {
-    return act;
-  }
-  return `${act}, ${cleanDir}`;
-}
-function sanitizeQuoteAndUnitNotation(text3) {
-  if (!text3)
-    return "";
-  return text3.replace(/\b(\d+)'\s*(\d+)(?:"|''|\u2019\u2019)?\b/g, "$1 ft $2 in").replace(/\b(\d+)'\b/g, "$1 ft").replace(/\b(\d+)"\b/g, "$1 inches").replace(/"/g, "'").replace(/,\s*\./g, ".").replace(/;\s*\./g, ".").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").trim();
-}
-function formatSceneProse(sceneText) {
-  if (!sceneText)
-    return "";
-  return sanitizeQuoteAndUnitNotation(sceneText).split(/\s*;\s*/).map((part) => part.trim().replace(/\.+$/, "")).filter(Boolean).join(", ").replace(/,\s*\./g, ".").replace(/\s+/g, " ").trim();
-}
-function parseSubjectsFromBrief(brief, cue) {
-  if (brief.subjectMode === "none")
-    return [];
-  const isNarrativeUndressed = /\b(?:naked|nude|undressed|bare skin|unclothed|topless|stripping|in the bath|in the shower)\b/i.test(`${brief.action} ${brief.scene}`);
-  if (brief.subjectMode === "ensemble") {
-    const lines = brief.subjects.split(`
-`).filter((line2) => line2.includes(":"));
-    if (lines.length > 0) {
-      return lines.map((line2) => {
-        const colon = line2.indexOf(":");
-        const name3 = line2.slice(0, colon).trim();
-        const rawRest = line2.slice(colon + 1).trim();
-        const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
-        const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
-        let appearance = sanitizedRest;
-        let attire2 = undefined;
-        if (wearingMatch) {
-          appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
-          attire2 = wearingMatch[1].trim();
-        } else {
-          const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
-          if (!hasClothing && !isNarrativeUndressed) {
-            attire2 = "scene-appropriate casual clothing";
-          }
-        }
-        return {
-          name: name3,
-          appearance,
-          attire: attire2
-        };
-      });
-    }
-    if (brief.subjects.trim()) {
-      const names = brief.subjects.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
-      if (names.length > 0) {
-        return names.map((name3) => ({
-          name: name3,
-          appearance: "distinct physical features",
-          attire: isNarrativeUndressed ? undefined : "scene-appropriate casual clothing"
-        }));
-      }
-    }
-  }
-  const name2 = brief.subjectPreparation?.name || cue?.character || "Subject";
-  const rawAppearance = brief.subjectPreparation?.identity || cue?.resolvedIdentity || brief.subjects;
-  const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
-  let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
-  if (!attire) {
-    const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedAppearance);
-    if (!hasClothing && !isNarrativeUndressed) {
-      attire = "everyday clothing suitable for the scene";
-    }
-  }
-  const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
-  return [{
-    name: name2,
-    appearance: sanitizedAppearance,
-    attire,
-    action: action ? sanitizeQuoteAndUnitNotation(action) : undefined
-  }];
-}
-function formatCameraFraming(shotSpec, styleDNA) {
-  const parts = [];
-  const customStyleText = [styleDNA?.prefix, styleDNA?.suffix].filter(Boolean).join(" ").toLowerCase();
-  const hasCustomLens = Boolean(customStyleText && /\b(?:\d+mm|wide-angle|wide angle|smartphone lens|telephoto|fisheye)\b/i.test(customStyleText));
-  const hasCustomDof = Boolean(customStyleText && /\b(?:depth of field|deep focus|shallow focus|background remains in focus|without cinematic lens blur|no bokeh)\b/i.test(customStyleText));
-  const hasCustomAngle = Boolean(customStyleText && /\b(?:eye-level|eye level|tilted horizon|off-center framing|low-angle|high-angle|overhead)\b/i.test(customStyleText));
-  const sizeMap = {
-    "extreme-close-up": "extreme close-up shot",
-    "close-up": "close-up shot",
-    "medium-close-up": "medium close-up framing",
-    medium: "medium shot",
-    "medium-wide": "medium-wide shot",
-    "full-body": "full-body shot",
-    wide: "wide shot",
-    establishing: "wide establishing shot",
-    macro: "macro detail close-up"
-  };
-  parts.push(sizeMap[shotSpec.camera.shotSize] || `${shotSpec.camera.shotSize} shot`);
-  if (!hasCustomAngle) {
-    const angleMap = {
-      "eye-level": "eye-level angle",
-      "low-angle": "low-angle viewpoint",
-      "high-angle": "high-angle viewpoint",
-      overhead: "overhead bird's-eye view",
-      "ground-level": "ground-level low perspective",
-      "three-quarter": "three-quarter view",
-      profile: "side profile view",
-      "over-the-shoulder": "over-the-shoulder perspective"
-    };
-    parts.push(angleMap[shotSpec.camera.angle] || shotSpec.camera.angle);
-  }
-  if (!hasCustomLens && shotSpec.camera.lens && shotSpec.camera.lens !== "unspecified") {
-    const lensMap = {
-      ultrawide: "ultrawide lens feel",
-      wide: "wide-angle lens",
-      normal: "natural 50mm lens perspective",
-      portrait: "portrait focal length",
-      telephoto: "telephoto lens compression",
-      macro: "macro lens magnification"
-    };
-    parts.push(lensMap[shotSpec.camera.lens] || `${shotSpec.camera.lens} lens`);
-  }
-  if (!hasCustomDof && shotSpec.camera.depthOfField) {
-    const dofMap = {
-      shallow: "shallow depth of field with gentle background blur",
-      moderate: "moderate depth of field",
-      deep: "deep focus across all layers",
-      selective: "selective crisp focus on the main subject"
-    };
-    parts.push(dofMap[shotSpec.camera.depthOfField] || `${shotSpec.camera.depthOfField} depth of field`);
-  }
-  if (shotSpec.crop) {
-    parts.push(shotSpec.crop);
-  }
-  return parts.join(", ");
-}
-function formatSpatialPlacements(shotSpec) {
-  const placements = shotSpec.composition.subjectPlacements;
-  if (!placements || placements.length <= 1) {
-    return "";
-  }
-  const hasRichBlocking = Boolean(shotSpec.composition.stagingNote) || placements.some((p) => Boolean(p.blocking));
-  if (!hasRichBlocking) {
-    const descriptions2 = placements.map((p) => {
-      const posParts = [];
-      if (p.depth)
-        posParts.push(`in the ${p.depth}`);
-      if (p.horizontal)
-        posParts.push(`on the ${p.horizontal.replace("-", " ")}`);
-      return `${p.subject} positioned ${posParts.join(", ")}`;
-    });
-    return descriptions2.join("; ");
-  }
-  const descriptions = placements.map((p) => {
-    const depthText = p.depth ? `in the ${p.depth}` : "in the scene";
-    const horizText = p.horizontal ? ` (${p.horizontal.replace("-", " ")})` : "";
-    const blockingText = p.blocking ? `: ${p.blocking.replace(/\.+$/, "")}` : "";
-    return `${p.subject} ${depthText}${horizText}${blockingText}`;
-  });
-  const staging = shotSpec.composition.stagingNote ? `. ${shotSpec.composition.stagingNote.replace(/\.+$/, "")}` : "";
-  return `${descriptions.join("; ")}${staging}`;
-}
-function formatDialogueSafeArea(shotSpec) {
-  if (!shotSpec.safeArea)
-    return null;
-  const edge = shotSpec.safeArea.edge;
-  const pct = Math.round(shotSpec.safeArea.fraction * 100);
-  return `Keep faces, hands and key focal action above the ${edge} ${pct}% of the frame; reserve that region as quiet visual space for the dialogue overlay.`;
-}
-function formatStyleDNAProse(styleDNA) {
-  const parts = [];
-  const cleanMedium = styleDNA.medium?.replace(/[,;:\s]+$/, "").trim();
-  const cleanPrefix = styleDNA.prefix?.replace(/[,;:\s]+$/, "").trim();
-  if (cleanMedium && cleanMedium !== cleanPrefix) {
-    parts.push(cleanMedium);
-  }
-  if (styleDNA.rendering && styleDNA.rendering.length > 0)
-    parts.push(...styleDNA.rendering);
-  if (styleDNA.linework && styleDNA.linework.length > 0)
-    parts.push(...styleDNA.linework);
-  if (styleDNA.shading && styleDNA.shading.length > 0)
-    parts.push(...styleDNA.shading);
-  if (styleDNA.realism && styleDNA.realism.length > 0)
-    parts.push(...styleDNA.realism);
-  if (styleDNA.surface && styleDNA.surface.length > 0)
-    parts.push(...styleDNA.surface);
-  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0)
-    parts.push(...styleDNA.atmosphere);
-  if (styleDNA.lightingOverlay?.type)
-    parts.push(styleDNA.lightingOverlay.type);
-  if (styleDNA.palette && styleDNA.palette.length > 0)
-    parts.push(`palette of ${styleDNA.palette.join(", ")}`);
-  if (styleDNA.texture && styleDNA.texture.length > 0)
-    parts.push(...styleDNA.texture);
-  return parts.join(", ");
-}
-function formatReferenceDirectives(referencePlan) {
-  if (!referencePlan || !referencePlan.references || referencePlan.references.length === 0) {
-    return [];
-  }
-  const hasWireIndices = referencePlan.references.some((ref) => typeof ref.wireIndex === "number");
-  const activeRefs = hasWireIndices ? referencePlan.references.filter((ref) => typeof ref.wireIndex === "number") : referencePlan.references;
-  return activeRefs.map((ref, idx) => {
-    const num = typeof ref.wireIndex === "number" ? ref.wireIndex : idx + 1;
-    if (ref.role === "identity" && ref.subject) {
-      return `Use reference image ${num} specifically for ${ref.subject}'s facial identity and hair; follow the scene prompt for current pose, outfit, and setting.`;
-    }
-    if (ref.role === "clothing" && ref.subject) {
-      return `Use reference image ${num} for ${ref.subject}'s clothing details.`;
-    }
-    if (ref.role === "style") {
-      return `Use reference image ${num} for overall artistic rendering style.`;
-    }
-    return `Use reference image ${num} as a visual reference.`;
-  });
-}
-var init_helpers = __esm(() => {
-  init_character();
 });
 
 // src/backend/runtime/prompt-serializers/flux3-klein.ts
@@ -53550,7 +53808,8 @@ function applyDeltaOnlySubjectBrief(brief, referencePlan) {
       const body2 = line2.slice(colonIdx + 1);
       const attireMatch = body2.match(/;\s*(?:wearing|attired in)\s+([^;\n]+)/i);
       const attireClause = attireMatch?.[1] ? `; wearing ${attireMatch[1].trim()}` : "";
-      return `${name2}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
+      const appearance = body2.trim().split(/;\s*(?:wearing|attired in)\s+/i, 1)[0];
+      return `${name2}: ${appearance}, matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
     });
     return { ...brief, subjects: lines.join(`
 `) };
@@ -53789,7 +54048,8 @@ function manualCameraOverrides(camera) {
   };
 }
 function buildV2ImageRequest(input2) {
-  const { config: config2, cue, profile, rebuild } = input2;
+  const { config: config2, profile, rebuild } = input2;
+  const cue = input2.brief.ensembleCast ? { ...input2.cue, ensembleSubjects: input2.brief.ensembleCast } : input2.cue;
   const request = { ...input2.request, parameters: { ...input2.request.parameters } };
   const metadata = input2.metadata ? structuredClone(input2.metadata) : undefined;
   const effectiveRatio = cue.preferredAspectRatio ?? (config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === "9:16" ? "9:16" : undefined);
@@ -54278,117 +54538,6 @@ var init_scene_art_index = __esm(() => {
   }).strict();
   runtimes3 = new WeakMap;
 });
-
-// src/backend/runtime/prompt-protection.ts
-function containsTokenSequence(haystack, needle) {
-  if (!needle.length || needle.length > haystack.length)
-    return false;
-  outer:
-    for (let start = 0;start <= haystack.length - needle.length; start += 1) {
-      for (let offset = 0;offset < needle.length; offset += 1) {
-        if (haystack[start + offset] !== needle[offset])
-          continue outer;
-      }
-      return true;
-    }
-  return false;
-}
-function startsWithTokenSequence(haystack, prefix) {
-  if (!prefix.length || prefix.length > haystack.length)
-    return false;
-  return prefix.every((token, index) => haystack[index] === token);
-}
-function promptProtection(prompt, metadata, compactSingle = false) {
-  const source = metadata?.brief.subjects.trim() ?? "";
-  const empty = { exact: "", facts: [], subjects: [], minimumCharacters: 0 };
-  if (!source)
-    return empty;
-  const original = canonical(prompt), paddedOriginal = ` ${original} `;
-  if (metadata?.brief.subjectMode !== "ensemble") {
-    const tagSource = source.replace(/;\s*|\n+/g, ", ").replace(/\s+/g, " ").trim();
-    const exact = prompt.includes(source) ? source : tagSource && prompt.includes(tagSource) ? tagSource : "";
-    if (!compactSingle && exact) {
-      return { ...empty, exact, minimumCharacters: exact.length };
-    }
-    if (compactSingle || !exact) {
-      const promptTokens = tokenize(prompt);
-      const facts = [...new Map(source.split(/[,;\n]+/).map((value) => value.trim()).filter((value) => containsTokenSequence(promptTokens, tokenize(value))).map((value) => {
-        const bare = value.replace(/^wearing\s+/i, "");
-        return [canonical(bare), bare];
-      })).values()];
-      return { ...empty, facts, minimumCharacters: facts.reduce((sum, fact) => sum + fact.length + 2, 0) };
-    }
-    return { ...empty, exact, minimumCharacters: exact.length };
-  }
-  const originalTokens = tokenize(prompt), subjects = [];
-  const rows = source.split(/\r?\n/).filter((row) => row.indexOf(":") > 0);
-  const declarations = [];
-  for (const row of rows) {
-    const name2 = row.slice(0, row.indexOf(":")).trim();
-    if (name2.length > 160 || !canonical(name2))
-      continue;
-    const escaped = name2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    for (const match of prompt.matchAll(new RegExp(escaped + "\\s*:", "giu"))) {
-      if (match.index > 0 && /[\p{L}\p{N}]/u.test(prompt[match.index - 1]))
-        continue;
-      declarations.push({ name: name2, index: match.index, end: match.index + match[0].length });
-    }
-  }
-  declarations.sort((a, b) => a.index - b.index);
-  for (const row of rows) {
-    const colon = row.indexOf(":");
-    if (colon < 1)
-      continue;
-    const name2 = row.slice(0, colon).trim();
-    if (name2.length > 160 || !canonical(name2) || !containsTokenSequence(originalTokens, tokenize(name2)))
-      continue;
-    const declared = declarations.find((d) => d.name === name2);
-    const next = declared ? declarations.find((d) => d.index > declared.index) : undefined;
-    const newline = declared ? prompt.indexOf(`
-`, declared.end) : -1;
-    const current = declared ? prompt.slice(declared.end, Math.min(next?.index ?? prompt.length, newline < 0 ? prompt.length : newline)).trim() : "";
-    const unchanged = declared && startsWithTokenSequence(tokenize(current), tokenize(row.slice(colon + 1)));
-    const values = declared && !unchanged ? current : row.slice(colon + 1);
-    const scopeTokens = declared ? tokenize(current) : originalTokens;
-    const facts = [...new Set(values.split(/[,;\n]+/).map((value) => value.trim()).filter((value) => Boolean(canonical(value)) && containsTokenSequence(scopeTokens, tokenize(value))))];
-    subjects.push({ name: name2, facts });
-  }
-  if (!subjects.length)
-    return { ...empty, exact: prompt.includes(source) ? source : "", minimumCharacters: prompt.includes(source) ? source.length : 0 };
-  return { ...empty, subjects, minimumCharacters: subjects.reduce((sum, s) => sum + s.name.length + 2 + s.facts.reduce((n, f) => n + f.length + 2, 0), 0) };
-}
-function assertPromptProtection(prompt, protection) {
-  if (protection.exact && !prompt.includes(protection.exact))
-    throw new Error("The protected identity/outfit phrase was changed or omitted.");
-  const promptTokens = tokenize(prompt);
-  if (!protection.facts.every((fact) => containsTokenSequence(promptTokens, tokenize(fact))))
-    throw new Error("Required subject appearance or outfit details were omitted or changed. Keep every supplied appearance fact.");
-  const mentions = [];
-  for (const [subject, lock] of protection.subjects.entries()) {
-    const nameTokens = tokenize(lock.name);
-    for (let start = 0;start + nameTokens.length <= promptTokens.length; start += 1) {
-      if (nameTokens.every((token, offset) => promptTokens[start + offset] === token))
-        mentions.push({ index: start, subject });
-    }
-  }
-  mentions.sort((a, b) => a.index - b.index);
-  for (const [index, lock] of protection.subjects.entries()) {
-    const owned = mentions.filter((m) => m.subject === index);
-    if (!owned.length)
-      throw new Error("A required cast member was omitted from the rewritten prompt.");
-    const valid = owned.some((mention) => {
-      const next = mentions.find((m) => m.index > mention.index && m.subject !== index);
-      const section = promptTokens.slice(mention.index, next?.index ?? promptTokens.length);
-      return lock.facts.every((fact) => containsTokenSequence(section, tokenize(fact)));
-    });
-    if (!valid)
-      throw new Error("Required cast appearance details were omitted, changed, or assigned to another person. Keep each supplied appearance fact with its named subject.");
-  }
-}
-var canonical = (value) => value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " "), tokenize = (value) => {
-  const text3 = canonical(value);
-  return text3 ? text3.split(" ") : [];
-};
 
 // src/backend/runtime/prompt-anchors.ts
 function sanitizePinnedClauseForDialect(clause, dialect) {
@@ -54991,6 +55140,7 @@ async function enrichImagePrompt(spindle2, request, metadata, config2, userId, s
 }
 var output2;
 var init_prompt_rewrite = __esm(() => {
+  init_prompt_protection();
   init_image_prompt_profile();
   init_image_prompt_profile_v2();
   init_prompt_budget();
@@ -56104,44 +56254,44 @@ var init_reference_source = __esm(() => {
 // src/backend/runtime/images.ts
 var exports_images = {};
 __export(exports_images, {
-  CACHE_JOB_PROVIDER: () => CACHE_JOB_PROVIDER,
-  applyAttireOverride: () => applyAttireOverride,
-  cacheEligibleCue: () => cacheEligibleCue,
-  cardPortraitFor: () => cardPortraitFor,
-  cardPortraitKey: () => cardPortraitKey,
-  cardReferenceForCache: () => cardReferenceForCache,
-  castAppearanceIdentity: () => castAppearanceIdentity,
-  castArtIdentityFor: () => castArtIdentityFor,
-  classifySubject: () => classifySubject,
-  cleanClothingFromPhrase: () => cleanClothingFromPhrase,
-  compatiblePortrait: () => compatiblePortrait,
-  compileImagePrompt: () => compileImagePrompt,
-  compileNegativePrompt: () => compileNegativePrompt,
-  compileNovelAiRequest: () => compileNovelAiRequest,
-  compileTemplateCue: () => compileTemplateCue,
-  computeDeterministicV2Plan: () => computeDeterministicV2Plan,
-  createAssetJobs: () => createAssetJobs,
-  cueCharacterName: () => cueCharacterName,
-  cueUsesCharacterReference: () => cueUsesCharacterReference,
-  defaultSceneImageVerifier: () => defaultSceneImageVerifier,
-  describeCue: () => describeCue,
-  generateAssets: () => generateAssets,
-  hydrateDnaReferenceImages: () => hydrateDnaReferenceImages,
-  isClothingTag: () => isClothingTag,
-  locationArtIdentityFor: () => locationArtIdentityFor,
-  multiReferenceParametersFor: () => multiReferenceParametersFor,
-  parseDataUrl: () => parseDataUrl,
-  portraitIdentityFingerprint: () => portraitIdentityFingerprint,
-  prepareAssetJobs: () => prepareAssetJobs,
-  referenceAnchoringEnabled: () => referenceAnchoringEnabled,
-  referenceParametersFor: () => referenceParametersFor,
-  resolveCacheCues: () => resolveCacheCues,
-  resolveCueCharacterVisualState: () => resolveCueCharacterVisualState,
-  resolveSceneImageProvider: () => resolveSceneImageProvider,
-  retainPlanEpisodes: () => retainPlanEpisodes,
-  sceneForCue: () => sceneForCue,
+  splitConnectionSelection: () => splitConnectionSelection,
   sceneImageIdentityFor: () => sceneImageIdentityFor,
-  splitConnectionSelection: () => splitConnectionSelection
+  sceneForCue: () => sceneForCue,
+  retainPlanEpisodes: () => retainPlanEpisodes,
+  resolveSceneImageProvider: () => resolveSceneImageProvider,
+  resolveCueCharacterVisualState: () => resolveCueCharacterVisualState,
+  resolveCacheCues: () => resolveCacheCues,
+  referenceParametersFor: () => referenceParametersFor,
+  referenceAnchoringEnabled: () => referenceAnchoringEnabled,
+  prepareAssetJobs: () => prepareAssetJobs,
+  portraitIdentityFingerprint: () => portraitIdentityFingerprint,
+  parseDataUrl: () => parseDataUrl,
+  multiReferenceParametersFor: () => multiReferenceParametersFor,
+  locationArtIdentityFor: () => locationArtIdentityFor,
+  isClothingTag: () => isClothingTag,
+  hydrateDnaReferenceImages: () => hydrateDnaReferenceImages,
+  generateAssets: () => generateAssets,
+  describeCue: () => describeCue,
+  defaultSceneImageVerifier: () => defaultSceneImageVerifier,
+  cueUsesCharacterReference: () => cueUsesCharacterReference,
+  cueCharacterName: () => cueCharacterName,
+  createAssetJobs: () => createAssetJobs,
+  computeDeterministicV2Plan: () => computeDeterministicV2Plan,
+  compileTemplateCue: () => compileTemplateCue,
+  compileNovelAiRequest: () => compileNovelAiRequest,
+  compileNegativePrompt: () => compileNegativePrompt,
+  compileImagePrompt: () => compileImagePrompt,
+  compatiblePortrait: () => compatiblePortrait,
+  cleanClothingFromPhrase: () => cleanClothingFromPhrase,
+  classifySubject: () => classifySubject,
+  castArtIdentityFor: () => castArtIdentityFor,
+  castAppearanceIdentity: () => castAppearanceIdentity,
+  cardReferenceForCache: () => cardReferenceForCache,
+  cardPortraitKey: () => cardPortraitKey,
+  cardPortraitFor: () => cardPortraitFor,
+  cacheEligibleCue: () => cacheEligibleCue,
+  applyAttireOverride: () => applyAttireOverride,
+  CACHE_JOB_PROVIDER: () => CACHE_JOB_PROVIDER
 });
 function hash2(source) {
   let value = 2166136261;
@@ -56335,8 +56485,8 @@ function compileNovelAiRequest(config2, scene, cue, appearances, characterDNALib
     const compiled = compileTemplateCue(config2, scene, cue, appearances, characterDNALibrary, storyDNASet);
     const model2 = config2.imageModel || "";
     const caps2 = novelAiCapabilities(model2);
-    if (config2.imagePromptEngineVersion === 2 && caps2.structured && cue.imageTemplate.subjectMode === "ensemble" && (cue.ensembleSubjects?.length ?? 0) > 0) {
-      const subjects = cue.ensembleSubjects;
+    if (config2.imagePromptEngineVersion === 2 && caps2.structured && compiled.brief.ensembleCast?.length) {
+      const subjects = compiled.brief.ensembleCast.filter((subject) => subject.appearance);
       const spatialHints = cue.shotHint?.spatialRelationships ?? [];
       const xSlots = subjects.length === 2 ? [0.28, 0.72] : subjects.length === 3 ? [0.2, 0.5, 0.8] : subjects.map((_, i) => Number((0.18 + 0.64 * i / Math.max(1, subjects.length - 1)).toFixed(2)));
       const characterTags = subjects.map((subject, index) => {
@@ -56350,7 +56500,7 @@ function compileNovelAiRequest(config2, scene, cue, appearances, characterDNALib
         const y = depth ? yMap[depth] ?? 0.5 : 0.5;
         const rawTags = [subject.appearance, subject.attire ? `wearing ${subject.attire}` : ""].filter(Boolean).join(", ");
         return {
-          tags: renderNovelAiEmphasis(rawTags || subject.name, model2),
+          tags: renderNovelAiEmphasis(rawTags, model2),
           centers: [{ x, y }]
         };
       });
@@ -57484,16 +57634,19 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               ...provider === "comfyui" && config2.imageParameters.denoise === undefined ? { denoise: 0 } : {}
             };
             const { connectionId, workflowId } = splitConnectionSelection(config2.imageConnectionId);
-            const effectiveParameters = {
-              ...parameters,
-              ...nai?.parameters ?? {},
-              ...workflowId ? { workflow_id: workflowId } : {}
-            };
             if (signal.aborted)
               throw abortError3(signal);
             if (jobSignal.aborted)
               throw abortError3(jobSignal);
             const selected = await getBatchConnection(connectionId ?? null);
+            const selectedProvider = selected?.provider?.trim().toLowerCase() ?? provider;
+            const selectedModel = config2.imageModel || selected?.model || "";
+            const selectedNai = selectedProvider === "novelai" ? nai && selectedModel === config2.imageModel ? nai : compileNovelAiRequest({ ...config2, imageModel: selectedModel }, scene, cue, characterAppearance, characterDNALibrary, storyDNASet) : null;
+            const effectiveParameters = {
+              ...parameters,
+              ...selectedNai?.parameters ?? {},
+              ...workflowId ? { workflow_id: workflowId } : {}
+            };
             const input2 = {
               ...connectionId ? { connection_id: connectionId } : {},
               prompt,
@@ -57511,7 +57664,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               parameters: { ...templateOutputParameters(cue.imageTemplate, selected?.provider ?? provider, config2.imageParameters, selected?.default_parameters ?? {}, config2.imageModel || selected?.model), ...input2.parameters }
             } : input2;
             if (cue.imageTemplate) {
-              frozen = applyImageEdits({ ...frozen, prompt, negativePrompt }, {});
+              frozen = applyImageEdits({ ...frozen, prompt, negativePrompt, ensembleCast: initialCompiled?.brief.ensembleCast }, {});
               frozen.parameters = { ...frozen.parameters, negativePrompt };
             }
             if (!cueUsesCharacterReference(cue))
@@ -57649,12 +57802,12 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
                 if (nextDnaForRefs) {
                   await hydrateDnaReferenceImages(spindle2, plan.key.chatId, userId, nextDnaForRefs, nextCue, signal);
                 }
-                const nextNai = provider === "novelai" ? compileNovelAiRequest(config2, relightScene, nextCue, characterAppearance) : null;
-                const updated = applyImageEdits({ ...frozen, prompt: nextCompiled.prompt, negativePrompt: nextCompiled.negativePrompt }, {});
+                const updated = applyImageEdits({ ...frozen, prompt: nextCompiled.prompt, negativePrompt: nextCompiled.negativePrompt, ensembleCast: nextCompiled.brief.ensembleCast }, {});
                 const effectiveConnectionId = options3?.connectionId !== undefined ? options3.connectionId.trim() || undefined : selected?.id;
                 const effectiveSelected = effectiveConnectionId && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(effectiveConnectionId, userId) : selected;
                 const effectiveProvider = effectiveSelected?.provider?.trim().toLowerCase() ?? selected?.provider ?? provider;
                 const effectiveModel = options3?.model !== undefined ? options3.model.trim() || undefined : updated.model || config2.imageModel || effectiveSelected?.model;
+                const nextNai = effectiveProvider === "novelai" ? compileNovelAiRequest({ ...latestConfig, imageModel: effectiveModel ?? "" }, relightScene, nextCue, characterAppearance, characterDNALibrary, storyDNASet) : null;
                 const nextRefPlan = effectiveProvider && (nextPortrait || nextDnaForRefs) ? resolveReferencePlan({ brief: nextCompiled.brief, cue: nextCue, portraits: nextPortraitsForCue, characterDNALibrary: nextDnaForRefs }) : undefined;
                 const nextMultiRef = effectiveProvider ? multiReferenceParametersFor(effectiveProvider, nextRefPlan, latestConfig, nextPortrait) : {};
                 const request = {
@@ -57748,12 +57901,13 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
             assertModelOutputParameters(activeProvider, approved.model, approved.parameters ?? {});
             if (approved.promptProfile?.output)
               assertCapabilityOutput(approved.promptProfile.output, approved.parameters ?? {});
-            const { promptProfile: _promptProfile, ...providerRequest } = approved;
+            const { promptProfile: _promptProfile, ensembleCast, ...providerRequest } = approved;
             if (approved.promptProfile?.negativeMode === "positive-only" || approved.promptProfileV2?.negativePolicy === "positive-only" || sanitizeImagePayloadParameters({}, activeProvider, approved.model) && approved.model && /ideogram|flux-3.*klein|recraft|banana/i.test(approved.model)) {
               delete providerRequest.negativePrompt;
             }
             const rawParams = providerOutputParameters(approved.parameters ?? {});
             const safeParams = sanitizeImagePayloadParameters(rawParams, activeProvider, approved.model);
+            assertEnsembleAppearance(ensembleCast, providerRequest.prompt, safeParams.characterTags);
             if (cacheOptions.waitForDispatch) {
               do {
                 await cacheOptions.waitForDispatch(scheduledJob, jobSignal);
@@ -57972,6 +58126,7 @@ var init_images = __esm(() => {
   init_attire();
   init_image_review();
   init_prompt_rewrite();
+  init_prompt_protection();
   init_config();
   init_novelai_prompt();
   init_contracts();

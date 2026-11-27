@@ -9,8 +9,9 @@ import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js'
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { syncGeneratedModelOutput } from './template-output.js';
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
-import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
+import { ImagePromptMetadataSchema, type ImagePromptMetadata, type VisualBrief } from "../../shared/image-templates.js";
 import { compactPromptText, compactNegativePrompt, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
+import { assertEnsembleAppearance } from "./prompt-protection.js";
 
 export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0] & {
   promptProfile?: ImagePromptProfile;
@@ -18,6 +19,7 @@ export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate
   outputPlan?: ImageOutputPlan;
   shotSpec?: ImageShotSpec;
   styleSnapshot?: StyleDNA;
+  ensembleCast?: VisualBrief["ensembleCast"];
 };
 const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^_lumiglyphics|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
 
@@ -187,7 +189,10 @@ export class ImageReviewGate {
   async prepare(jobId: string, paragraphIndex: number, input: ImageGenerationRequest, metadata: Metadata, review: boolean, signal: AbortSignal): Promise<ImageGenerationRequest> {
     if (signal.aborted) throw aborted("Image request cancelled.");
     const request = compactImageRequest(structuredClone(input));
-    try{assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);}catch{review=true;}
+    try {
+      assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);
+      assertEnsembleAppearance(request.ensembleCast, request.prompt, request.parameters?.characterTags);
+    } catch { review = true; }
     const record = reviewRecord(jobId, paragraphIndex, request, metadata, review);
     if (!review) { await this.onRecord(record); if (signal.aborted) throw aborted("Image request cancelled."); return request; }
     let item!: Pending;
@@ -301,6 +306,7 @@ export class ImageReviewGate {
     if (action === "skip") { this.pending.delete(requestId); item.skipped = true; item.reject(aborted("Image skipped.")); return true; }
     const edited = applyImageEdits(item.request, edits);
     assertPromptLengths(edited.prompt,edited.negativePrompt,edited.promptProfile);
+    assertEnsembleAppearance(edited.ensembleCast, edited.prompt, edited.parameters?.characterTags);
     if(edited.promptProfile?.output)assertCapabilityOutput(edited.promptProfile.output,edited.parameters??{});
     this.pending.delete(requestId);
     item.resolve(edited);

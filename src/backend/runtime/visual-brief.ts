@@ -3,7 +3,7 @@ import { applyAttireOverride } from "./attire.js";
 import type { VisualNovelConfig } from "../../config.js";
 import type { SceneState, VisualCue } from "../../shared/contracts.js";
 import type { CharacterAppearanceMap } from "../../shared/identity.js";
-import { characterAppearanceKey, normalizeCharacterName } from "../../shared/identity.js";
+import { characterAppearanceKey, isUsableIdentity, normalizeCharacterName } from "../../shared/identity.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { resolveImageTemplate, type ImageTemplate } from "../../shared/image-templates.js";
 import type { VisualBrief } from "../../shared/image-templates.js";
@@ -14,6 +14,7 @@ import { isScenarioTitle } from "../../shared/card-role.js";
 import { areNamesEquivalent, findMatchingCharacterId } from "../../shared/nicknames.js";
 import { deriveShortAliases, findMatchingLocation, findMatchingItem, formatLocationDNAForImagePrompt, formatItemDNAForImagePrompt, matchesBoundaryCandidate, type StoryDNASet } from "../../shared/story-dna.js";
 import { isEnclosedInterior } from "../../shared/scene-atmosphere.js";
+import { recoverStagedCast } from "./ensemble-cast.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
@@ -317,7 +318,20 @@ export function buildVisualBrief(
 
   const deletedLibrary = (characterDNALibrary && 'deleted' in characterDNALibrary ? characterDNALibrary.deleted : undefined) as Record<string, CharacterDNA> | undefined;
   const isMemberExcluded = (n: string) => isScenarioTitle(n) || Boolean(deletedLibrary && (findCharacterDNA(deletedLibrary, n) || findMatchingCharacterId(deletedLibrary, n)));
-  const members = (cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:""}))).filter(m => !isMemberExcluded(m.name)).map(member=>{
+  type Member = NonNullable<VisualBrief["ensembleCast"]>[number];
+  const plannedMembers: Member[] = ensemble ? cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:""})) : [];
+  const candidates = [...plannedMembers];
+  if (ensemble && cue.shotHint?.spatialRelationships?.length) {
+    const folio = Object.values(chars ?? {}).filter(member => !isMemberExcluded(member.name));
+    const otherRoster = [...new Set([...scene.cast, ...Object.keys(appearances ?? {})])]
+      .filter(name => !isMemberExcluded(name) && !(chars && findMatchingCharacterId(chars, name)))
+      .map(name => ({ name }));
+    const visibleNames = plannedMembers.map(member => member.name);
+    const staged = recoverStagedCast(visibleNames, cue.shotHint.spatialRelationships, [...folio, ...otherRoster]);
+    candidates.push(...staged.slice(visibleNames.length).map(name => ({name,appearance:""})));
+  }
+  const seen = new Set<string>();
+  const members: Member[] = candidates.filter(member => !isMemberExcluded(member.name)).flatMap(member=>{
     let dnaAppearance: string | undefined;
     let memberDna: CharacterDNA | undefined;
     if (chars) {
@@ -327,42 +341,64 @@ export function buildVisualBrief(
         dnaAppearance = formatCharacterDNAForImagePrompt(memberDna, { includeOutfit: false });
       }
     }
-    const saved = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
+    const canonicalName = memberDna?.name ?? member.name;
+    const key = characterAppearanceKey(canonicalName);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const matchesMember = (name:string) => {
+      if (characterAppearanceKey(name) === key) return true;
+      return memberDna && chars ? findMatchingCharacterId(chars, name) === memberDna.id : areNamesEquivalent(name, canonicalName);
+    };
+    const entries = Object.entries(appearances ?? {});
+    const saved = entries.find(([name]) => characterAppearanceKey(name) === key)?.[1] ?? entries.find(([name]) => matchesMember(name))?.[1];
     
     // Continuity fallback if Character DNA or saved appearance is not yet recorded
-    const cont = scene.continuity?.characters ? Object.entries(scene.continuity.characters).find(([k]) => areNamesEquivalent(k, member.name))?.[1] : undefined;
+    const cont = Object.entries(scene.continuity?.characters ?? {}).find(([name]) => matchesMember(name))?.[1];
     const contAppearance = cont?.appearance ? Object.values(cont.appearance).filter(Boolean).join(', ') : undefined;
     const contWardrobe = cont?.wardrobe ? Object.values(cont.wardrobe).filter(Boolean).join(', ') : undefined;
 
     const isCuratedDna = memberDna && (memberDna.locked || !memberDna.autoDiscovered);
-    const fallbackAppearance = isCuratedDna
-      ? (dnaAppearance || saved || (member.appearance?.trim() ? member.appearance : contAppearance))
-      : (saved || dnaAppearance || (member.appearance?.trim() ? member.appearance : contAppearance));
+    const currentIdentity = cue.character && matchesMember(cue.character) ? cue.resolvedIdentity : undefined;
+    const sceneIdentity = scene.character && matchesMember(scene.character) ? scene.identityPrompt : undefined;
+    const localAppearance = [member.appearance, currentIdentity, contAppearance, sceneIdentity];
+    const appearancesInOrder = manual ? [member.appearance] : [
+      ...(isCuratedDna ? [dnaAppearance, saved] : [saved, dnaAppearance]),
+      ...localAppearance,
+    ];
     const memberDnaWardrobe = (memberDna?.activeWardrobeKey && memberDna.wardrobeStates?.[memberDna.activeWardrobeKey]) || memberDna?.activeOutfit || memberDna?.signatureOutfit;
     const memberAttire = (memberDna?.lockActiveWardrobe && memberDnaWardrobe)
       ? memberDnaWardrobe
-      : ('attire' in member && member.attire)
-        ? String(member.attire)
+      : member.attire
+        ? member.attire
         : (memberDnaWardrobe || contWardrobe || undefined);
-    const appearanceBase = manual ? member.appearance : (fallbackAppearance || member.appearance);
-    const appearance = memberAttire ? applyAttireOverride(appearanceBase, '') : appearanceBase;
-    return {...member, appearance, attire: memberAttire};
+    const appearance = appearancesInOrder
+      .map(value => optimizeAppearanceTextForImagePrompt(memberAttire ? applyAttireOverride(value ?? "", "") : value ?? ""))
+      .find(value => isUsableIdentity(canonicalName, value.split(/[,;\n]/))) ?? "";
+    return [{ ...member, appearance, ...(memberAttire ? { attire: memberAttire } : {}) }];
   });
+  if (members.length > 16) throw new Error("This shot has more than 16 visible cast members. Choose a smaller group before generating it.");
   // Reserve room for every name before sharing the remaining appearance budget.
   // A long first description must never erase the persona or the last cast member.
   const nameBudget = members.reduce((total, member) => total + member.name.length + 4, 0);
   if (ensemble && nameBudget > 4000) throw new Error("The ensemble names exceed the prompt preview limit. Shorten cast display names before preparing this picture.");
   const isHighCap = Boolean(config.imageModel && /ideogram|recraft|grok|flux|nano-banana|seedream|midjourney|gpt-image/i.test(config.imageModel)) || Boolean(config.imagePromptBudgetOverride);
   const baseBudget = isHighCap ? (config.imagePromptBudgetOverride ? config.imagePromptBudget : 4000) : 1800;
-  const descriptionBudget = Math.max(0, Math.floor((Math.max(baseBudget, nameBudget) - nameBudget) / Math.max(1, members.length)));
-  const group = members.map(member => {
-    const look = optimizeAppearanceTextForImagePrompt(member.appearance.trim());
-    const attireText = ("attire" in member && member.attire) ? `; wearing ${member.attire}` : "";
-    const remainingForLook = Math.max(0, descriptionBudget - attireText.length);
-    const boundedLook = look.length > remainingForLook ? look.slice(0, remainingForLook).replace(/\s+\S*$/, "") : look;
-    const description = boundedLook ? `${boundedLook}${attireText}` : attireText ? attireText.replace(/^;\s*/, "") : "appearance not established";
-    return `${member.name}: ${description}`;
-  }).join("\n");
+  const descriptionBudget = Math.max(0, Math.floor((Math.max(Math.min(baseBudget,4000), nameBudget) - nameBudget) / Math.max(1, members.length)));
+  const boundClause = (value:string, limit:number): string => {
+    if (value.length <= limit) return value;
+    const clipped = value.slice(0, limit);
+    const boundary = Math.max(clipped.lastIndexOf(","), clipped.lastIndexOf(";"));
+    return (boundary > 0 ? clipped.slice(0,boundary) : clipped.replace(/\s+\S*$/, "")).trim();
+  };
+  const outfitLead = "; wearing ";
+  const boundedCast = members.map(({ name, appearance, attire, persona }): Member => {
+    const identityAllowance = Math.min(descriptionBudget, Math.max(80, Math.ceil(descriptionBudget / 2)));
+    const wardrobeAllowance = Math.max(0, descriptionBudget - Math.min(appearance.length, identityAllowance) - outfitLead.length);
+    const boundedAttire = boundClause(attire ?? "", wardrobeAllowance);
+    const boundedAppearance = boundClause(appearance, descriptionBudget - (boundedAttire ? outfitLead.length + boundedAttire.length : 0));
+    return { name, appearance: boundedAppearance, ...(boundedAttire ? { attire: boundedAttire } : {}), ...(persona ? { persona } : {}) };
+  });
+  const group = boundedCast.map(member => `${member.name}: ${member.appearance || "appearance not established"}${member.attire ? outfitLead + member.attire : ""}`).join("\n");
   const rawLocDNA = storyDNASet?.locations ? findMatchingLocation(storyDNASet.locations, environment.location) : undefined;
   const locDNA = rawLocDNA && (!rawLocDNA.autoDiscovered || rawLocDNA.locked || Boolean(rawLocDNA.architecture?.trim()))
     ? rawLocDNA
@@ -385,6 +421,7 @@ export function buildVisualBrief(
   }
 
   return {
+    ...(ensemble ? { ensembleCast: boundedCast } : {}),
     ...(!noPeople?{subjectPreparation:{
       name:ensemble?'Named ensemble':name.slice(0,256),identity:ensemble?'':(attire?applyAttireOverride(identity,''):identity).slice(0,4000),
       identitySource:ensemble?'ensemble snapshot' as const:!identity?'unavailable' as const:manual?'manual correction' as const:lockedDNA?.locked?'locked DNA' as const:saved?'saved appearance' as const:'resolved context' as const,
@@ -410,6 +447,6 @@ export function buildVisualBrief(
     framing: template.framing,
     referencePolicy: noPeople || ensemble ? "none" : template.referencePolicy,
     sources: [...(cue.visualSources ?? []), "scene context", ...(locDNA ? ["location DNA"] : []), ...(activeItemClauses.length > 0 ? ["item DNA"] : []), ...(lockedDNA?.locked ? ["character DNA matrix"] : []), ...(ensemble ? ["named cast and persona appearance snapshot"] : !noPeople && saved && !manual ? ["saved appearance"] : [])].slice(0, 24),
-    conflicts: [...conflicts, ...(ensemble && members.some(member => member.appearance.length > descriptionBudget) ? ["Ensemble appearance descriptions are condensed to share the prompt budget; all listed names are retained."] : []), ...sharedStyleWarnings(template, config.promptPrefix, config.promptSuffix, config.negativePrompt)].slice(0, 16)
+    conflicts: [...conflicts, ...(ensemble && members.some((member,index) => member.appearance !== boundedCast[index]?.appearance || member.attire !== boundedCast[index]?.attire) ? ["Ensemble appearance descriptions or outfits are condensed to share the prompt budget."] : []), ...sharedStyleWarnings(template, config.promptPrefix, config.promptSuffix, config.negativePrompt)].slice(0, 16)
   };
 }

@@ -44,6 +44,7 @@ import { CameraAngleSchema, CompositionModeSchema, ShotIntentSchema, ShotSizeSch
 import { reduceContinuity } from "../core/continuity.js";
 import { resolveCueTimeline } from "../core/cue-state.js";
 import { repairScenarioSubjects } from "./scenario-subjects.js";
+import { recoverStagedCast } from "./ensemble-cast.js";
 import {scenarioPersonaSubject} from './scenario-persona.js';
 import { extractProseAtmosphereDelta, prepareNarrative, type StructuredTurnHints } from "../core/paragraphs.js";
 import { decideSceneBoundary } from "../core/scene-boundary.js";
@@ -2506,9 +2507,11 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   // add a provider request: only an exact-compatible cached image can turn one
   // into an extra swap (see runtime/images.ts resolveCacheCues).
   const cacheCandidates = peakSelection ? peakSelection.overflow.slice(0, MAX_CACHE_CUES_PER_TURN) : [];
+  const castRoster = [...Object.values(registry), ...(personaName ? [{ name: personaName, aliases: ["User", "Player", "Persona"] }] : [])];
   const materializeCue = (cue: typeof distinctCues[number], index: number) => {
       const scene = sceneForParagraph(scenes, cue.paragraphIndex);
       const paragraph = promptParagraphs.find((candidate) => candidate.index === cue.paragraphIndex);
+      const stagedCast = recoverStagedCast(cue.visibleCharacters ?? [], cue.shotHint?.spatialRelationships, castRoster);
       const cueIsUser = isPersona(cue.character);
       // When a cue was erroneously aimed at the user/persona (e.g. user dialogue
       // or action), do not copy the user's expression or scan the user's speech
@@ -2519,7 +2522,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       let selection = resolveImageTemplate(input.config, input.config.dynamicImageTemplates ? cue.templateId : undefined);
       if (input.config.dynamicImageTemplates && input.config.readerPreferences?.directorAi !== false && !cue.templateId) {
         const pLower = `${paragraph?.text ?? ""} ${cue.visualDescription ?? ""}`.toLowerCase();
-        const visibleCount = Array.isArray(cue.visibleCharacters) ? cue.visibleCharacters.length : 0;
+        const visibleCount = stagedCast.length;
         const hasClimax = /\b(explodes?|shatters?|unleashes?|betrayal|devastating|catastrophic|awakens?|climaxes?|standoff)\b/i.test(pLower);
         const hasAction = /\b(strikes?|slashes?|dodges?|sprints?|grabs?|leaps?|clashes?|punches?|tackles?|shoots?|firing|defends?|parr(y|ies)|lunges?)\b/i.test(pLower);
         const hasPeakEmotion = /\b(sobbing|weeps?|terrified|horrified|gasps?|wide-eyed|tears?|stunned|trembl(es?|ing)|whispered? threat|stares? in shock)\b/i.test(pLower);
@@ -2570,15 +2573,17 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         const environmentTemplate=input.config.imageTemplates.find(template=>template.enabled&&template.category==='environment'&&template.subjectMode==='none');
         if(environmentTemplate)selection={template:templateSnapshot(environmentTemplate),fallbackReason:'No drawable character appearance was resolved for this scenario. Showing the established setting without people; correct the subject to draw a character.'};
       }
-      const visible = cue.visibleCharacters ?? [...scene.cast, ...(personaName ? [personaName] : [])];
+      const visible = selection.template.subjectMode === "ensemble"
+        ? cue.visibleCharacters || stagedCast.length ? stagedCast : scene.cast
+        : cue.visibleCharacters ?? [...scene.cast, ...(personaName ? [personaName] : [])];
       const ensembleSubjects: Array<{name:string;appearance:string;attire?:string;persona?:boolean}> = [];
       for (const name of visible) {
         const person = resolveCharacterReference(registry, { name });
         const persona = isPersona(name);
         const canonical = persona ? personaName : (person?.name ?? normalizeCharacterName(name));
         if (!canonical || ensembleSubjects.some(item => characterAppearanceKey(item.name) === characterAppearanceKey(canonical))) continue;
-        const savedKey = appearanceMapKeyFor(input.characterAppearance, canonical);
-        const saved = savedKey ? input.characterAppearance[savedKey] : "";
+        const savedKey = appearanceMapKeyFor(turnAppearances, canonical);
+        const saved = savedKey ? turnAppearances[savedKey] : "";
         const description = saved || (persona ? distillVisualTags(visualContext.personaIdentity?.description ?? "").join(", ") : person?.tags ?? "");
         const current = timeline.snapshots[cue.paragraphIndex]!;
         const outfit = characterAppearanceKey(canonical) === characterAppearanceKey(current.character ?? "") ? current.attire : (timeline.snapshots.find(s => characterAppearanceKey(canonical) === characterAppearanceKey(s.character ?? ""))?.attire ?? null);

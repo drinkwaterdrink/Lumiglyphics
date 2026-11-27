@@ -392,6 +392,30 @@ test("planner supports multi-character cast resolution and attire overrides", as
   assert.equal(result.plan.visualCues[0]?.attire, "white sundress, straw hat");
 });
 
+test("planner recovers a staged roster member from an incomplete two-shot cast", async () => {
+  const spindle = fallbackSpindle();
+  spindle.generate.raw = async () => ({
+    choices: [{ message: { content: JSON.stringify({
+      scenes: [{ startParagraph: 0, cast: ["Mira", "Darby", "Elena"], character: "Mira" }],
+      cues: [{
+        paragraphIndex: 0, templateId: "two-shot", character: "Mira", visibleCharacters: ["Mira"],
+        shotHint: { intent: "two-shot", spatialRelationships: ["Darby stands on the right", "Elena is offscreen"] },
+      }],
+    }) } }],
+  }) as Awaited<ReturnType<typeof spindle.generate.raw>>;
+  const content = "Mira steps up to Darby by the door. She asks if he has heard from Elena.";
+  const result = await planTurn(spindle, {
+    chatId: "chat", message: { ...message, content }, content,
+    previousScene: null, previousContinuity: null, recentMessages: [],
+    config: { ...DEFAULT_CONFIG, parserConnectionId: "parser", dynamicImageTemplates: false, defaultImageTemplateId: "two-shot" },
+    singleCharacter: emptySingleCharacter(),
+    characterAppearance: { Mira: "silver hair", Darby: "purple hair", Elena: "green eyes" },
+  });
+  const visual = result.plan.visualCues[0];
+  assert.equal(visual?.imageTemplate?.subjectMode, "ensemble");
+  assert.deepEqual(visual?.ensembleSubjects?.map(member => [member.name, member.appearance]), [["Mira", "silver hair"], ["Darby", "purple hair"]]);
+});
+
 
 test("planTurn resolves {{user}}/{{char}} display macros in narrative paragraphs", async () => {
   const spindle: SpindleAPI = {

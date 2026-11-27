@@ -92,7 +92,8 @@ function applyDeltaOnlySubjectBrief(brief: VisualBrief, referencePlan?: Referenc
       const body = line.slice(colonIdx + 1);
       const attireMatch = body.match(/;\s*(?:wearing|attired in)\s+([^;\n]+)/i);
       const attireClause = attireMatch?.[1] ? `; wearing ${attireMatch[1].trim()}` : '';
-      return `${name}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
+      const appearance = body.trim().split(/;\s*(?:wearing|attired in)\s+/i, 1)[0];
+      return `${name}: ${appearance}, matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
     });
     return { ...brief, subjects: lines.join('\n') };
   }

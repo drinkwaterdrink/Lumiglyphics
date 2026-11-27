@@ -22,6 +22,7 @@ import type { SpindleAPI } from "lumiverse-spindle-types";
 import { applyImageEdits, compactImageRequest, type ImageGenerationRequest, type ImagePreparationMetadata, type RebuildOptions } from "./image-review.js";
 import { assertPromptLengths, fitPromptToBudget } from '../../shared/prompt-length.js';
 import {rewriteImagePrompt,enrichImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.js';
+import {assertEnsembleAppearance} from './prompt-protection.js';
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { novelAiCapabilities, novelAiQualityTags, NOVELAI_NEGATIVE_DEFAULT, renderNovelAiEmphasis } from "./novelai-prompt.js";
@@ -366,8 +367,8 @@ export function compileNovelAiRequest(config: VisualNovelConfig, scene: SceneSta
     const compiled = compileTemplateCue(config, scene, cue, appearances, characterDNALibrary, storyDNASet);
     const model = config.imageModel || "";
     const caps = novelAiCapabilities(model);
-    if (config.imagePromptEngineVersion === 2 && caps.structured && cue.imageTemplate.subjectMode === "ensemble" && (cue.ensembleSubjects?.length ?? 0) > 0) {
-      const subjects = cue.ensembleSubjects!;
+    if (config.imagePromptEngineVersion === 2 && caps.structured && compiled.brief.ensembleCast?.length) {
+      const subjects = compiled.brief.ensembleCast.filter(subject => subject.appearance);
       const spatialHints = cue.shotHint?.spatialRelationships ?? [];
       const xSlots = subjects.length === 2 ? [0.28, 0.72] : subjects.length === 3 ? [0.20, 0.50, 0.80] : subjects.map((_, i) => Number((0.18 + (0.64 * i) / Math.max(1, subjects.length - 1)).toFixed(2)));
       const characterTags = subjects.map((subject, index) => {
@@ -389,7 +390,7 @@ export function compileNovelAiRequest(config: VisualNovelConfig, scene: SceneSta
         const y = depth ? (yMap[depth] ?? 0.50) : 0.50;
         const rawTags = [subject.appearance, subject.attire ? `wearing ${subject.attire}` : ""].filter(Boolean).join(", ");
         return {
-          tags: renderNovelAiEmphasis(rawTags || subject.name, model),
+          tags: renderNovelAiEmphasis(rawTags, model),
           centers: [{ x, y }]
         };
       });
@@ -1769,16 +1770,22 @@ export async function generateAssets(
                 ...(provider === "comfyui" && config.imageParameters.denoise === undefined ? { denoise: 0.0 } : {})
               };
           const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
-          const effectiveParameters = {
-            ...parameters,
-            ...(nai?.parameters ?? {}),
-            ...(workflowId ? { workflow_id: workflowId } : {})
-          };
           // Relay/capture waits and storage operations can outlive cancellation.
           // Never start paid work after either the batch or job was cancelled.
           if (signal.aborted) throw abortError(signal);
           if (jobSignal.aborted) throw abortError(jobSignal);
           const selected = await getBatchConnection(connectionId ?? null);
+          const selectedProvider = selected?.provider?.trim().toLowerCase() ?? provider;
+          const selectedModel = config.imageModel || selected?.model || "";
+          const selectedNai = selectedProvider === "novelai"
+            ? nai && selectedModel === config.imageModel ? nai
+              : compileNovelAiRequest({ ...config, imageModel: selectedModel }, scene, cue, characterAppearance, characterDNALibrary, storyDNASet)
+            : null;
+          const effectiveParameters = {
+            ...parameters,
+            ...(selectedNai?.parameters ?? {}),
+            ...(workflowId ? { workflow_id: workflowId } : {}),
+          };
           const input: ImageGenerationRequest = {
             ...(connectionId ? { connection_id: connectionId } : {}),
             prompt,
@@ -1797,7 +1804,7 @@ export async function generateAssets(
             parameters: { ...templateOutputParameters(cue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}, config.imageModel || selected?.model), ...input.parameters }
           } : input;
           if (cue.imageTemplate) {
-            frozen = applyImageEdits({...frozen,prompt,negativePrompt}, {});
+            frozen = applyImageEdits({...frozen,prompt,negativePrompt,ensembleCast:initialCompiled?.brief.ensembleCast}, {});
             frozen.parameters = { ...frozen.parameters, negativePrompt };
           }
           if (!cueUsesCharacterReference(cue)) frozen = { ...frozen, parameters: withoutImageReferences(frozen.parameters ?? {}) };
@@ -1935,14 +1942,16 @@ export async function generateAssets(
               if (nextDnaForRefs) {
                 await hydrateDnaReferenceImages(spindle, plan.key.chatId, userId, nextDnaForRefs, nextCue, signal);
               }
-              const nextNai = provider === "novelai" ? compileNovelAiRequest(config, relightScene, nextCue, characterAppearance) : null;
-              const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt}, {});
+              const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt,ensembleCast:nextCompiled.brief.ensembleCast}, {});
               const effectiveConnectionId = options?.connectionId !== undefined ? (options.connectionId.trim() || undefined) : selected?.id;
               const effectiveSelected = effectiveConnectionId && typeof spindle.imageGen?.getConnection === 'function'
                 ? await spindle.imageGen.getConnection(effectiveConnectionId, userId)
                 : selected;
               const effectiveProvider = effectiveSelected?.provider?.trim().toLowerCase() ?? selected?.provider ?? provider;
               const effectiveModel = options?.model !== undefined ? (options.model.trim() || undefined) : (updated.model || config.imageModel || effectiveSelected?.model);
+              const nextNai = effectiveProvider === "novelai"
+                ? compileNovelAiRequest({ ...latestConfig, imageModel: effectiveModel ?? "" }, relightScene, nextCue, characterAppearance, characterDNALibrary, storyDNASet)
+                : null;
               const nextRefPlan = effectiveProvider && (nextPortrait || nextDnaForRefs)
                 ? resolveReferencePlan({ brief: nextCompiled.brief, cue: nextCue, portraits: nextPortraitsForCue, characterDNALibrary: nextDnaForRefs })
                 : undefined;
@@ -2027,12 +2036,13 @@ export async function generateAssets(
           const activeProvider = activeSelected?.provider?.trim().toLowerCase() ?? selected?.provider ?? provider;
           assertModelOutputParameters(activeProvider, approved.model, approved.parameters ?? {});
           if(approved.promptProfile?.output)assertCapabilityOutput(approved.promptProfile.output,approved.parameters??{});
-          const {promptProfile:_promptProfile,...providerRequest}=approved;
+          const {promptProfile:_promptProfile,ensembleCast,...providerRequest}=approved;
           if (approved.promptProfile?.negativeMode === 'positive-only' || approved.promptProfileV2?.negativePolicy === 'positive-only' || sanitizeImagePayloadParameters({}, activeProvider, approved.model) && approved.model && /ideogram|flux-3.*klein|recraft|banana/i.test(approved.model)) {
             delete providerRequest.negativePrompt;
           }
           const rawParams = providerOutputParameters(approved.parameters ?? {});
           const safeParams = sanitizeImagePayloadParameters(rawParams, activeProvider, approved.model);
+          assertEnsembleAppearance(ensembleCast, providerRequest.prompt, safeParams.characterTags);
           // The last asynchronous boundary: toggles during review/connection refresh
           // are checked again synchronously before the actual provider invocation.
           if(cacheOptions.waitForDispatch){do{await cacheOptions.waitForDispatch(scheduledJob,jobSignal);}while(cacheOptions.canDispatch&&!cacheOptions.canDispatch(scheduledJob));}

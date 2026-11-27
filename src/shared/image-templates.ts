@@ -40,7 +40,13 @@ export const SubjectPreparationSchema=z.object({
 export const VisualBriefSchema = z.object({
   scene: z.string().max(4000), subjects: z.string().max(4000), action: z.string().max(4000), composition: z.string().max(1000), lighting: z.string().max(1000),
   subjectMode: z.enum(["one", "none", "ensemble"]), framing: ImageTemplateFramingSchema, referencePolicy: z.enum(["character", "none"]), sources: z.array(z.string().max(300)).max(24), conflicts: z.array(z.string().max(1000)).max(16),
-  subjectPreparation:SubjectPreparationSchema.optional()
+  subjectPreparation:SubjectPreparationSchema.optional(),
+  ensembleCast: z.array(z.object({
+    name: z.string().max(256),
+    appearance: z.string().max(4000),
+    attire: z.string().max(4000).optional(),
+    persona: z.boolean().optional(),
+  }).strict()).max(16).optional(),
 }).strict();
 export type VisualBrief = z.infer<typeof VisualBriefSchema>;
 export const ImagePromptMetadataSchema = z.object({

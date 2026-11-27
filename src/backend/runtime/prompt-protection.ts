@@ -1,4 +1,5 @@
-import type {ImagePromptMetadata} from '../../shared/image-templates.js';
+import type {ImagePromptMetadata, VisualBrief} from '../../shared/image-templates.js';
+import { sanitizeQuoteAndUnitNotation } from './prompt-serializers/helpers.js';
 
 type SubjectLock={name:string;facts:string[]};
 export type PromptProtection={exact:string;facts:string[];subjects:SubjectLock[];minimumCharacters:number};
@@ -93,11 +94,47 @@ export function assertPromptProtection(prompt:string,protection:PromptProtection
  mentions.sort((a,b)=>a.index-b.index);
  for(const [index,lock] of protection.subjects.entries()){
   const owned=mentions.filter(m=>m.subject===index);
-  if(!owned.length)throw new Error('A required cast member was omitted from the rewritten prompt.');
+  if(!owned.length)throw new Error(`A required cast member was omitted from the rewritten prompt: "${lock.name}".`);
   const valid=owned.some(mention=>{
    const next=mentions.find(m=>m.index>mention.index&&m.subject!==index);
    const section=promptTokens.slice(mention.index,next?.index??promptTokens.length);
    return lock.facts.every(fact=>containsTokenSequence(section,tokenize(fact)));  });
-  if(!valid)throw new Error('Required cast appearance details were omitted, changed, or assigned to another person. Keep each supplied appearance fact with its named subject.');
+  if(!valid)throw new Error(`Required cast appearance details for "${lock.name}" were omitted, changed, or assigned to another person. Keep each supplied appearance fact with its named subject.`);
  }
+}
+
+/** Verify the final positive payload cannot turn an established subject into a bare name. */
+export function assertEnsembleAppearance(
+  cast: VisualBrief['ensembleCast'],
+  positive: string,
+  characterTags: unknown,
+): void {
+  if (!cast) return;
+  if (!cast.length) throw new Error("No visible cast was resolved for this ensemble. Replan or choose another picture template.");
+  const captions = Array.isArray(characterTags) ? characterTags : [];
+  if (captions.length && captions.length !== cast.length) throw new Error("The image payload is missing a positioned cast caption. Prepare this picture again.");
+  const appearances = cast.map(member => sanitizeQuoteAndUnitNotation(member.appearance));
+  const tokens = appearances.map(tokenize);
+  const subjects = cast.map((member,index) => {
+    const facts = appearances[index]!.split(/[,;\n]+/).map(fact => fact.trim()).filter(fact => tokenize(fact).length);
+    const physical = facts.filter(fact => /\b(?:hair|eyes?|skin|fur|scales|feathers|horns?|freckles|scars?|beard|face|ears?|wings?)\b/i.test(fact));
+    const distinguish = (fact:string) => !tokens.some((other,i) => i !== index && containsTokenSequence(other, tokenize(fact)));
+    const trait = physical.find(distinguish) ?? facts.find(distinguish) ?? physical[0] ?? facts[0];
+    if (!trait) throw new Error(`No usable appearance was resolved for "${member.name}". Add appearance details in Character Folio and prepare this picture again.`);
+    return { name: member.name, facts: [trait] };
+  });
+  if (captions.length) {
+    for (const [index, { name, facts }] of subjects.entries()) {
+      const tags: unknown = captions[index]?.tags;
+      if (typeof tags !== 'string' || !containsTokenSequence(tokenize(tags), tokenize(facts[0]!))) {
+        throw new Error(`The positioned caption for "${name}" is missing its appearance. Prepare this picture again.`);
+      }
+    }
+    return;
+  }
+  try {
+    assertPromptProtection(positive, { exact: '', facts: [], minimumCharacters: 0, subjects });
+  } catch (error) {
+    throw new Error("The ensemble prompt is missing a named cast member or their appearance. Restore the cast descriptions in this picture's preview before generating.", { cause: error });
+  }
 }

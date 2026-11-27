@@ -9,6 +9,21 @@ import {sharedStyleSnapshot} from '../../shared/shared-style-snapshot.js';
 const request = { connection_id: "nano", prompt: "original", negativePrompt: "blurry", model: "model-a", parameters: { seed: 12, width: 1024 }, owner_chat_id: "chat", userId: "alice" };
 const meta = { provider: "nanogpt", connectionRevision: 3 };
 
+test("missing or swapped ensemble DNA holds the selected draft for correction", async () => {
+  const records: any[] = [];
+  const gate = new ImageReviewGate(async record => { records.push(record); });
+  const pending = gate.prepare("ensemble", 0, {
+    ...request, prompt: "Mira: silver hair\nDarby",
+    ensembleCast: [{ name: "Mira", appearance: "silver hair" }, { name: "Darby", appearance: "purple hair" }],
+  }, meta, false, new AbortController().signal);
+  const preview = records[0];
+  expect(preview.state).toBe("review");
+  expect(() => gate.decide(preview.requestId, "generate", { prompt: "Mira: purple hair\nDarby: silver hair" })).toThrow("missing");
+  expect(records).toHaveLength(1);
+  expect(gate.decide(preview.requestId, "generate", { prompt: "Darby: purple hair\nMira: silver hair" })).toBe(true);
+  expect((await pending).prompt).toBe("Darby: purple hair\nMira: silver hair");
+});
+
 test('saved style snapshots survive history; invalid optional snapshots do not discard the valid request or brief',async()=>{
  const config=normalizeConfig({promptPrefix:'Saved ink style',promptSuffix:'Saved paper texture',negativePrompt:'logo'});
  const template=templateSnapshot(config.imageTemplates[0]!);

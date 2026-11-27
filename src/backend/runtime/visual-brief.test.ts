@@ -102,6 +102,25 @@ test("long ensemble appearances retain every named subject and disclose condensa
   assert.ok(brief.conflicts.some(note=>note.includes('condensed')));
 });
 
+test("ensemble staging recovers an omitted roster member and reserves identity ahead of wardrobe", () => {
+  const config = normalizeConfig({ defaultImageTemplateId: "ensemble", imagePromptBudgetOverride: true, imagePromptBudget: 400 });
+  const robert = createEmptyCharacterDNA("Robert Vance");
+  robert.aliases = ["Bob"];
+  robert.hair.color = "copper";
+  const elena = createEmptyCharacterDNA("Elena");
+  elena.hair.color = "blue";
+  const brief = buildVisualBrief(config, scene, {
+    ...cue, imageTemplate: resolveImageTemplate(config).template,
+    visualDescription: "Mira talks about Elena.",
+    ensembleSubjects: [{ name: "Mira", appearance: "silver hair, green eyes", attire: "embroidered raincoat, ".repeat(40) }],
+    shotHint: { spatialRelationships: ["Mira and Bob stand in the midground doorway", "Elena is offscreen"] },
+  }, undefined, { [robert.id]: robert, [elena.id]: elena });
+  assert.match(brief.subjects, /Mira:.*silver hair/);
+  assert.match(brief.subjects, /Robert Vance:.*copper/);
+  assert.doesNotMatch(brief.subjects, /Elena/);
+  assert.ok(brief.subjects.length <= 400);
+});
+
 test("pulls Character DNA for non-primary characters and resolves diminutives like Bob for Robert", () => {
   const config = normalizeConfig({ defaultImageTemplateId: "ensemble" });
   const robertDna = {

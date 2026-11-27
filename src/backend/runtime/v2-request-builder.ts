@@ -54,7 +54,8 @@ function manualCameraOverrides(camera:RebuildOptions['manualCamera']):ShotDirect
 
 /** Pure V2 assembly. Profile lookup, source ownership, review and dispatch stay with the caller. */
 export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGenerationRequest;metadata:ImagePromptMetadata|undefined;referencePlan?:ReturnType<typeof resolveReferencePlan>} {
- const {config,cue,profile,rebuild}=input;
+ const {config,profile,rebuild}=input;
+ const cue=input.brief.ensembleCast ? {...input.cue,ensembleSubjects:input.brief.ensembleCast} : input.cue;
  const request={...input.request,parameters:{...input.request.parameters}};
  const metadata=input.metadata?structuredClone(input.metadata):undefined;
  const effectiveRatio=cue.preferredAspectRatio??(config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
