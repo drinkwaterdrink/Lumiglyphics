@@ -48,6 +48,7 @@ export type SpeechSettings = {
   deliveryMode: SpeechDeliveryMode;
   /** Inline delivery tag body (without brackets), e.g. "whispers". Empty = no tag. */
   deliveryTag: string;
+  sceneAwareDelivery: boolean;
   /**
    * Compatibility opt-in: apply the delivery tag even when the selected
    * profile's model is NOT Gemini-family. Off by default because non-Gemini
@@ -65,6 +66,7 @@ export const DEFAULT_SPEECH_SETTINGS: SpeechSettings = {
   characters: {},
   deliveryMode: "none",
   deliveryTag: "",
+  sceneAwareDelivery: false,
   deliveryAllProviders: false,
 };
 
@@ -119,6 +121,7 @@ export function normalizeSpeechSettings(value: unknown): SpeechSettings {
       ? raw.deliveryMode as SpeechDeliveryMode
       : "none",
     deliveryTag: typeof raw.deliveryTag === "string" ? raw.deliveryTag.trim() : "",
+    sceneAwareDelivery: raw.sceneAwareDelivery === true,
     deliveryAllProviders: raw.deliveryAllProviders === true,
   };
 }

@@ -21451,6 +21451,104 @@ function panelHash(text) {
 var ROOTS = new Set(["div", "section", "article", "aside", "table", "svg", "details", "figure"]);
 var VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
 
+// src/shared/text-effects.ts
+var TEXT_EFFECT_IDS = [
+  "shake",
+  "tremble",
+  "wave",
+  "bounce",
+  "rainbow",
+  "glow",
+  "pulse",
+  "glitch",
+  "whisper",
+  "shout",
+  "fade"
+];
+var TEXT_EFFECT_CATALOGUE = [
+  { id: "shake", label: "Shake", description: "Letters jolt hard and fast. Shouts, impacts, fear.", example: "<shake>Get down!</shake>", perLetter: true, motion: true },
+  { id: "tremble", label: "Tremble", description: "A small nervous quiver. Cold, nerves, holding back tears.", example: "<tremble>I-I'm fine.</tremble>", perLetter: true, motion: true },
+  { id: "wave", label: "Wave", description: "Letters ripple up and down in turn. Sing-song, teasing, dreamy.", example: "<wave>La la la~</wave>", perLetter: true, motion: true },
+  { id: "bounce", label: "Bounce", description: "Letters hop one after another. Excited, cheerful.", example: "<bounce>We won!</bounce>", perLetter: true, motion: true },
+  { id: "rainbow", label: "Rainbow", description: "Colours flow through the letters. Magic, wonder, silliness.", example: "<rainbow>Magic!</rainbow>", perLetter: true, motion: true },
+  { id: "glow", label: "Glow", description: "A soft, breathing light around the words. Spells, revelations.", example: "<glow>The seal breaks.</glow>", perLetter: false, motion: true },
+  { id: "pulse", label: "Pulse", description: "Words swell like a heartbeat. Emphasis, longing.", example: "<pulse>Ba-dump.</pulse>", perLetter: false, motion: true },
+  { id: "glitch", label: "Glitch", description: "Colour split with sudden digital tearing. Machines, corruption.", example: "<glitch>SYSTEM ERROR</glitch>", perLetter: true, motion: true },
+  { id: "whisper", label: "Whisper", description: "Small, faint, slightly italic. Secrets, asides.", example: "<whisper>don't tell anyone</whisper>", perLetter: false, motion: false },
+  { id: "shout", label: "Shout", description: "Large and bold; each letter punches in. Yelling.", example: "<shout>STOP!</shout>", perLetter: true, motion: true },
+  { id: "fade", label: "Fade", description: "Letters drift in slowly, then flicker like a ghost. Memories, the uncanny.", example: "<fade>Remember me...</fade>", perLetter: true, motion: true }
+];
+var TEXT_EFFECT_AUTHOR_GUIDE = [
+  "Text effects: in dialogue you may wrap a few words in one of these tags to style them in the visual novel:",
+  TEXT_EFFECT_CATALOGUE.map((effect) => `<${effect.id}>`).join(" "),
+  `Examples: "<shake>Get down!</shake>", "<whisper>don't tell anyone</whisper>", "<rainbow><wave>la la la</wave></rainbow>".`,
+  "Use them rarely (at most one or two per reply), only for strong moments, wrap only the words that need it, and always close every tag."
+].join(`
+`);
+var TEXT_EFFECT_ID_SET = new Set(TEXT_EFFECT_IDS);
+function isTextEffectId(value) {
+  return typeof value === "string" && TEXT_EFFECT_ID_SET.has(value);
+}
+var TEXT_EFFECT_ATTRIBUTE = "data-vn-text-fx";
+var TEXT_EFFECT_TAG_PATTERN = new RegExp(`<\\s*(\\/?)\\s*(${TEXT_EFFECT_IDS.join("|")})\\s*>`, "gi");
+function stripTextEffectTags(text) {
+  if (!text || text.indexOf("<") === -1)
+    return text;
+  return text.replace(new RegExp(TEXT_EFFECT_TAG_PATTERN.source, "gi"), "");
+}
+var ENTITY_MAP = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&apos;": "'",
+  "&nbsp;": " "
+};
+function prepareSpeechText(text) {
+  if (!text)
+    return "";
+  let out = stripTextEffectTags(text);
+  out = out.replace(/<r[tp]\b[^>]*>[\s\S]*?<\/r[tp]>/gi, "");
+  out = out.replace(/<br\s*\/?>/gi, " ");
+  out = out.replace(/<[^>]+>/g, "");
+  out = out.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/gi, (m) => ENTITY_MAP[m.toLowerCase()] ?? m);
+  out = out.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  out = out.replace(/^\s{0,3}#{1,6}\s+/gm, "");
+  out = out.replace(/^\s*>\s*/gm, "");
+  out = out.replace(/\*\*/g, "").replace(/__/g, "").replace(/~~/g, "").replace(/`/g, "");
+  out = out.replace(/\*/g, "");
+  out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, "$1$2$3");
+  return out.replace(/[ \t\r\n]+/g, " ").trim();
+}
+
+// src/shared/speech-direction.ts
+var SPEECH_EVENTS = ["short pause", "long pause", "breath", "sigh", "gasp", "chuckle", "laugh"];
+var SpeechDirectionSchema = exports_external.object({
+  paragraphIndex: exports_external.number().int().nonnegative(),
+  anchor: exports_external.string().trim().min(4).max(160),
+  event: exports_external.enum(SPEECH_EVENTS)
+}).strict();
+function sceneSpeechEnabled(speech) {
+  return speech.enabled && speech.deliveryMode === "gemini-audio-tags" && speech.sceneAwareDelivery && !speech.deliveryTag.trim();
+}
+function anchorEnd(text, anchor2) {
+  const start = text.indexOf(anchor2);
+  if (start < 0 || text.indexOf(anchor2, start + 1) >= 0)
+    return -1;
+  const end = start + anchor2.length;
+  const word = /[\p{L}\p{N}\p{M}]/u;
+  if (word.test(text[start - 1] ?? "") && word.test(anchor2[0] ?? "") || word.test(anchor2.at(-1) ?? "") && word.test(text[end] ?? ""))
+    return -1;
+  return end;
+}
+function insertSpeechEvent(text, cue, tag) {
+  const end = anchorEnd(text, cue.anchor);
+  if (end < 0)
+    return text;
+  return [text.slice(0, end).trimEnd(), tag, text.slice(end).trimStart()].filter(Boolean).join(" ");
+}
+
 // src/shared/style-dna.ts
 var StyleLightingOverlaySchema = exports_external.object({
   type: exports_external.string().min(1).max(200),
@@ -22854,6 +22952,7 @@ var TurnPlanSchema = exports_external.object({
   schemaVersion: exports_external.literal(1),
   storyReferences: exports_external.array(StoryReferenceSchema).max(32).optional(),
   storyDocuments: exports_external.array(StoryDocumentSchema).max(12).optional(),
+  speechDirections: exports_external.array(SpeechDirectionSchema).max(32).optional(),
   key: TurnKeySchema,
   paragraphs: exports_external.array(ParagraphSchema).min(1),
   panels: exports_external.array(PanelArtifactSchema).max(12).optional(),
@@ -23278,77 +23377,6 @@ function referenceHistoryFor(value, key) {
   } catch {
     return;
   }
-}
-
-// src/shared/text-effects.ts
-var TEXT_EFFECT_IDS = [
-  "shake",
-  "tremble",
-  "wave",
-  "bounce",
-  "rainbow",
-  "glow",
-  "pulse",
-  "glitch",
-  "whisper",
-  "shout",
-  "fade"
-];
-var TEXT_EFFECT_CATALOGUE = [
-  { id: "shake", label: "Shake", description: "Letters jolt hard and fast. Shouts, impacts, fear.", example: "<shake>Get down!</shake>", perLetter: true, motion: true },
-  { id: "tremble", label: "Tremble", description: "A small nervous quiver. Cold, nerves, holding back tears.", example: "<tremble>I-I'm fine.</tremble>", perLetter: true, motion: true },
-  { id: "wave", label: "Wave", description: "Letters ripple up and down in turn. Sing-song, teasing, dreamy.", example: "<wave>La la la~</wave>", perLetter: true, motion: true },
-  { id: "bounce", label: "Bounce", description: "Letters hop one after another. Excited, cheerful.", example: "<bounce>We won!</bounce>", perLetter: true, motion: true },
-  { id: "rainbow", label: "Rainbow", description: "Colours flow through the letters. Magic, wonder, silliness.", example: "<rainbow>Magic!</rainbow>", perLetter: true, motion: true },
-  { id: "glow", label: "Glow", description: "A soft, breathing light around the words. Spells, revelations.", example: "<glow>The seal breaks.</glow>", perLetter: false, motion: true },
-  { id: "pulse", label: "Pulse", description: "Words swell like a heartbeat. Emphasis, longing.", example: "<pulse>Ba-dump.</pulse>", perLetter: false, motion: true },
-  { id: "glitch", label: "Glitch", description: "Colour split with sudden digital tearing. Machines, corruption.", example: "<glitch>SYSTEM ERROR</glitch>", perLetter: true, motion: true },
-  { id: "whisper", label: "Whisper", description: "Small, faint, slightly italic. Secrets, asides.", example: "<whisper>don't tell anyone</whisper>", perLetter: false, motion: false },
-  { id: "shout", label: "Shout", description: "Large and bold; each letter punches in. Yelling.", example: "<shout>STOP!</shout>", perLetter: true, motion: true },
-  { id: "fade", label: "Fade", description: "Letters drift in slowly, then flicker like a ghost. Memories, the uncanny.", example: "<fade>Remember me...</fade>", perLetter: true, motion: true }
-];
-var TEXT_EFFECT_AUTHOR_GUIDE = [
-  "Text effects: in dialogue you may wrap a few words in one of these tags to style them in the visual novel:",
-  TEXT_EFFECT_CATALOGUE.map((effect) => `<${effect.id}>`).join(" "),
-  `Examples: "<shake>Get down!</shake>", "<whisper>don't tell anyone</whisper>", "<rainbow><wave>la la la</wave></rainbow>".`,
-  "Use them rarely (at most one or two per reply), only for strong moments, wrap only the words that need it, and always close every tag."
-].join(`
-`);
-var TEXT_EFFECT_ID_SET = new Set(TEXT_EFFECT_IDS);
-function isTextEffectId(value) {
-  return typeof value === "string" && TEXT_EFFECT_ID_SET.has(value);
-}
-var TEXT_EFFECT_ATTRIBUTE = "data-vn-text-fx";
-var TEXT_EFFECT_TAG_PATTERN = new RegExp(`<\\s*(\\/?)\\s*(${TEXT_EFFECT_IDS.join("|")})\\s*>`, "gi");
-function stripTextEffectTags(text) {
-  if (!text || text.indexOf("<") === -1)
-    return text;
-  return text.replace(new RegExp(TEXT_EFFECT_TAG_PATTERN.source, "gi"), "");
-}
-var ENTITY_MAP = {
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#39;": "'",
-  "&apos;": "'",
-  "&nbsp;": " "
-};
-function prepareSpeechText(text) {
-  if (!text)
-    return "";
-  let out = stripTextEffectTags(text);
-  out = out.replace(/<r[tp]\b[^>]*>[\s\S]*?<\/r[tp]>/gi, "");
-  out = out.replace(/<br\s*\/?>/gi, " ");
-  out = out.replace(/<[^>]+>/g, "");
-  out = out.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/gi, (m) => ENTITY_MAP[m.toLowerCase()] ?? m);
-  out = out.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-  out = out.replace(/^\s{0,3}#{1,6}\s+/gm, "");
-  out = out.replace(/^\s*>\s*/gm, "");
-  out = out.replace(/\*\*/g, "").replace(/__/g, "").replace(/~~/g, "").replace(/`/g, "");
-  out = out.replace(/\*/g, "");
-  out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, "$1$2$3");
-  return out.replace(/[ \t\r\n]+/g, " ").trim();
 }
 
 // src/shared/relationship-observations.ts
@@ -45440,6 +45468,7 @@ var DEFAULT_SPEECH_SETTINGS = {
   characters: {},
   deliveryMode: "none",
   deliveryTag: "",
+  sceneAwareDelivery: false,
   deliveryAllProviders: false
 };
 
@@ -64791,7 +64820,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.19-beta.185";
+var LUMIGLYPHICS_VERSION = "0.2.20-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -74271,7 +74300,7 @@ function describeImageFailure(turn, assetError) {
 }
 
 // src/frontend/speech/delivery.ts
-var DELIVERY_ADAPTER_VERSION = 3;
+var DELIVERY_ADAPTER_VERSION = 4;
 var GEMINI_AUDIO_TAG_SUGGESTIONS = [
   "amazed",
   "crying",
@@ -74333,6 +74362,29 @@ function inferAutoDeliveryTag(text3, poseExpressionId) {
       return tag;
   }
   return "";
+}
+function formatSpeechDelivery(spoken, original, settings, model, direction, pose) {
+  if (!deliveryTagAllowedForModel(settings.deliveryMode, model, settings.deliveryAllProviders))
+    return spoken;
+  const modern = /(?:^|[/:])gemini-3\.8-flash(?:-lite)?-tts$/i.test(model.trim());
+  const manual = settings.deliveryTag.trim();
+  if (manual) {
+    if (!modern)
+      return formatOutboundText(spoken, settings.deliveryMode, manual);
+    const event = manual.toLowerCase().replace(/^[\[<]|[\]>]$/g, "").trim();
+    const allowed = [...SPEECH_EVENTS, "cough", "giggle", "whispers", "whispering"];
+    return allowed.includes(event) ? `<${event}> ${spoken}` : spoken;
+  }
+  if (sceneSpeechEnabled(settings)) {
+    const validated = SpeechDirectionSchema.safeParse(direction);
+    if (!validated.success || !/(?:^|[/:])gemini-[\w.-]*tts(?:-preview)?$/i.test(model.trim()))
+      return spoken;
+    const cue = validated.data;
+    const legacyEvent = { laugh: "laughs", chuckle: "laughs", sigh: "sighs" };
+    const event = modern ? cue.event : legacyEvent[cue.event] ?? cue.event;
+    return insertSpeechEvent(spoken, cue, modern ? `<${event}>` : `[${event}]`);
+  }
+  return modern ? spoken : formatOutboundText(spoken, settings.deliveryMode, inferAutoDeliveryTag(original, pose));
 }
 
 // src/frontend/speech/voice-resolution.ts
@@ -74448,6 +74500,12 @@ function splitSpeechChunks(text3, maxChars = 1900) {
     while (remaining.length > maxChars) {
       const space = remaining.slice(0, maxChars + 1).search(/\s+\S*$/u);
       let end = space > 0 ? space : maxChars;
+      const open2 = Math.max(remaining.lastIndexOf("<", end - 1), remaining.lastIndexOf("[", end - 1));
+      if (open2 > 0) {
+        const tag = /^(?:<[a-z -]{1,40}>|\[[a-z -]{1,40}\])/i.exec(remaining.slice(open2));
+        if (tag && open2 + tag[0].length > end)
+          end = open2;
+      }
       const last = remaining.charCodeAt(end - 1);
       if (end > 1 && last >= 55296 && last <= 56319)
         end--;
@@ -74669,10 +74727,8 @@ class SpeechController {
     }
     if (this.disposed || myEpoch !== this.epoch)
       return;
-    const tagAllowed = deliveryTagAllowedForModel(this.settings.deliveryMode, snapshot.model, this.settings.deliveryAllProviders);
     const spoken = prepareSpeechText(cursor.text);
-    const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(cursor.text, cursor.poseExpressionId);
-    const outbound = tagAllowed ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag) : spoken;
+    const outbound = formatSpeechDelivery(spoken, cursor.text, this.settings, snapshot.model, cursor.speechDirection, cursor.poseExpressionId);
     const effectiveVoice = resolved.ref.voice || snapshot.voice;
     const key = [
       "v" + DELIVERY_ADAPTER_VERSION,
@@ -74762,12 +74818,10 @@ class SpeechController {
         const snapshot = await this.getProfileCached(ref.connectionId, abort.signal);
         if (this.disposed || myEpoch !== this.epoch || abort.signal.aborted)
           return;
-        const tagAllowed = deliveryTagAllowedForModel(this.settings.deliveryMode, snapshot.model, this.settings.deliveryAllProviders);
         const spoken = prepareSpeechText(nextCursor.text);
         if (!spoken.trim())
           return;
-        const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(nextCursor.text, nextCursor.poseExpressionId);
-        const outbound = tagAllowed ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag) : spoken;
+        const outbound = formatSpeechDelivery(spoken, nextCursor.text, this.settings, snapshot.model, nextCursor.speechDirection, nextCursor.poseExpressionId);
         const effectiveVoice = ref.voice || snapshot.voice;
         const key = [
           "v" + DELIVERY_ADAPTER_VERSION,
@@ -75907,11 +75961,11 @@ class SpeechSettingsSection {
     const deliveryLegend = document.createElement("legend");
     deliveryLegend.textContent = "Delivery style (experimental)";
     const deliveryHelp = document.createElement("small");
-    deliveryHelp.textContent = "“Gemini audio tags” adds one tag like [whispers] to the spoken text only. The visible prose never changes.";
-    const deliveryMore = moreDisclosure("This follows Google’s Gemini speech-generation guide. It is probabilistic guidance for Gemini-family TTS models routed through your profile and has no exhaustive supported list. Other providers may read the bracket text aloud. Cue never makes extra LLM calls to pick emotions — you choose the tag.");
+    deliveryHelp.textContent = "Gemini audio tags guide the spoken performance. Set a manual cue or let the Sidecar choose cues from the scene.";
+    const deliveryMore = moreDisclosure("Gemini 3.8 uses inline cues such as <sigh> or <short pause>. Earlier Gemini speech models use bracket tags. A manual cue takes priority over the Sidecar.");
     const modeSelect = document.createElement("select");
     modeSelect.setAttribute("data-speech-field", "delivery-mode");
-    for (const [value, label] of [["none", "None — send the prose unchanged (default)"], ["gemini-audio-tags", "Gemini audio tags — prepend a chosen [tag]"]]) {
+    for (const [value, label] of [["none", "Plain speech (default)"], ["gemini-audio-tags", "Gemini audio tags"]]) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = label;
@@ -75927,7 +75981,7 @@ class SpeechSettingsSection {
     const tagInput = document.createElement("input");
     tagInput.type = "text";
     tagInput.setAttribute("data-speech-field", "delivery-tag");
-    tagInput.placeholder = "e.g. whispers — empty sends no tag";
+    tagInput.placeholder = "e.g. sigh";
     const draftTag = this.activeDrafts.get("delivery-tag");
     tagInput.value = draftTag !== undefined ? draftTag : settings.deliveryTag;
     const tagListId = "gemini-tags";
@@ -75951,6 +76005,19 @@ class SpeechSettingsSection {
     });
     tagLabel.append(tagTitle, tagInput, tagList);
     tagLabel.hidden = settings.deliveryMode !== "gemini-audio-tags";
+    const sceneAware = document.createElement("label");
+    sceneAware.className = "check";
+    sceneAware.hidden = settings.deliveryMode !== "gemini-audio-tags";
+    const sceneAwareInput = document.createElement("input");
+    sceneAwareInput.type = "checkbox";
+    sceneAwareInput.setAttribute("data-speech-field", "scene-aware-delivery");
+    sceneAwareInput.checked = settings.sceneAwareDelivery;
+    sceneAwareInput.addEventListener("change", () => this.save((next) => {
+      next.sceneAwareDelivery = sceneAwareInput.checked;
+    }));
+    const sceneAwareText = document.createElement("span");
+    sceneAwareText.innerHTML = "Scene-aware delivery<small>Leave the manual tag blank to use Sidecar cues. Play uses plain speech while cues are pending.</small>";
+    sceneAware.append(sceneAwareInput, sceneAwareText);
     const compat2 = document.createElement("label");
     compat2.className = "check";
     const compatInput = document.createElement("input");
@@ -75964,7 +76031,7 @@ class SpeechSettingsSection {
     compatText.innerHTML = "Compatibility: also send the tag to non-Gemini profiles<small>Off by default. Cue checks the selected profile’s model before each Play and only adds the tag for Gemini-family models. On sends the tag to any provider, which may read it aloud.</small>";
     compat2.append(compatInput, compatText);
     compat2.hidden = settings.deliveryMode !== "gemini-audio-tags";
-    delivery.append(deliveryLegend, deliveryHelp, deliveryMore, modeSelect, tagLabel, compat2);
+    delivery.append(deliveryLegend, deliveryHelp, deliveryMore, modeSelect, tagLabel, sceneAware, compat2);
     const autoplay = document.createElement("label");
     autoplay.className = "check";
     const autoplayInput = document.createElement("input");
@@ -76186,6 +76253,7 @@ function speechCursorFor(view, index, aliases2) {
     revision: view.revision,
     paragraphIndex: index,
     text: text3,
+    speechDirection: view.speechDirections?.find((cue) => cue.paragraphIndex === index),
     paragraphSpeaker: effectiveSpeakerAttribution(view, index),
     turnSpeaker: view.speaker,
     ...aliases2 ? { aliases: aliases2 } : {}
@@ -78053,6 +78121,16 @@ function setupVisualNovelFrontend(baseContext) {
     if (type === "vn_turn_lore_patch" && message.type === "vn_turn_lore_patch") {
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint || turn.revision !== message.revision)
         return;
+      if (message.speechDirections !== undefined) {
+        const loaded = loadedReadingCursor.turn;
+        turn = { ...turn, speechDirections: message.speechDirections };
+        if (loaded && loaded.chatId === turn.chatId && loaded.messageId === turn.messageId && loaded.swipeId === turn.swipeId && loaded.sourceFingerprint === turn.sourceFingerprint && loaded.revision === turn.revision) {
+          const refreshed = { ...loaded, speechDirections: message.speechDirections };
+          loadedReadingCursor.load(refreshed);
+          if (!stage.isReadingUserParagraph())
+            speech.setCursor(speechCursorFor(refreshed, stage.getState().currentParagraphIndex), { autoplay: false });
+        }
+      }
       if (invalidatedReferenceTurn === referenceTurnToken(turn) && message.referenceHistory !== undefined)
         return;
       turn = {

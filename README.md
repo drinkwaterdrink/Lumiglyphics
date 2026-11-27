@@ -14,7 +14,7 @@ Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visu
 | Read a story without pictures | Leave generated pictures disabled and open **Visual novel** after the first assistant reply. |
 | Review a new picture before generating it | Enable picture review and open **Image prompts**. [Image prompting guide](docs/image-prompting.md) |
 | View artwork I already have | Choose **Browse saved artwork** in Artwork, or open **History** to browse by reply. |
-| Listen to a passage | Configure a voice and enable speech. [Speech setup and troubleshooting](SPEECH.md) |
+| Listen to a passage | Configure a voice and enable speech. Gemini profiles can use optional scene-aware pauses and vocal cues. [Speech setup and troubleshooting](SPEECH.md) |
 | Diagnose installation or build issues | [Local staging installation](#install-into-a-local-lumiverse-staging-checkout) · [Development checks](#development) |
 
 ### Reader controls and presentation

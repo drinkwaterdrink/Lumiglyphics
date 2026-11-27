@@ -1,4 +1,5 @@
-import type { SpeechDeliveryMode } from "../../speech-config.js";
+import type { SpeechDeliveryMode, SpeechSettings } from "../../speech-config.js";
+import { insertSpeechEvent, sceneSpeechEnabled, SPEECH_EVENTS, SpeechDirectionSchema, type SpeechDirection } from "../../shared/speech-direction.js";
 
 /**
  * Outbound speech-text decoration.
@@ -6,7 +7,7 @@ import type { SpeechDeliveryMode } from "../../speech-config.js";
  * Bumped whenever formatting changes so cache keys never serve audio produced
  * by an older formatter for the same prose.
  */
-export const DELIVERY_ADAPTER_VERSION = 3;
+export const DELIVERY_ADAPTER_VERSION = 4;
 
 /**
  * The "commonly used" inline audio tags from the official Gemini
@@ -86,4 +87,32 @@ export function inferAutoDeliveryTag(text: string, poseExpressionId?: string | n
     if (pattern.test(pose)) return tag;
   }
   return "";
+}
+
+export function formatSpeechDelivery(
+  spoken: string,
+  original: string,
+  settings: SpeechSettings,
+  model: string,
+  direction?: SpeechDirection,
+  pose?: string | null,
+): string {
+  if (!deliveryTagAllowedForModel(settings.deliveryMode, model, settings.deliveryAllProviders)) return spoken;
+  const modern = /(?:^|[/:])gemini-3\.8-flash(?:-lite)?-tts$/i.test(model.trim());
+  const manual = settings.deliveryTag.trim();
+  if (manual) {
+    if (!modern) return formatOutboundText(spoken, settings.deliveryMode, manual);
+    const event = manual.toLowerCase().replace(/^[\[<]|[\]>]$/g, "").trim();
+    const allowed = [...SPEECH_EVENTS, "cough", "giggle", "whispers", "whispering"];
+    return allowed.includes(event) ? `<${event}> ${spoken}` : spoken;
+  }
+  if (sceneSpeechEnabled(settings)) {
+    const validated = SpeechDirectionSchema.safeParse(direction);
+    if (!validated.success || !/(?:^|[/:])gemini-[\w.-]*tts(?:-preview)?$/i.test(model.trim())) return spoken;
+    const cue = validated.data;
+    const legacyEvent = { laugh: "laughs", chuckle: "laughs", sigh: "sighs" } as const;
+    const event = modern ? cue.event : (legacyEvent[cue.event as keyof typeof legacyEvent] ?? cue.event);
+    return insertSpeechEvent(spoken, cue, modern ? `<${event}>` : `[${event}]`);
+  }
+  return modern ? spoken : formatOutboundText(spoken, settings.deliveryMode, inferAutoDeliveryTag(original, pose));
 }

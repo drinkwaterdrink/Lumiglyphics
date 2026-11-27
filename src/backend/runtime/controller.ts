@@ -82,6 +82,7 @@ import { handleReferenceImageResponse } from "./reference-source.js";
 import { CACHE_JOB_PROVIDER, createAssetJobs, prepareAssetJobs, generateAssets, resolveCacheCues, retainPlanEpisodes } from "./images.js";
 import { SceneImageCache, sceneImageScope } from "../core/scene-image-cache.js";
 import { extractTurnLoreAsync, fingerprintForMessage, gameHintsForTurn, planTurn, prepareEarlyNarrativeParagraphs } from "./planner.js";
+import { sceneSpeechEnabled } from "../../shared/speech-direction.js";
 import {readImageLibraryPage} from './image-library.js';
 import {readBranchChronicle} from './branch-chronicle.js';
 import {changeRehearsalPreset} from '../../shared/reader-preferences.js';
@@ -166,7 +167,8 @@ function capEpochMap(map: Map<string, number>, max = 256): void {
 const pendingLoreJobs = new Map<string, { timer?: ReturnType<typeof setTimeout>; controller: AbortController; scheduled: string; userId?: string | undefined }>();
 
 function sidecarEnabled(config: VisualNovelConfig): boolean {
-  return config.enabled && (config.collectEntityReferences || config.tooltips.enabled) && config.sidecarCollection.selected.length > 0;
+  return config.enabled && (sceneSpeechEnabled(config.speech)
+    || ((config.collectEntityReferences || config.tooltips.enabled) && config.sidecarCollection.selected.length > 0));
 }
 
 export function cancelSplitHorizonLore(key: string): void {
@@ -260,14 +262,15 @@ export function scheduleSplitHorizonLore(
       if (config.debugLogging) {
         spindle.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name, status]) => `${name}=${status}`).join(", ")}`);
       }
-      if (
+      const hasLore = !(
         lore.storyReferences.length === 0
         && lore.storyDocuments.length === 0
         && lore.npcBeliefs.length === 0
         && lore.threadUpdates.length === 0
         && lore.wardrobeDeltas.length === 0
         && lore.suppressedDocumentNouns.length === 0
-      ) {
+      );
+      if (!hasLore && !lore.speechDirections.length) {
         await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, current =>
           compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: 'settled' } : null, isCurrent);
         return;
@@ -298,12 +301,13 @@ export function scheduleSplitHorizonLore(
             ...current.plan,
             ...(mergedRefs.length ? { storyReferences: mergedRefs } : {}),
             ...(mergedDocs !== undefined ? { storyDocuments: mergedDocs } : {}),
+            ...(lore.speechDirections.length ? { speechDirections: lore.speechDirections } : {}),
           },
         };
       }, isCurrent);
       if (!updated || !isCurrent()) return;
       let dnaSaved = false;
-      if (spindle.userStorage) {
+      if (hasLore && spindle.userStorage) {
         try {
           const swipeTag = swipeTurnTag(params.turnKey.assistantMessageId, Number(params.turnKey.swipeId ?? 0) || 0);
           await mutateStoryDNASet(spindle, params.chatId, params.userId, undefined, (set) => {
@@ -324,7 +328,7 @@ export function scheduleSplitHorizonLore(
           if (isCurrent()) spindle.log?.warn?.(`Sidecar Story DNA save failed: ${errorText(error)}`);
         }
       }
-      if (dnaSaved && isCurrent()) {
+      if ((!hasLore || dnaSaved) && isCurrent()) {
         await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, current =>
           compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: 'settled' } : null, isCurrent);
       }
@@ -346,6 +350,7 @@ export function scheduleSplitHorizonLore(
         revision: params.turnKey.revision,
         ...(presentation ? { presentation } : {}),
         ...(referenceHistory ? { referenceHistory } : {}),
+        ...(lore.speechDirections.length ? { speechDirections: lore.speechDirections } : {}),
       }, params.userId);
       if (!config.useNativeCardImages && config.generateImages && !config.dataSaverMode && config.documentImageMode === "auto" && updated.plan.storyDocuments?.length) {
         const remainingSlots = Math.max(0, 3 - previousDocIds.size);
@@ -931,6 +936,7 @@ export function turnView(record: StoredTurnRecord): TurnView {
     speaker: record.speaker,
     userSpeaker: record.userSpeaker || "You",
     paragraphs: record.plan.paragraphs.map((paragraph) => paragraph.text),
+    ...(record.plan.speechDirections ? { speechDirections: record.plan.speechDirections } : {}),
     ...(record.plan.panels ? { panels: record.plan.panels } : {}),
     ...(record.plan.panelSource ? { panelSource: record.plan.panelSource } : {}),
     ...(record.plan.paragraphSpeakers?.some((speaker) => speaker !== null)

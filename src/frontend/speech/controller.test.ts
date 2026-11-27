@@ -288,6 +288,24 @@ describe("profile revision refresh (updated_at cache keying)", () => {
 });
 
 describe("delivery tag gating by actual profile model", () => {
+  test("late Sidecar cue keeps current audio playing and changes the next synthesis", async () => {
+    const { transport, controller, audio } = rig({ settings: enabledSettings({ deliveryMode: "gemini-audio-tags", sceneAwareDelivery: true }) });
+    transport.profiles.set("conn-n", snapshot("conn-n", { model: "gemini-3.8-flash-tts" }));
+    const passage = { ...cursor(), text: "Wait… did you hear that?" };
+    controller.setCursor(passage);
+    const { done } = await dispatchPlay(controller);
+    expect(transport.requests[0]!.input.text).toBe(passage.text);
+    transport.requests[0]!.resolve(audioBlob());
+    await done;
+    controller.setCursor({ ...passage, speechDirection: { paragraphIndex: passage.paragraphIndex, anchor: "Wait…", event: "short pause" } });
+    expect(controller.getStatus().kind).toBe("playing");
+    audio.emit("ended");
+    const { done: replay } = await dispatchPlay(controller);
+    expect(transport.requests[1]!.input.text).toBe("Wait… <short pause> did you hear that?");
+    transport.requests[1]!.resolve(audioBlob());
+    await replay;
+    controller.dispose();
+  });
   test("Gemini-family model on the selected profile gets the tag", async () => {
     const { transport, controller } = rig({ settings: enabledSettings({ deliveryMode: "gemini-audio-tags", deliveryTag: "whispers" }) });
     controller.setCursor(cursor());

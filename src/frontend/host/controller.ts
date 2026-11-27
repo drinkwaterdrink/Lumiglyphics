@@ -228,6 +228,7 @@ export function speechCursorFor(view: TurnView, index: number, aliases?: readonl
     swipeId:view.swipeId,revision:view.revision,
     paragraphIndex: index,
     text,
+    speechDirection: view.speechDirections?.find(cue => cue.paragraphIndex === index),
     paragraphSpeaker: effectiveSpeakerAttribution(view, index),
     turnSpeaker: view.speaker,
     ...(aliases ? { aliases } : {}),
@@ -1897,6 +1898,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_turn_lore_patch" && message.type === "vn_turn_lore_patch") {
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint || turn.revision !== message.revision) return;
+      if (message.speechDirections !== undefined) {
+        const loaded = loadedReadingCursor.turn;
+        turn = { ...turn, speechDirections: message.speechDirections };
+        if (loaded && loaded.chatId === turn.chatId && loaded.messageId === turn.messageId
+          && loaded.swipeId === turn.swipeId && loaded.sourceFingerprint === turn.sourceFingerprint && loaded.revision === turn.revision) {
+          const refreshed = { ...loaded, speechDirections: message.speechDirections };
+          loadedReadingCursor.load(refreshed);
+          if (!stage.isReadingUserParagraph()) speech.setCursor(speechCursorFor(refreshed, stage.getState().currentParagraphIndex), { autoplay: false });
+        }
+      }
       if (invalidatedReferenceTurn === referenceTurnToken(turn) && message.referenceHistory !== undefined) return;
       turn = {
         ...turn,

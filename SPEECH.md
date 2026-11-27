@@ -57,27 +57,11 @@ entirely in the frontend overlay.
 
 ## Delivery styles (Gemini audio tags)
 
-`Delivery style → Gemini audio tags` prepends **one user-chosen inline tag**
-(for example `[whispers]`) to the *spoken* text only; the visible prose never
-changes and Cue makes **no extra LLM calls** to pick emotions. The tag is
-reduced to one safe token (letters, digits, space, hyphen, underscore; 40
-characters max) — bracket or markup content is stripped, never sent.
+In **Settings → Audio → Speech**, enable speech, select a Gemini TTS profile, and choose **Gemini audio tags**. Turn on **Scene-aware delivery** and leave the manual tag blank. For newly prepared replies, the Sidecar reads the speech copy in its existing background pass and can suggest up to one pause or human vocal cue per paragraph. The reader and original chat message retain their prose. If a cue is still pending when you press Play, the paragraph plays plain. A late cue applies to the next synthesis.
 
-**Route gating**: before each Play, Cue checks the selected profile's actual
-model id (from the same metadata read that keys the cache). The tag is injected
-only when that model is Gemini-family (`/gemini/i`). Any other provider/model
-receives the tag **only** through the clearly-labeled compatibility opt-in
-("also send the tag to non-Gemini profiles", off by default), because non-Gemini
-providers may read the bracket text aloud. Tagged and untagged renditions are
-distinct cache entries. This follows the
-official Gemini speech-generation guide (fetched 2025; page last updated
-2026-09-02 UTC): tags are probabilistic performance guidance with **no
-exhaustive supported list**, English tags are recommended, and there is no
-closing-tag syntax. Other providers may read the bracket text aloud, which is
-why the mode is opt-in per user. Cue does not claim `parameters.instructions`
-support for Gemini via OpenRouter (the host only forwards `instructions` for
-`gpt-4o-mini-tts` models) and does not manufacture Gemini model ids; the
-profile's configured model is always used.
+Gemini 3.8 Flash TTS and Flash-Lite TTS use angle brackets for inline cues such as `<short pause>` and `<sigh>`. Earlier Gemini TTS profiles use bracket tags. Automatic cues require a recognized Gemini TTS model on the selected profile. Manual tags take priority. Gemini 3.8 manual tags are limited to supported inline cues such as `sigh`, `gasp`, or `short pause`.
+
+This feature uses the Lumiverse connection's existing text route. Sustained Gemini 3.8 delivery in `speech_metadata.style` requires structured metadata forwarding that the current extension transport does not expose. See the [Gemini speech-generation guide](https://aistudio.google.com/docs/speech-generation#prompting-guide).
 
 ## Truthful limitations (v1)
 

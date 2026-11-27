@@ -1,7 +1,8 @@
 import {speechPlaybackProgress,type SpeechPlaybackProgress} from './read-along.js';
 import type { SpeechSettings } from "../../speech-config.js";
 import { DEFAULT_SPEECH_SETTINGS } from "../../speech-config.js";
-import { DELIVERY_ADAPTER_VERSION, deliveryTagAllowedForModel, formatOutboundText, inferAutoDeliveryTag } from "./delivery.js";
+import { DELIVERY_ADAPTER_VERSION, formatSpeechDelivery } from "./delivery.js";
+import type { SpeechDirection } from "../../shared/speech-direction.js";
 import { resolveVoiceForParagraph } from "./voice-resolution.js";
 import { prepareSpeechText } from "../../shared/text-effects.js";
 import { SpeechTransportError, type TtsProfileSnapshot, type TtsTransport } from "./transport.js";
@@ -38,6 +39,7 @@ export type SpeechCursor = {
   turnSpeaker: string;
   aliases?: readonly string[];
   poseExpressionId?: string | null;
+  speechDirection?: SpeechDirection | undefined;
 };
 
 export type SpeechStatus =
@@ -98,6 +100,11 @@ export function splitSpeechChunks(text: string, maxChars = 1900): string[] {
     while (remaining.length > maxChars) {
       const space = remaining.slice(0, maxChars + 1).search(/\s+\S*$/u);
       let end = space > 0 ? space : maxChars;
+      const open = Math.max(remaining.lastIndexOf("<", end - 1), remaining.lastIndexOf("[", end - 1));
+      if (open > 0) {
+        const tag = /^(?:<[a-z -]{1,40}>|\[[a-z -]{1,40}\])/i.exec(remaining.slice(open));
+        if (tag && open + tag[0].length > end) end = open;
+      }
       const last = remaining.charCodeAt(end - 1);
       if (end > 1 && last >= 0xd800 && last <= 0xdbff) end--;
       chunks.push(remaining.slice(0, end));
@@ -341,19 +348,8 @@ export class SpeechController {
     }
     if (this.disposed || myEpoch !== this.epoch) return;
 
-    // Tags are injected only for a Gemini-family model on the selected profile,
-    // or through the clearly-labeled all-providers compatibility opt-in.
-    const tagAllowed = deliveryTagAllowedForModel(
-      this.settings.deliveryMode,
-      snapshot.model,
-      this.settings.deliveryAllProviders,
-    );
-    // Text effect tags (<shake>, <whisper>, ...) and HTML/Markdown markup: never read them aloud.
     const spoken = prepareSpeechText(cursor.text);
-    const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(cursor.text, cursor.poseExpressionId);
-    const outbound = tagAllowed
-      ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag)
-      : spoken;
+    const outbound = formatSpeechDelivery(spoken, cursor.text, this.settings, snapshot.model, cursor.speechDirection, cursor.poseExpressionId);
     const effectiveVoice = resolved.ref.voice || snapshot.voice;
     const key = [
       "v" + DELIVERY_ADAPTER_VERSION,
@@ -448,17 +444,9 @@ export class SpeechController {
       try {
         const snapshot = await this.getProfileCached(ref.connectionId, abort.signal);
         if (this.disposed || myEpoch !== this.epoch || abort.signal.aborted) return;
-        const tagAllowed = deliveryTagAllowedForModel(
-          this.settings.deliveryMode,
-          snapshot.model,
-          this.settings.deliveryAllProviders,
-        );
         const spoken = prepareSpeechText(nextCursor.text);
         if (!spoken.trim()) return;
-        const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(nextCursor.text, nextCursor.poseExpressionId);
-        const outbound = tagAllowed
-          ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag)
-          : spoken;
+        const outbound = formatSpeechDelivery(spoken, nextCursor.text, this.settings, snapshot.model, nextCursor.speechDirection, nextCursor.poseExpressionId);
         const effectiveVoice = ref.voice || snapshot.voice;
         const key = [
           "v" + DELIVERY_ADAPTER_VERSION,

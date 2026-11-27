@@ -45,6 +45,7 @@ import { reduceContinuity } from "../core/continuity.js";
 import { resolveCueTimeline } from "../core/cue-state.js";
 import { repairScenarioSubjects } from "./scenario-subjects.js";
 import { recoverStagedCast } from "./ensemble-cast.js";
+import { normalizeSpeechDirections, sceneSpeechEnabled, SPEECH_EVENTS, type SpeechDirection } from "../../shared/speech-direction.js";
 import {scenarioPersonaSubject} from './scenario-persona.js';
 import { extractProseAtmosphereDelta, prepareNarrative, type StructuredTurnHints } from "../core/paragraphs.js";
 import { decideSceneBoundary } from "../core/scene-boundary.js";
@@ -81,7 +82,7 @@ import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.j
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
 import { decidePresentation, formatSystemOneCoverage, type SystemOneDecisions } from "./system-one.js";
 import { addPlannerTokens, addSystemOneUsage, createReplyUsage, recordPlannerAttempt, type ReplyUsage } from "../../shared/reply-usage.js";
-import { stripTextEffectTags } from "../../shared/text-effects.js";
+import { prepareSpeechText, stripTextEffectTags } from "../../shared/text-effects.js";
 import { throwIfAborted } from "../core/planning-queue.js";
 import { buildRpgStaticRules, buildRpgTurnSnapshot, ChoiceRequirementsSchema, evaluateChoiceGate, reduceRpgState, RpgDeltasSchema, SkillCheckSchema, type RpgState } from "../../shared/rpg-state.js";
 
@@ -2892,7 +2893,7 @@ export interface SidecarWardrobeDelta {
   activeOutfit: string;
 }
 
-const SIDECAR_CHANNELS = ["storyReferences", "storyDocuments", "suppressedDocumentNouns", "npcBeliefs", "threadUpdates", "wardrobeDeltas"] as const;
+const SIDECAR_CHANNELS = ["storyReferences", "storyDocuments", "suppressedDocumentNouns", "npcBeliefs", "threadUpdates", "wardrobeDeltas", "speechDirections"] as const;
 type SidecarChannel = (typeof SIDECAR_CHANNELS)[number];
 type SidecarChannelStatus = "disabled" | "unavailable" | "invalid" | "partial" | "valid";
 
@@ -2909,6 +2910,7 @@ export interface SidecarCuratorResult {
   npcBeliefs: SidecarNpcBelief[];
   threadUpdates: SidecarThreadUpdate[];
   wardrobeDeltas: SidecarWardrobeDelta[];
+  speechDirections: SpeechDirection[];
 }
 
 function parseSidecarNpcBeliefs(raw: unknown): SidecarNpcBelief[] {
@@ -2975,8 +2977,10 @@ export async function extractTurnLoreAsync(
     signal?: AbortSignal;
   },
 ): Promise<SidecarCuratorResult> {
-  const selected = new Set<string>(params.config.sidecarCollection.selected);
+  const loreEnabled = params.config.collectEntityReferences || params.config.tooltips.enabled;
+  const selected = new Set<string>(loreEnabled ? params.config.sidecarCollection.selected : []);
   if (selected.has("storyDocuments")) selected.add("suppressedDocumentNouns");
+  if (sceneSpeechEnabled(params.config.speech)) selected.add("speechDirections");
   const emptyResult = (docs: ReturnType<typeof normalizeStoryDocuments>, status: SidecarChannelStatus): SidecarCuratorResult => ({
     storyReferences: [],
     storyDocuments: docs,
@@ -2986,13 +2990,14 @@ export async function extractTurnLoreAsync(
     npcBeliefs: [],
     threadUpdates: [],
     wardrobeDeltas: [],
+    speechDirections: [],
   });
   const strict = params.config.strictDocumentSensing !== false;
-  if (!params.paragraphs.length || (!params.config.collectEntityReferences && !params.config.tooltips.enabled)) {
+  if (!params.paragraphs.length || (!loreEnabled && !selected.size)) {
     return emptyResult([], "disabled");
   }
   throwIfAborted(params.signal);
-  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const rawSensedDocs = loreEnabled ? senseDocumentsDeterministically(params.paragraphs) : [];
   const fallbackDocs = strict
     ? filterStrictStoryDocuments(rawSensedDocs, { ...(params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {}) })
     : rawSensedDocs;
@@ -3021,9 +3026,11 @@ export async function extractTurnLoreAsync(
   if (params.openDocumentTitles?.length) {
     contextLines.push(`- Previously opened story documents: ${params.openDocumentTitles.slice(0, 12).join(", ")}`);
   }
-  const userMessage = contextLines.length > 0
+  const speechTranscript = selected.has("speechDirections") ? "\n\nSpeech transcript (the exact audible copy, for speechDirections only):\n" + params.paragraphs.map((p, position) =>
+    JSON.stringify({ paragraphIndex: p.index, speaker: params.paragraphSpeakers?.[position] ?? null, text: prepareSpeechText(p.text) })).join("\n") : "";
+  const userMessage = (contextLines.length > 0
     ? `Context hints (disambiguation only — extract ONLY facts explicitly stated in the numbered paragraphs below):\n${contextLines.join("\n")}\n\nVisible paragraphs:\n${paragraphText}`
-    : paragraphText;
+    : paragraphText) + speechTranscript;
 
   const outputs: Record<SidecarChannel, string> = {
     storyReferences: "Salient story references only. Resolve aliases and omit incidental details.",
@@ -3033,6 +3040,7 @@ export async function extractTurnLoreAsync(
     npcBeliefs: 'Only explicitly stated knowledge. Shape: [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}].',
     threadUpdates: 'Only meaningful narrative threads. Shape: [{title,action:"open"|"advance"|"resolve",summary?}].',
     wardrobeDeltas: "Only visible outfit changes. Shape: [{character,activeOutfit}].",
+    speechDirections: "Act as a restrained voice director. Return [{paragraphIndex,anchor,event}], at most one event per passage, only when it materially improves playback. Most passages need none. Copy an exact unique phrase including any adjacent punctuation from the speech transcript. The cue plays immediately after that phrase. Use only " + JSON.stringify(SPEECH_EVENTS) + ". Vocal events must belong to the audible speaker and be clearly evidenced in the scene. Skip character vocalizations on mixed narration or ambiguous dialogue, and skip a vocalization if the prose already says it aloud. Never rewrite the transcript, infer sounds from visual emotion alone, or add environment sounds.",
   };
   const systemPrompt = [
     "You are the Master Narrative Sidecar Curator. Extract only the following selected fields from the numbered paragraphs.",
@@ -3116,10 +3124,12 @@ export async function extractTurnLoreAsync(
   const npcBeliefs = parseSidecarNpcBeliefs(rec.npcBeliefs);
   const threadUpdates = parseSidecarThreadUpdates(rec.threadUpdates);
   const wardrobeDeltas = parseSidecarWardrobeDeltas(rec.wardrobeDeltas);
+  const speechDirections = normalizeSpeechDirections(rec.speechDirections, params.paragraphs);
   const acceptedCounts: Record<SidecarChannel, number> = {
     storyReferences: storyReferences.length, storyDocuments: llmDocs.length,
     suppressedDocumentNouns: suppressedDocumentNouns.length, npcBeliefs: npcBeliefs.length,
     threadUpdates: threadUpdates.length, wardrobeDeltas: wardrobeDeltas.length,
+    speechDirections: speechDirections.length,
   };
   const channels = sidecarChannelStatuses("unavailable");
   for (const key of SIDECAR_CHANNELS) {
@@ -3130,7 +3140,7 @@ export async function extractTurnLoreAsync(
       ? "invalid" : acceptedCounts[key] < raw.length ? "partial" : "valid";
   }
   return {
-    storyReferences, storyDocuments, channels, suppressedDocumentNouns, npcBeliefs, threadUpdates, wardrobeDeltas,
+    storyReferences, storyDocuments, channels, suppressedDocumentNouns, npcBeliefs, threadUpdates, wardrobeDeltas, speechDirections,
     sidecarSucceeded: Object.values(channels).some(status => status === "valid" || status === "partial"),
   };
 }

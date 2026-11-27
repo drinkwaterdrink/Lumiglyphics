@@ -612,6 +612,42 @@ test('Sidecar resumes interrupted enrichment, grounds references and preserves l
     f.request({ type: 'vn_view', chatId: 'chat', open: false }, 'sidecar-readiness');
   }
 });
+
+test("scene-aware speech uses a single background pass with lore disabled", async () => {
+  const f = generationFixture();
+  const original = (await f.spindle.chat.getMessages("chat"))[0]!;
+  const content = "Wait… did you hear that?";
+  const direction = { paragraphIndex: 0, anchor: "Wait…", event: "short pause" } as const;
+  f.spindle.chat.getMessages = async () => [{ ...original, content }];
+  f.data.set("config.json", {
+    generateImages: false, collectEntityReferences: false, tooltips: { enabled: false },
+    speech: { enabled: true, deliveryMode: "gemini-audio-tags", sceneAwareDelivery: true },
+  });
+  let scans = 0;
+  f.spindle.generate.raw = (async (request: any) => {
+    if (!request.messages[0]?.content?.includes("Master Narrative Sidecar Curator")) return { content: JSON.stringify(generationPayload([])) };
+    scans++;
+    expect(request.messages[0].content).toContain("speechDirections");
+    expect(request.messages[0].content).not.toContain("storyReferences:");
+    return { content: JSON.stringify({ speechDirections: [direction, { ...direction, event: "explosion" }] }) };
+  }) as typeof f.spindle.generate.raw;
+  registerVisualNovelBackend(f.spindle);
+  try {
+    await sendState(f.spindle, "chat", "speech-direction", { viewOpen: true });
+    await waitFor(() => f.sent.some((m: any) => m.type === "vn_turn_lore_patch"));
+    const initial = f.sent.find((m: any) => m.type === "vn_turn" && m.turn.status === "ready") as any;
+    expect(initial.turn.paragraphs).toEqual([content]);
+    expect(initial.turn.speechDirections).toBeUndefined();
+    const patch = f.sent.find((m: any) => m.type === "vn_turn_lore_patch") as any;
+    expect(patch.speechDirections).toEqual([direction]);
+    const saved = f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord;
+    expect(saved.sidecarState).toBe("settled");
+    expect(saved.plan.speechDirections).toEqual([direction]);
+    expect(scans).toBe(1);
+  } finally {
+    f.request({ type: "vn_view", chatId: "chat", open: false }, "speech-direction");
+  }
+});
 test('new plans capture reference ancestry and views retain only verified earlier source observations',async()=>{
  const f=generationFixture(),template=(await f.spindle.chat.getMessages('chat'))[0]!,messages=[{...template,id:'prior-ref',content:'Mira has silver hair.'}];let calls=0;
  f.spindle.chat.getMessages=async()=>messages;

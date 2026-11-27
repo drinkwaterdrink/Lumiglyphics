@@ -560,11 +560,11 @@ export class SpeechSettingsSection {
     const deliveryLegend = document.createElement("legend");
     deliveryLegend.textContent = "Delivery style (experimental)";
     const deliveryHelp = document.createElement("small");
-    deliveryHelp.textContent = "“Gemini audio tags” adds one tag like [whispers] to the spoken text only. The visible prose never changes.";
-    const deliveryMore = moreDisclosure("This follows Google’s Gemini speech-generation guide. It is probabilistic guidance for Gemini-family TTS models routed through your profile and has no exhaustive supported list. Other providers may read the bracket text aloud. Cue never makes extra LLM calls to pick emotions — you choose the tag.");
+    deliveryHelp.textContent = "Gemini audio tags guide the spoken performance. Set a manual cue or let the Sidecar choose cues from the scene.";
+    const deliveryMore = moreDisclosure("Gemini 3.8 uses inline cues such as <sigh> or <short pause>. Earlier Gemini speech models use bracket tags. A manual cue takes priority over the Sidecar.");
     const modeSelect = document.createElement("select");
     modeSelect.setAttribute("data-speech-field", "delivery-mode");
-    for (const [value, label] of [["none", "None — send the prose unchanged (default)"], ["gemini-audio-tags", "Gemini audio tags — prepend a chosen [tag]"]] as const) {
+    for (const [value, label] of [["none", "Plain speech (default)"], ["gemini-audio-tags", "Gemini audio tags"]] as const) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = label;
@@ -578,7 +578,7 @@ export class SpeechSettingsSection {
     const tagInput = document.createElement("input");
     tagInput.type = "text";
     tagInput.setAttribute("data-speech-field", "delivery-tag");
-    tagInput.placeholder = "e.g. whispers — empty sends no tag";
+    tagInput.placeholder = "e.g. sigh";
     const draftTag = this.activeDrafts.get("delivery-tag");
     tagInput.value = draftTag !== undefined ? draftTag : settings.deliveryTag;
     const tagListId = "gemini-tags";
@@ -600,6 +600,17 @@ export class SpeechSettingsSection {
     });
     tagLabel.append(tagTitle, tagInput, tagList);
     tagLabel.hidden = settings.deliveryMode !== "gemini-audio-tags";
+    const sceneAware = document.createElement("label");
+    sceneAware.className = "check";
+    sceneAware.hidden = settings.deliveryMode !== "gemini-audio-tags";
+    const sceneAwareInput = document.createElement("input");
+    sceneAwareInput.type = "checkbox";
+    sceneAwareInput.setAttribute("data-speech-field", "scene-aware-delivery");
+    sceneAwareInput.checked = settings.sceneAwareDelivery;
+    sceneAwareInput.addEventListener("change", () => this.save((next) => { next.sceneAwareDelivery = sceneAwareInput.checked; }));
+    const sceneAwareText = document.createElement("span");
+    sceneAwareText.innerHTML = "Scene-aware delivery<small>Leave the manual tag blank to use Sidecar cues. Play uses plain speech while cues are pending.</small>";
+    sceneAware.append(sceneAwareInput, sceneAwareText);
     const compat = document.createElement("label");
     compat.className = "check";
     const compatInput = document.createElement("input");
@@ -611,7 +622,7 @@ export class SpeechSettingsSection {
     compatText.innerHTML = "Compatibility: also send the tag to non-Gemini profiles<small>Off by default. Cue checks the selected profile’s model before each Play and only adds the tag for Gemini-family models. On sends the tag to any provider, which may read it aloud.</small>";
     compat.append(compatInput, compatText);
     compat.hidden = settings.deliveryMode !== "gemini-audio-tags";
-    delivery.append(deliveryLegend, deliveryHelp, deliveryMore, modeSelect, tagLabel, compat);
+    delivery.append(deliveryLegend, deliveryHelp, deliveryMore, modeSelect, tagLabel, sceneAware, compat);
 
     // Autoplay + volume
     const autoplay = document.createElement("label");

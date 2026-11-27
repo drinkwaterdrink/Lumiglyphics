@@ -22766,6 +22766,126 @@ var init_panels = __esm(() => {
   VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
 });
 
+// src/shared/text-effects.ts
+function isTextEffectId(value) {
+  return typeof value === "string" && TEXT_EFFECT_ID_SET.has(value);
+}
+function stripTextEffectTags(text) {
+  if (!text || text.indexOf("<") === -1)
+    return text;
+  return text.replace(new RegExp(TEXT_EFFECT_TAG_PATTERN.source, "gi"), "");
+}
+function prepareSpeechText(text) {
+  if (!text)
+    return "";
+  let out = stripTextEffectTags(text);
+  out = out.replace(/<r[tp]\b[^>]*>[\s\S]*?<\/r[tp]>/gi, "");
+  out = out.replace(/<br\s*\/?>/gi, " ");
+  out = out.replace(/<[^>]+>/g, "");
+  out = out.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/gi, (m) => ENTITY_MAP[m.toLowerCase()] ?? m);
+  out = out.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  out = out.replace(/^\s{0,3}#{1,6}\s+/gm, "");
+  out = out.replace(/^\s*>\s*/gm, "");
+  out = out.replace(/\*\*/g, "").replace(/__/g, "").replace(/~~/g, "").replace(/`/g, "");
+  out = out.replace(/\*/g, "");
+  out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, "$1$2$3");
+  return out.replace(/[ \t\r\n]+/g, " ").trim();
+}
+var TEXT_EFFECT_IDS, TEXT_EFFECT_CATALOGUE, TEXT_EFFECT_AUTHOR_GUIDE, TEXT_EFFECT_ID_SET, TEXT_EFFECT_TAG_PATTERN, ENTITY_MAP;
+var init_text_effects = __esm(() => {
+  TEXT_EFFECT_IDS = [
+    "shake",
+    "tremble",
+    "wave",
+    "bounce",
+    "rainbow",
+    "glow",
+    "pulse",
+    "glitch",
+    "whisper",
+    "shout",
+    "fade"
+  ];
+  TEXT_EFFECT_CATALOGUE = [
+    { id: "shake", label: "Shake", description: "Letters jolt hard and fast. Shouts, impacts, fear.", example: "<shake>Get down!</shake>", perLetter: true, motion: true },
+    { id: "tremble", label: "Tremble", description: "A small nervous quiver. Cold, nerves, holding back tears.", example: "<tremble>I-I'm fine.</tremble>", perLetter: true, motion: true },
+    { id: "wave", label: "Wave", description: "Letters ripple up and down in turn. Sing-song, teasing, dreamy.", example: "<wave>La la la~</wave>", perLetter: true, motion: true },
+    { id: "bounce", label: "Bounce", description: "Letters hop one after another. Excited, cheerful.", example: "<bounce>We won!</bounce>", perLetter: true, motion: true },
+    { id: "rainbow", label: "Rainbow", description: "Colours flow through the letters. Magic, wonder, silliness.", example: "<rainbow>Magic!</rainbow>", perLetter: true, motion: true },
+    { id: "glow", label: "Glow", description: "A soft, breathing light around the words. Spells, revelations.", example: "<glow>The seal breaks.</glow>", perLetter: false, motion: true },
+    { id: "pulse", label: "Pulse", description: "Words swell like a heartbeat. Emphasis, longing.", example: "<pulse>Ba-dump.</pulse>", perLetter: false, motion: true },
+    { id: "glitch", label: "Glitch", description: "Colour split with sudden digital tearing. Machines, corruption.", example: "<glitch>SYSTEM ERROR</glitch>", perLetter: true, motion: true },
+    { id: "whisper", label: "Whisper", description: "Small, faint, slightly italic. Secrets, asides.", example: "<whisper>don't tell anyone</whisper>", perLetter: false, motion: false },
+    { id: "shout", label: "Shout", description: "Large and bold; each letter punches in. Yelling.", example: "<shout>STOP!</shout>", perLetter: true, motion: true },
+    { id: "fade", label: "Fade", description: "Letters drift in slowly, then flicker like a ghost. Memories, the uncanny.", example: "<fade>Remember me...</fade>", perLetter: true, motion: true }
+  ];
+  TEXT_EFFECT_AUTHOR_GUIDE = [
+    "Text effects: in dialogue you may wrap a few words in one of these tags to style them in the visual novel:",
+    TEXT_EFFECT_CATALOGUE.map((effect) => `<${effect.id}>`).join(" "),
+    `Examples: "<shake>Get down!</shake>", "<whisper>don't tell anyone</whisper>", "<rainbow><wave>la la la</wave></rainbow>".`,
+    "Use them rarely (at most one or two per reply), only for strong moments, wrap only the words that need it, and always close every tag."
+  ].join(`
+`);
+  TEXT_EFFECT_ID_SET = new Set(TEXT_EFFECT_IDS);
+  TEXT_EFFECT_TAG_PATTERN = new RegExp(`<\\s*(\\/?)\\s*(${TEXT_EFFECT_IDS.join("|")})\\s*>`, "gi");
+  ENTITY_MAP = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&apos;": "'",
+    "&nbsp;": " "
+  };
+});
+
+// src/shared/speech-direction.ts
+function sceneSpeechEnabled(speech) {
+  return speech.enabled && speech.deliveryMode === "gemini-audio-tags" && speech.sceneAwareDelivery && !speech.deliveryTag.trim();
+}
+function anchorEnd(text, anchor2) {
+  const start = text.indexOf(anchor2);
+  if (start < 0 || text.indexOf(anchor2, start + 1) >= 0)
+    return -1;
+  const end = start + anchor2.length;
+  const word = /[\p{L}\p{N}\p{M}]/u;
+  if (word.test(text[start - 1] ?? "") && word.test(anchor2[0] ?? "") || word.test(anchor2.at(-1) ?? "") && word.test(text[end] ?? ""))
+    return -1;
+  return end;
+}
+function normalizeSpeechDirections(raw, paragraphs) {
+  if (!Array.isArray(raw))
+    return [];
+  const spoken = new Map(paragraphs.map((p) => [p.index, prepareSpeechText(p.text)]));
+  const used = new Set;
+  const result = [];
+  for (const value of raw.slice(0, 64)) {
+    const parsed = SpeechDirectionSchema.safeParse(value);
+    if (!parsed.success)
+      continue;
+    const cue = parsed.data;
+    const text = spoken.get(cue.paragraphIndex);
+    if (!text || used.has(cue.paragraphIndex) || anchorEnd(text, cue.anchor) < 0)
+      continue;
+    used.add(cue.paragraphIndex);
+    result.push(cue);
+    if (result.length === 32)
+      break;
+  }
+  return result;
+}
+var SPEECH_EVENTS, SpeechDirectionSchema;
+var init_speech_direction = __esm(() => {
+  init_zod();
+  init_text_effects();
+  SPEECH_EVENTS = ["short pause", "long pause", "breath", "sigh", "gasp", "chuckle", "laugh"];
+  SpeechDirectionSchema = exports_external.object({
+    paragraphIndex: exports_external.number().int().nonnegative(),
+    anchor: exports_external.string().trim().min(4).max(160),
+    event: exports_external.enum(SPEECH_EVENTS)
+  }).strict();
+});
+
 // src/shared/style-dna.ts
 function cleanStyleAffix(raw) {
   if (!raw)
@@ -24543,6 +24663,7 @@ var init_contracts = __esm(() => {
   init_reply_usage();
   init_action_prop();
   init_panels();
+  init_speech_direction();
   init_image_templates();
   init_image_shot_spec();
   init_rpg_state();
@@ -24849,6 +24970,7 @@ var init_contracts = __esm(() => {
     schemaVersion: exports_external.literal(1),
     storyReferences: exports_external.array(StoryReferenceSchema).max(32).optional(),
     storyDocuments: exports_external.array(StoryDocumentSchema).max(12).optional(),
+    speechDirections: exports_external.array(SpeechDirectionSchema).max(32).optional(),
     key: TurnKeySchema,
     paragraphs: exports_external.array(ParagraphSchema).min(1),
     panels: exports_external.array(PanelArtifactSchema).max(12).optional(),
@@ -25839,54 +25961,6 @@ var init_character_dna = __esm(() => {
     "slightly"
   ]);
   GENERIC_ATTIRE_RE = /^(?:wearing\s+)?(?:everyday|casual|normal|ordinary|standard|typical|street)?\s*(?:casual\s*)?(?:attire|clothes|clothing|outfit|wear|dress|garb)\.?$/i;
-});
-
-// src/shared/text-effects.ts
-function isTextEffectId(value) {
-  return typeof value === "string" && TEXT_EFFECT_ID_SET.has(value);
-}
-function stripTextEffectTags(text) {
-  if (!text || text.indexOf("<") === -1)
-    return text;
-  return text.replace(new RegExp(TEXT_EFFECT_TAG_PATTERN.source, "gi"), "");
-}
-var TEXT_EFFECT_IDS, TEXT_EFFECT_CATALOGUE, TEXT_EFFECT_AUTHOR_GUIDE, TEXT_EFFECT_ID_SET, TEXT_EFFECT_TAG_PATTERN;
-var init_text_effects = __esm(() => {
-  TEXT_EFFECT_IDS = [
-    "shake",
-    "tremble",
-    "wave",
-    "bounce",
-    "rainbow",
-    "glow",
-    "pulse",
-    "glitch",
-    "whisper",
-    "shout",
-    "fade"
-  ];
-  TEXT_EFFECT_CATALOGUE = [
-    { id: "shake", label: "Shake", description: "Letters jolt hard and fast. Shouts, impacts, fear.", example: "<shake>Get down!</shake>", perLetter: true, motion: true },
-    { id: "tremble", label: "Tremble", description: "A small nervous quiver. Cold, nerves, holding back tears.", example: "<tremble>I-I'm fine.</tremble>", perLetter: true, motion: true },
-    { id: "wave", label: "Wave", description: "Letters ripple up and down in turn. Sing-song, teasing, dreamy.", example: "<wave>La la la~</wave>", perLetter: true, motion: true },
-    { id: "bounce", label: "Bounce", description: "Letters hop one after another. Excited, cheerful.", example: "<bounce>We won!</bounce>", perLetter: true, motion: true },
-    { id: "rainbow", label: "Rainbow", description: "Colours flow through the letters. Magic, wonder, silliness.", example: "<rainbow>Magic!</rainbow>", perLetter: true, motion: true },
-    { id: "glow", label: "Glow", description: "A soft, breathing light around the words. Spells, revelations.", example: "<glow>The seal breaks.</glow>", perLetter: false, motion: true },
-    { id: "pulse", label: "Pulse", description: "Words swell like a heartbeat. Emphasis, longing.", example: "<pulse>Ba-dump.</pulse>", perLetter: false, motion: true },
-    { id: "glitch", label: "Glitch", description: "Colour split with sudden digital tearing. Machines, corruption.", example: "<glitch>SYSTEM ERROR</glitch>", perLetter: true, motion: true },
-    { id: "whisper", label: "Whisper", description: "Small, faint, slightly italic. Secrets, asides.", example: "<whisper>don't tell anyone</whisper>", perLetter: false, motion: false },
-    { id: "shout", label: "Shout", description: "Large and bold; each letter punches in. Yelling.", example: "<shout>STOP!</shout>", perLetter: true, motion: true },
-    { id: "fade", label: "Fade", description: "Letters drift in slowly, then flicker like a ghost. Memories, the uncanny.", example: "<fade>Remember me...</fade>", perLetter: true, motion: true }
-  ];
-  TEXT_EFFECT_AUTHOR_GUIDE = [
-    "Text effects: in dialogue you may wrap a few words in one of these tags to style them in the visual novel:",
-    TEXT_EFFECT_CATALOGUE.map((effect) => `<${effect.id}>`).join(" "),
-    `Examples: "<shake>Get down!</shake>", "<whisper>don't tell anyone</whisper>", "<rainbow><wave>la la la</wave></rainbow>".`,
-    "Use them rarely (at most one or two per reply), only for strong moments, wrap only the words that need it, and always close every tag."
-  ].join(`
-`);
-  TEXT_EFFECT_ID_SET = new Set(TEXT_EFFECT_IDS);
-  TEXT_EFFECT_TAG_PATTERN = new RegExp(`<\\s*(\\/?)\\s*(${TEXT_EFFECT_IDS.join("|")})\\s*>`, "gi");
 });
 
 // src/shared/identity.ts
@@ -40370,6 +40444,7 @@ function normalizeSpeechSettings(value) {
     characters: normalizeCharacters(raw.characters),
     deliveryMode: SPEECH_DELIVERY_MODES.includes(raw.deliveryMode) ? raw.deliveryMode : "none",
     deliveryTag: typeof raw.deliveryTag === "string" ? raw.deliveryTag.trim() : "",
+    sceneAwareDelivery: raw.sceneAwareDelivery === true,
     deliveryAllProviders: raw.deliveryAllProviders === true
   };
 }
@@ -40385,6 +40460,7 @@ var init_speech_config = __esm(() => {
     characters: {},
     deliveryMode: "none",
     deliveryTag: "",
+    sceneAwareDelivery: false,
     deliveryAllProviders: false
   };
 });
@@ -41898,7 +41974,7 @@ async function recordWithRetainedHistory(spindle2, path2, record3, userId) {
   }
   const imageLibrary = mergeImageLibrary(previous ?? undefined, record3);
   if (record3.sidecarState === "pending" && previous?.sidecarState === "settled" && previous.plan?.key && samePresentationTurn(previous.plan.key, record3.plan.key) && previous.plan.createdAt === record3.plan.createdAt) {
-    const { storyReferences, storyDocuments } = previous.plan;
+    const { storyReferences, storyDocuments, speechDirections } = previous.plan;
     return {
       ...record3,
       sidecarState: "settled",
@@ -41906,6 +41982,7 @@ async function recordWithRetainedHistory(spindle2, path2, record3, userId) {
       plan: {
         ...record3.plan,
         ...storyReferences !== undefined ? { storyReferences } : {},
+        ...speechDirections !== undefined ? { speechDirections } : {},
         ...storyDocuments !== undefined ? { storyDocuments } : {}
       }
     };
@@ -49684,9 +49761,12 @@ function parseSidecarWardrobeDeltas(raw) {
   return out;
 }
 async function extractTurnLoreAsync(spindle2, params) {
-  const selected = new Set(params.config.sidecarCollection.selected);
+  const loreEnabled = params.config.collectEntityReferences || params.config.tooltips.enabled;
+  const selected = new Set(loreEnabled ? params.config.sidecarCollection.selected : []);
   if (selected.has("storyDocuments"))
     selected.add("suppressedDocumentNouns");
+  if (sceneSpeechEnabled(params.config.speech))
+    selected.add("speechDirections");
   const emptyResult = (docs, status) => ({
     storyReferences: [],
     storyDocuments: docs,
@@ -49695,14 +49775,15 @@ async function extractTurnLoreAsync(spindle2, params) {
     suppressedDocumentNouns: [],
     npcBeliefs: [],
     threadUpdates: [],
-    wardrobeDeltas: []
+    wardrobeDeltas: [],
+    speechDirections: []
   });
   const strict = params.config.strictDocumentSensing !== false;
-  if (!params.paragraphs.length || !params.config.collectEntityReferences && !params.config.tooltips.enabled) {
+  if (!params.paragraphs.length || !loreEnabled && !selected.size) {
     return emptyResult([], "disabled");
   }
   throwIfAborted(params.signal);
-  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const rawSensedDocs = loreEnabled ? senseDocumentsDeterministically(params.paragraphs) : [];
   const fallbackDocs = strict ? filterStrictStoryDocuments(rawSensedDocs, { ...params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {} }) : rawSensedDocs;
   if (!selected.size)
     return emptyResult(fallbackDocs, "disabled");
@@ -49734,19 +49815,25 @@ async function extractTurnLoreAsync(spindle2, params) {
   if (params.openDocumentTitles?.length) {
     contextLines.push(`- Previously opened story documents: ${params.openDocumentTitles.slice(0, 12).join(", ")}`);
   }
-  const userMessage = contextLines.length > 0 ? `Context hints (disambiguation only \u2014 extract ONLY facts explicitly stated in the numbered paragraphs below):
+  const speechTranscript = selected.has("speechDirections") ? `
+
+Speech transcript (the exact audible copy, for speechDirections only):
+` + params.paragraphs.map((p, position) => JSON.stringify({ paragraphIndex: p.index, speaker: params.paragraphSpeakers?.[position] ?? null, text: prepareSpeechText(p.text) })).join(`
+`) : "";
+  const userMessage = (contextLines.length > 0 ? `Context hints (disambiguation only \u2014 extract ONLY facts explicitly stated in the numbered paragraphs below):
 ${contextLines.join(`
 `)}
 
 Visible paragraphs:
-${paragraphText}` : paragraphText;
+${paragraphText}` : paragraphText) + speechTranscript;
   const outputs = {
     storyReferences: "Salient story references only. Resolve aliases and omit incidental details.",
     storyDocuments: "Up to 12 explicitly read or inspected documents. Anchor names, aliases, observations and sections to numbered paragraphs. Copy section wording verbatim. Shape: [{name,kind:" + JSON.stringify(STORY_DOCUMENT_KINDS) + ",paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}].",
     suppressedDocumentNouns: "A list of document-like nouns used figuratively or casually rather than as readable artifacts.",
     npcBeliefs: 'Only explicitly stated knowledge. Shape: [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}].',
     threadUpdates: 'Only meaningful narrative threads. Shape: [{title,action:"open"|"advance"|"resolve",summary?}].',
-    wardrobeDeltas: "Only visible outfit changes. Shape: [{character,activeOutfit}]."
+    wardrobeDeltas: "Only visible outfit changes. Shape: [{character,activeOutfit}].",
+    speechDirections: "Act as a restrained voice director. Return [{paragraphIndex,anchor,event}], at most one event per passage, only when it materially improves playback. Most passages need none. Copy an exact unique phrase including any adjacent punctuation from the speech transcript. The cue plays immediately after that phrase. Use only " + JSON.stringify(SPEECH_EVENTS) + ". Vocal events must belong to the audible speaker and be clearly evidenced in the scene. Skip character vocalizations on mixed narration or ambiguous dialogue, and skip a vocalization if the prose already says it aloud. Never rewrite the transcript, infer sounds from visual emotion alone, or add environment sounds."
   };
   const systemPrompt = [
     "You are the Master Narrative Sidecar Curator. Extract only the following selected fields from the numbered paragraphs.",
@@ -49818,13 +49905,15 @@ ${paragraphText}` : paragraphText;
   const npcBeliefs = parseSidecarNpcBeliefs(rec.npcBeliefs);
   const threadUpdates = parseSidecarThreadUpdates(rec.threadUpdates);
   const wardrobeDeltas = parseSidecarWardrobeDeltas(rec.wardrobeDeltas);
+  const speechDirections = normalizeSpeechDirections(rec.speechDirections, params.paragraphs);
   const acceptedCounts = {
     storyReferences: storyReferences.length,
     storyDocuments: llmDocs.length,
     suppressedDocumentNouns: suppressedDocumentNouns.length,
     npcBeliefs: npcBeliefs.length,
     threadUpdates: threadUpdates.length,
-    wardrobeDeltas: wardrobeDeltas.length
+    wardrobeDeltas: wardrobeDeltas.length,
+    speechDirections: speechDirections.length
   };
   const channels = sidecarChannelStatuses("unavailable");
   for (const key of SIDECAR_CHANNELS) {
@@ -49845,6 +49934,7 @@ ${paragraphText}` : paragraphText;
     npcBeliefs,
     threadUpdates,
     wardrobeDeltas,
+    speechDirections,
     sidecarSucceeded: Object.values(channels).some((status) => status === "valid" || status === "partial")
   };
 }
@@ -49940,6 +50030,7 @@ var init_planner = __esm(() => {
   init_cue_state();
   init_scenario_subjects();
   init_ensemble_cast();
+  init_speech_direction();
   init_scenario_persona();
   init_paragraphs();
   init_turn_plan();
@@ -50107,7 +50198,7 @@ var init_planner = __esm(() => {
     "an",
     "the"
   ]);
-  SIDECAR_CHANNELS = ["storyReferences", "storyDocuments", "suppressedDocumentNouns", "npcBeliefs", "threadUpdates", "wardrobeDeltas"];
+  SIDECAR_CHANNELS = ["storyReferences", "storyDocuments", "suppressedDocumentNouns", "npcBeliefs", "threadUpdates", "wardrobeDeltas", "speechDirections"];
 });
 
 // src/backend/runtime/context-providers/lumibooks.ts
@@ -60982,6 +61073,7 @@ init_reference_source();
 init_images();
 init_scene_image_cache();
 init_planner();
+init_speech_direction();
 init_image_library2();
 
 // src/backend/runtime/branch-chronicle.ts
@@ -61280,7 +61372,7 @@ function capEpochMap(map2, max = 256) {
 }
 var pendingLoreJobs = new Map;
 function sidecarEnabled(config2) {
-  return config2.enabled && (config2.collectEntityReferences || config2.tooltips.enabled) && config2.sidecarCollection.selected.length > 0;
+  return config2.enabled && (sceneSpeechEnabled(config2.speech) || (config2.collectEntityReferences || config2.tooltips.enabled) && config2.sidecarCollection.selected.length > 0);
 }
 function cancelSplitHorizonLore(key) {
   const pending = pendingLoreJobs.get(key);
@@ -61360,7 +61452,8 @@ function scheduleSplitHorizonLore(spindle2, params) {
       if (config2.debugLogging) {
         spindle2.log.info(`Sidecar channels: ${Object.entries(lore.channels).map(([name2, status]) => `${name2}=${status}`).join(", ")}`);
       }
-      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && lore.suppressedDocumentNouns.length === 0) {
+      const hasLore = !(lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && lore.suppressedDocumentNouns.length === 0);
+      if (!hasLore && !lore.speechDirections.length) {
         await mutateActiveTurnRecord(spindle2, params.chatId, params.path, params.userId, (current) => compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: "settled" } : null, isCurrent);
         return;
       }
@@ -61386,14 +61479,15 @@ function scheduleSplitHorizonLore(spindle2, params) {
           plan: {
             ...current.plan,
             ...mergedRefs.length ? { storyReferences: mergedRefs } : {},
-            ...mergedDocs !== undefined ? { storyDocuments: mergedDocs } : {}
+            ...mergedDocs !== undefined ? { storyDocuments: mergedDocs } : {},
+            ...lore.speechDirections.length ? { speechDirections: lore.speechDirections } : {}
           }
         };
       }, isCurrent);
       if (!updated || !isCurrent())
         return;
       let dnaSaved = false;
-      if (spindle2.userStorage) {
+      if (hasLore && spindle2.userStorage) {
         try {
           const swipeTag = swipeTurnTag(params.turnKey.assistantMessageId, Number(params.turnKey.swipeId ?? 0) || 0);
           await mutateStoryDNASet(spindle2, params.chatId, params.userId, undefined, (set2) => {
@@ -61416,7 +61510,7 @@ function scheduleSplitHorizonLore(spindle2, params) {
             spindle2.log?.warn?.(`Sidecar Story DNA save failed: ${errorText2(error61)}`);
         }
       }
-      if (dnaSaved && isCurrent()) {
+      if ((!hasLore || dnaSaved) && isCurrent()) {
         await mutateActiveTurnRecord(spindle2, params.chatId, params.path, params.userId, (current) => compareTurnKeys(current.plan.key, params.turnKey).accepted ? { ...current, sidecarState: "settled" } : null, isCurrent);
       }
       if (!isCurrent())
@@ -61438,7 +61532,8 @@ function scheduleSplitHorizonLore(spindle2, params) {
         sourceFingerprint: params.turnKey.sourceFingerprint,
         revision: params.turnKey.revision,
         ...presentation ? { presentation } : {},
-        ...referenceHistory ? { referenceHistory } : {}
+        ...referenceHistory ? { referenceHistory } : {},
+        ...lore.speechDirections.length ? { speechDirections: lore.speechDirections } : {}
       }, params.userId);
       if (!config2.useNativeCardImages && config2.generateImages && !config2.dataSaverMode && config2.documentImageMode === "auto" && updated.plan.storyDocuments?.length) {
         const remainingSlots = Math.max(0, 3 - previousDocIds.size);
@@ -61900,6 +61995,7 @@ function turnView(record5) {
     speaker: record5.speaker,
     userSpeaker: record5.userSpeaker || "You",
     paragraphs: record5.plan.paragraphs.map((paragraph) => paragraph.text),
+    ...record5.plan.speechDirections ? { speechDirections: record5.plan.speechDirections } : {},
     ...record5.plan.panels ? { panels: record5.plan.panels } : {},
     ...record5.plan.panelSource ? { panelSource: record5.plan.panelSource } : {},
     ...record5.plan.paragraphSpeakers?.some((speaker) => speaker !== null) ? { paragraphSpeakers: record5.plan.paragraphSpeakers } : {},

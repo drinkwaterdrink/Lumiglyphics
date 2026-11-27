@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ReplyUsageSchema } from "./reply-usage.js";
 import { ActionPropFieldSchema, ActionPropSchema, type ActionProp } from "./action-prop.js";
 import { PanelArtifactSchema } from "./panels.js";
+import { SpeechDirectionSchema } from "./speech-direction.js";
 import { ImageTemplateSnapshotSchema } from "./image-templates.js";
 import { ShotIntentSchema, ShotSizeSchema, CameraAngleSchema, CompositionModeSchema } from "./image-shot-spec.js";
 import { ChoiceRequirementsSchema, SkillCheckSchema, RpgStateSchema } from "./rpg-state.js";
@@ -370,6 +371,7 @@ export const TurnPlanSchema = z.object({
   schemaVersion: z.literal(1),
   storyReferences: z.array(StoryReferenceSchema).max(32).optional(),
   storyDocuments: z.array(StoryDocumentSchema).max(12).optional(),
+  speechDirections: z.array(SpeechDirectionSchema).max(32).optional(),
   key: TurnKeySchema,
   paragraphs: z.array(ParagraphSchema).min(1),
   panels: z.array(PanelArtifactSchema).max(12).optional(),

@@ -227,6 +227,7 @@ export type TurnView = {
   speaker: string;
   userSpeaker?: string;
   paragraphs: string[];
+  speechDirections?: import("./shared/speech-direction.js").SpeechDirection[];
   panels?: PanelArtifact[];
   panelSource?: string;
   /** Per-paragraph nameplate override; null entries fall back to `speaker`. */
@@ -290,7 +291,7 @@ export type BackendResponse =
   | { type: "vn_turn"; turn: TurnView }
   | { type: "vn_choice_saved"; chatId: string; requestId: string; generationError?: string }
   | { type: "vn_sidecar_status"; chatId: string; messageId: string; swipeId: number; sourceFingerprint: string; revision: number; notice: string }
-  | { type: "vn_turn_lore_patch"; chatId: string; messageId: string; swipeId: number; sourceFingerprint: string; revision: number; presentation?: ReaderPresentation; referenceHistory?: ReferenceHistory }
+  | { type: "vn_turn_lore_patch"; chatId: string; messageId: string; swipeId: number; sourceFingerprint: string; revision: number; presentation?: ReaderPresentation; referenceHistory?: ReferenceHistory; speechDirections?: TurnView["speechDirections"] }
   | { type: "vn_turn_snapshot"; chatId: string; messageId: string; swipeId: number; turn: TurnView | null; requestId?: string }
   | {type:'vn_reference_history_invalidated';chatId:string}
   | { type: "vn_asset"; chatId: string; messageId: string; asset: AssetView; sourceFingerprint?: string; swipeId?: number; revision?: number }

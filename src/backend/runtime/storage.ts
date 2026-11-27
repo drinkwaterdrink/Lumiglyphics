@@ -1334,12 +1334,13 @@ async function recordWithRetainedHistory(spindle:SpindleAPI,path:string,record:S
  if (record.sidecarState === 'pending' && previous?.sidecarState === 'settled' &&
      previous.plan?.key && samePresentationTurn(previous.plan.key, record.plan.key) &&
      previous.plan.createdAt === record.plan.createdAt) {
-   const { storyReferences, storyDocuments } = previous.plan;
+   const { storyReferences, storyDocuments, speechDirections } = previous.plan;
    return {
      ...record, sidecarState: 'settled', imageLibrary,
      plan: {
        ...record.plan,
        ...(storyReferences !== undefined ? { storyReferences } : {}),
+       ...(speechDirections !== undefined ? { speechDirections } : {}),
        ...(storyDocuments !== undefined ? { storyDocuments } : {}),
      },
    };
